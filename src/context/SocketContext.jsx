@@ -1,14 +1,39 @@
+// SocketContext.js - Replace your current code with this
 import { createContext, useContext, useEffect, useState } from "react";
 import { io } from "socket.io-client";
 
 const SocketContext = createContext();
-const socket = io("http://localhost:5000"); // Replace with backend URL
 
 export const SocketProvider = ({ children }) => {
-  const [user, setUser] = useState(null); // for tutor or guest
+  const [socket, setSocket] = useState(null);
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
-    console.log("Socket connected:", socket.id);
+    const newSocket = io("http://localhost:5000", {
+      transports: ["websocket", "polling"],
+      autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    });
+
+    newSocket.on("connect", () => {
+      console.log("Socket connected:", newSocket.id);
+    });
+
+    newSocket.on("connect_error", (error) => {
+      console.error("Socket connection error:", error);
+    });
+
+    newSocket.on("disconnect", (reason) => {
+      console.log("Socket disconnected:", reason);
+    });
+
+    setSocket(newSocket);
+
+    return () => {
+      newSocket.close();
+    };
   }, []);
 
   return (
@@ -18,4 +43,10 @@ export const SocketProvider = ({ children }) => {
   );
 };
 
-export const useSocket = () => useContext(SocketContext);
+export const useSocket = () => {
+  const context = useContext(SocketContext);
+  if (!context) {
+    throw new Error('useSocket must be used within a SocketProvider');
+  }
+  return context;
+};

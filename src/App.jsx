@@ -7,6 +7,9 @@ import Register from "./pages/Register";
 import Login from "./pages/Login";
 import './App.css'
 import { pdfjs } from "react-pdf";
+import Lobby from "./pages/Lobby";
+import Dashboard from "./pages/DashBoard";
+import Profile from "./pages/Profile";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
       'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -23,6 +26,9 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/create" element={isLoggedIn() ? <CreateRoom /> : <Login />} />
         <Route path="/room/:code" element={<Room />} />
+        <Route path="/lobby" element={isLoggedIn() ? <Lobby /> : <Login />} />
+        <Route path="/dashboard" element={isLoggedIn() ? <Dashboard /> : <Login />} />
+        <Route path="/profile" element={isLoggedIn() ? <Profile /> : <Login />} />
       </Routes>
     </Router>
   )
