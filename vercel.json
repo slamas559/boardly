@@ -1,7 +1,6 @@
 {
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://boardly-api.onrender.com/api/$1" },
-    { "source": "/(.*)", "destination": "/index.html" }
-  ],
-  "cleanUrls": true
+    { "source": "/(rooms|pdf|auth|board)/(.*)", "destination": "https://boardly-api.onrender.com/$1/$2" },
+    { "source": "/(.*)", "destination": "/" }
+  ]
 }
