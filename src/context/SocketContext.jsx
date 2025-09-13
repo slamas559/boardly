@@ -9,7 +9,8 @@ export const SocketProvider = ({ children }) => {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-    const newSocket = io("http://localhost:5000", {
+    // const newSocket = io("http://localhost:5000", {
+    const newSocket = io("https://boardly-api.onrender.com", {
       transports: ["websocket", "polling"],
       autoConnect: true,
       reconnection: true,

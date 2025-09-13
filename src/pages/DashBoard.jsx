@@ -104,7 +104,7 @@ const Dashboard = () => {
             <Link to="/dashboard" className="flex items-center space-x-2">
               <FaGraduationCap className="h-8 w-8 text-blue-600" />
               <span className="font-bold text-xl bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                TutorHub
+                Boardly
               </span>
             </Link>
             

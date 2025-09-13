@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { useSocket } from "../context/SocketContext";
+import { useSocket } from "../../context/SocketContext";
 import { useNavigate } from "react-router-dom";
 import {
   FaPencilAlt,
@@ -24,8 +24,8 @@ import {
   FaToggleOn,
   FaToggleOff
 } from "react-icons/fa";
-import PDFViewer from "./PDFViewer";
-import { getToken } from "../utils/auth";
+import PDFViewer from "../PDFViewer";
+import { getToken } from "../../utils/auth";
 import axios from "axios";
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';

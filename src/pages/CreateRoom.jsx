@@ -49,7 +49,7 @@ const CreateRoom = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-4 py-8">
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-lg">
         {/* Back Button */}
         <button
           onClick={() => navigate('/lobby')}
@@ -60,7 +60,7 @@ const CreateRoom = () => {
         </button>
 
         {/* Main Card */}
-        <div className="bg-white rounded-2xl shadow-xl p-8">
+        <div className="bg-white rounded-2xl shadow-xl p-7">
           {/* Header */}
           <div className="text-center mb-8">
             <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -111,32 +111,52 @@ const CreateRoom = () => {
               </div>
             </div>
 
-            <button
-              onClick={handleCreate}
-              disabled={!topic.trim() || isCreating}
-              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold py-3 rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {isCreating ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Creating...
-                </>
-              ) : (
-                <>
-                  <FaPlus className="w-4 h-4" />
-                  Create Room
-                </>
-              )}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleCreate}
+                disabled={!topic.trim() || isCreating}
+                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold py-3 rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isCreating ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <FaPlus className="w-4 h-4" />
+                    Regular Room
+                  </>
+                )}
+              </button>
+              <button
+                onClick={handleCreate}
+                disabled={!topic.trim() || isCreating}
+                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold py-3 rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isCreating ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <FaPlus className="w-4 h-4" />
+                    Paid Room
+                  </>
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Features List */}
-          <div className="mt-8 pt-6 border-t border-gray-200">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">What you'll get:</h3>
-            <ul className="space-y-2 text-sm text-gray-600">
+          <div className="flex mt-8 pt-6 border-t border-gray-200 gap-2">
+          <div className="">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3"><b>Regular</b> - What you'll get:</h3>
+            <ul className="space-y-2 text-xs text-gray-600">
               <li className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                Interactive whiteboard with real-time collaboration
+                Interactive whiteboard with real-time
               </li>
               <li className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
@@ -151,6 +171,32 @@ const CreateRoom = () => {
                 Session persistence and auto-save
               </li>
             </ul>
+          </div>
+          <div className="">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3"><b>Paid</b> - What you'll get:</h3>
+            <ul className="space-y-2 text-xs text-gray-600">
+              <li className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                Custom pricing and payment integration
+              </li>
+              <li className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                Interactive whiteboard with real-time 
+              </li>
+              <li className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                PDF upload and annotation tools
+              </li>
+              <li className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                Unique room code for each paid student 
+              </li>
+              <li className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                Session persistence and auto-save
+              </li>
+            </ul>
+          </div>
           </div>
         </div>
 
