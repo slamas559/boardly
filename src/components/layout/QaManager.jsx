@@ -68,7 +68,10 @@ export const QaPanel = ({
   // Fetch questions from backend
   const fetchQuestions = useCallback(async () => {
     try {
-      const res = await axios.get(`http://localhost:5000/rooms/${room._id}/questions`, {
+      const res = await axios.get(
+        // `http://localhost:5000/rooms/${room._id}/questions`,
+        `https://boardly-api.onrender.com/rooms/${room._id}/questions`,
+         {
         headers: { Authorization: `Bearer ${getToken()}` }
       });
       setStudentQuestions(res.data.questions);
@@ -82,7 +85,9 @@ export const QaPanel = ({
     if (!newQuestion.trim()) return;
     
     try {
-      const res = await axios.post(`http://localhost:5000/rooms/${room._id}/questions`, 
+      const res = await axios.post(
+        // `http://localhost:5000/rooms/${room._id}/questions`,
+        `https://boardly-api.onrender.com/rooms/${room._id}/questions`,
         { text: newQuestion },
         { headers: { Authorization: `Bearer ${getToken()}` } }
       );
@@ -106,7 +111,9 @@ export const QaPanel = ({
       setStudentQuestions(prev => 
         prev.map(q => q._id === questionId ? { ...q, answered: true } : q)
       );
-      await axios.put(`http://localhost:5000/rooms/${room._id}/questions/${questionId}`, 
+      await axios.put(
+        // `http://localhost:5000/rooms/${room._id}/questions/${questionId}`,
+        `https://boardly-api.onrender.com/rooms/${room._id}/questions/${questionId}`, 
         { answered: true },
         { headers: { Authorization: `Bearer ${getToken()}` } }
       );
