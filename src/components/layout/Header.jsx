@@ -2,7 +2,7 @@
 import React from 'react';
 import { FaArrowLeft, FaLink, FaBars, FaTimes, FaQuestionCircle, FaToggleOn, FaToggleOff } from 'react-icons/fa';
 import { toast } from 'react-toastify';
-import VoiceBroadcast from './voiceBroadcast';
+import VoiceBroadcast from './VoiceBroadcast';
 
 const Header = ({ 
   room, 
