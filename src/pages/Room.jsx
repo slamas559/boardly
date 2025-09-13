@@ -5,6 +5,7 @@ import axios from "axios";
 import { getToken } from "../utils/auth";
 import WhiteboardLayout from "../components/WhiteboardLayout";
 import PDFViewer from "../components/PDFViewer";
+import api from "../utils/api";
 
 const Room = () => {
   const { code } = useParams();
@@ -21,10 +22,7 @@ const Room = () => {
         setError(null);
         
         // Get room data
-        const res = await axios.get(
-          // `http://localhost:5000/rooms/${code}`
-          `https://boardly-api.onrender.com/rooms/${code}`
-        );
+        const res = await api.get(`/rooms/${code}`);
         
         // Check if user is tutor
         const token = getToken();

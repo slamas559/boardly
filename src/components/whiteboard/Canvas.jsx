@@ -183,16 +183,27 @@ export const WhiteboardCanvas = ({
     <div className="bg-white shadow-sm border border-gray-200 h-full flex items-center justify-center relative">
       <canvas
         ref={canvasRef}
-        className={`${isTutor && (getCursorClass())} bg-white rounded-lg`}
+        className={`${isTutor && (getCursorClass())} bg-white rounded-lg touch-none`}
+        // Mouse events
         onMouseDown={tool === "text" ? onCanvasClick : onMouseDown}
         onMouseMove={onMouseMove}
-        onTouchMove={onTouchMove}
-        onTouchStart={tool === "text" ? onCanvasClick : onTouchStart}
-        onTouchEnd={onTouchEnd}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseLeave}
+        // Touch events
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
         width={canvasSize.width}
         height={canvasSize.height}
+        style={{ 
+          touchAction: 'none',
+          WebkitTouchCallout: 'none',
+          WebkitUserSelect: 'none',
+          KhtmlUserSelect: 'none',
+          MozUserSelect: 'none',
+          msUserSelect: 'none',
+          userSelect: 'none'
+        }}
       />
       {/* Show tutor cursor for students */}
       {!isTutor && tutorCursor && (

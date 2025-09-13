@@ -15,6 +15,7 @@ import { MobileFloatingToolbar, DesktopToolbar, MobileToolbarToggle } from "./wh
 import { WhiteboardCanvas, TextInputComponent } from "./whiteboard/Canvas";
 import { DesktopSidebar, MobileSidebarOverlay } from "./layout/SideBar";
 import InactiveRoom from "./layout/InactiveRoom";
+import api from "../utils/api";
 
 const WhiteboardLayout = ({ room, isTutor, token }) => {
   const canvasRef = useRef(null);
@@ -133,19 +134,10 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
   // Board state management
   const saveBoardState = async () => {
     if (!canvasRef.current) return;
+
     try {
-      await fetch(
-        // `http://localhost:5000/board/${room._id}/whiteboard`,
-        `https://boardly-api.onrender.com/board/${room._id}/whiteboard`,
-         {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("tutor_token")}`,
-        },
-        body: JSON.stringify({ 
-          imageData: canvasRef.current.toDataURL("image/png")
-        }),
+      await api.post(`/board/${room._id}/whiteboard`, {
+        imageData: canvasRef.current.toDataURL("image/png"),
       });
     } catch (err) {
       console.error("Failed to save board:", err);
@@ -154,17 +146,10 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
 
   const loadBoardState = async () => {
     try {
-      const res = await fetch(
-        // `http://localhost:5000/board/${room._id}/whiteboard`,
-        `https://boardly-api.onrender.com/board/${room._id}/whiteboard`,
-         {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("tutor_token")}`,
-        },
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      
+      const res = await api.get(`/board/${room._id}/whiteboard`);
+
+      const data = res.data; // axios automatically parses JSON
+
       if (data?.imageData) {
         const img = new Image();
         img.onload = () => {
@@ -286,9 +271,117 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
     };
   }, [room._id, socket, drawLine, isRoomActive, denormalizeCoordinates, denormalizeFontSize]);
 
+  // Touch event handlers
+  const getTouchPos = useCallback((e, canvas) => {
+    const rect = canvas.getBoundingClientRect();
+    const touch = e.touches[0] || e.changedTouches[0];
+    return {
+      x: touch.clientX - rect.left,
+      y: touch.clientY - rect.top
+    };
+  }, []);
+
+  const handleTouchStart = useCallback((e) => {
+    // e.preventDefault(); // Prevent scrolling
+    
+    if (view !== "whiteboard" || !isTutor || !isRoomActive) return;
+    
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const touchPos = getTouchPos(e, canvas);
+    
+    if (tool === "text") {
+      handleCanvasClick({ 
+        clientX: touchPos.x + canvas.getBoundingClientRect().left, 
+        clientY: touchPos.y + canvas.getBoundingClientRect().top,
+        touches: e.touches
+      });
+      return;
+    }
+    
+    setDrawing(true);
+    const ctx = ctxRef.current;
+    ctx.beginPath();
+    ctx.moveTo(touchPos.x, touchPos.y);
+    ctx.strokeStyle = tool === "pen" ? color : "#ffffff";
+    ctx.lineWidth = tool === "pen" ? lineWidth : 10;
+    
+    ctx.lastX = touchPos.x;
+    ctx.lastY = touchPos.y;
+  }, [view, isTutor, isRoomActive, tool, color, lineWidth, getTouchPos]);
+
+  const handleTouchMove = useCallback((e) => {
+    // e.preventDefault(); // Prevent scrolling
+    
+    if (!drawing || view !== "whiteboard" || !isTutor || !isRoomActive) return;
+    
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const touchPos = getTouchPos(e, canvas);
+    const ctx = ctxRef.current;
+    
+    // Draw on canvas
+    ctx.beginPath();
+    ctx.moveTo(ctx.lastX, ctx.lastY);
+    ctx.lineTo(touchPos.x, touchPos.y);
+    ctx.stroke();
+    
+    // Emit to socket
+    if (isRoomActive) {
+      const normalizedStart = normalizeCoordinates(ctx.lastX, ctx.lastY);
+      const normalizedEnd = normalizeCoordinates(touchPos.x, touchPos.y);
+      const normalizedWidth = normalizeLineWidth(tool === "pen" ? lineWidth : 10);
+      
+      socket.emit("whiteboard-draw", {
+        room: room._id,
+        x0: normalizedStart.x,
+        y0: normalizedStart.y,
+        x1: normalizedEnd.x,
+        y1: normalizedEnd.y,
+        color: tool === "pen" ? color : "#ffffff",
+        lineWidth: normalizedWidth,
+      });
+    }
+    
+    // Handle cursor movement for tutors
+    if (isTutor && isRoomActive) {
+      const normalizedCoords = normalizeCoordinates(touchPos.x, touchPos.y);
+      const cursorData = {
+        x: normalizedCoords.x,
+        y: normalizedCoords.y,
+        tool,
+        room: room._id,
+        timestamp: Date.now()
+      };
+      socket.emit("tutor-cursor-move", cursorData);
+    }
+    
+    ctx.lastX = touchPos.x;
+    ctx.lastY = touchPos.y;
+  }, [drawing, view, isTutor, isRoomActive, getTouchPos, normalizeCoordinates, normalizeLineWidth, socket, room._id, tool, color, lineWidth]);
+
+  const handleTouchEnd = useCallback((e) => {
+    e.preventDefault();
+    
+    if (view !== "whiteboard" || !isRoomActive) return;
+    
+    setDrawing(false);
+    if (ctxRef.current) {
+      ctxRef.current.closePath();
+    }
+    if (isTutor) {
+      saveBoardState();
+    }
+  }, [view, isRoomActive, isTutor, saveBoardState]);
+
   // Mouse and drawing event handlers
   const handleCanvasMouseMove = useCallback((e) => {
     if (!isTutor || !isRoomActive || view !== "whiteboard") return;
+    
+    // Skip if this is a touch event
+    if (e.nativeEvent && e.nativeEvent.touches) return;
     
     const rect = canvasRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -309,8 +402,12 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
     }
   }, [socket, room._id, isTutor, isRoomActive, view, tool, canvasSize, normalizeCoordinates]);
 
-  const startDraw = ({ nativeEvent }) => {
+  const startDraw = useCallback(({ nativeEvent }) => {
     if (view !== "whiteboard" || !isTutor || !isRoomActive) return;
+    
+    // Skip if this is a touch event (handled by touch handlers)
+    if (nativeEvent.touches) return;
+    
     const { offsetX, offsetY } = nativeEvent;
     
     setDrawing(true);
@@ -321,10 +418,14 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
     
     ctxRef.current.lastX = offsetX;
     ctxRef.current.lastY = offsetY;
-  };
+  }, [view, isTutor, isRoomActive, tool, color, lineWidth]);
 
-  const draw = ({ nativeEvent }) => {
+  const draw = useCallback(({ nativeEvent }) => {
     if (!drawing || view !== "whiteboard" || !isTutor || !isRoomActive) return;
+    
+    // Skip if this is a touch event (handled by touch handlers)
+    if (nativeEvent.touches) return;
+    
     const { offsetX, offsetY } = nativeEvent;
     
     const ctx = ctxRef.current;
@@ -352,14 +453,16 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
     
     ctxRef.current.lastX = offsetX;
     ctxRef.current.lastY = offsetY;
-  };
+  }, [drawing, view, isTutor, isRoomActive, normalizeCoordinates, normalizeLineWidth, socket, room._id, tool, color, lineWidth]);
 
-  const endDraw = () => {
+  const endDraw = useCallback(() => {
     if (view !== "whiteboard" || !isRoomActive) return;
     setDrawing(false);
-    ctxRef.current.closePath();
+    if (ctxRef.current) {
+      ctxRef.current.closePath();
+    }
     if (isTutor) saveBoardState();
-  };
+  }, [view, isRoomActive, isTutor, saveBoardState]);
 
   const clearBoard = () => {
     if (!canvasRef.current || !ctxRef.current || !isRoomActive) return;
@@ -368,12 +471,23 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
     if (isTutor) saveBoardState();
   };
 
-  // Text handling
-  const handleCanvasClick = (e) => {
+  // Enhanced handleCanvasClick to work with both mouse and touch
+  const handleCanvasClick = useCallback((e) => {
     if (tool === "text" && isTutor && isRoomActive) {
       const rect = canvasRef.current.getBoundingClientRect();
-      const deviceX = e.clientX - rect.left;
-      const deviceY = e.clientY - rect.top;
+      let deviceX, deviceY;
+      
+      // Handle both mouse and touch events
+      if (e.touches || e.changedTouches) {
+        // Touch event
+        const touch = e.touches[0] || e.changedTouches[0];
+        deviceX = touch.clientX - rect.left;
+        deviceY = touch.clientY - rect.top;
+      } else {
+        // Mouse event
+        deviceX = e.clientX - rect.left;
+        deviceY = e.clientY - rect.top;
+      }
       
       const normalizedCoords = normalizeCoordinates(deviceX, deviceY);
       
@@ -386,7 +500,7 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
       setShowTextInput(true);
       setText("");
     }
-  };
+  }, [tool, isTutor, isRoomActive, normalizeCoordinates]);
 
   const addTextToCanvas = () => {
     if (!text || !textPosition || !ctxRef.current) return;
@@ -435,10 +549,7 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
   const handleViewChange = (newView) => {
     if (isTutor && isRoomActive) {
       setView(newView);
-
-      axios.put(
-        // `http://localhost:5000/rooms/${room._id}/view`,
-        `https://boardly-api.onrender.com/rooms/${room._id}/view`,
+      api.put(`/rooms/${room._id}/view`,
         { view: newView }, {
         headers: { Authorization: `Bearer ${getToken()}` }
       });
@@ -480,12 +591,15 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
   };
 
   // Event handlers for components
-  const handleMouseMove = (e) => {
+  const handleMouseMove = useCallback((e) => {
+    // Skip if this is a touch event
+    if (e.nativeEvent && e.nativeEvent.touches) return;
+    
     if (drawing) {
       draw(e);
     }
     handleCanvasMouseMove(e);
-  };
+  }, [drawing, draw, handleCanvasMouseMove]);
 
   const handleTextSubmit = () => {
     if (text.trim()) {
@@ -579,7 +693,7 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
               isTextMode={isTextMode}
               setIsTextMode={setIsTextMode}
             />
-          ):(<div className="h-15 bg-white shadow-sm border-b border-gray-200 py-3"></div>))}
+          ):(<div className="hidden md:block h-15 bg-white shadow-sm border-b border-gray-200 py-3"></div>))}
 
           {/* Mobile Floating Toolbar */}
           {isTutor && view === "whiteboard" && toolbarOpen && (
@@ -612,9 +726,9 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
                 onMouseMove={handleMouseMove}
                 onMouseUp={endDraw}
                 onMouseLeave={endDraw}
-                onTouchStart={startDraw}
-                onTouchMove={draw}
-                onTouchEnd={endDraw}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
                 tutorCursor={tutorCursor}
                 isTutor={isTutor}
               />

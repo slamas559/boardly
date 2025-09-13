@@ -3,6 +3,7 @@ import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { saveToken } from "../utils/auth";
 import { FaUser, FaEnvelope, FaLock, FaInfoCircle, FaUpload, FaEye, FaEyeSlash } from "react-icons/fa";
+import api from "../utils/api";
 
 const Register = () => {
   const [form, setForm] = useState({ 
@@ -33,11 +34,7 @@ const Register = () => {
         data.append("avatar", avatar);
       }
 
-      const res = await axios.post(
-        // "http://localhost:5000/auth/register",
-        `https://boardly-api.onrender.com/auth/register`,
-        data
-      );
+      const res = await api.post("/auth/register", data);
       saveToken(res.data.token);
       navigate("/dashboard"); // Redirect to dashboard instead of login
       window.location.reload();

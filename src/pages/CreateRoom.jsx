@@ -3,6 +3,7 @@ import axios from "axios";
 import { getToken } from "../utils/auth";
 import { useNavigate } from "react-router-dom";
 import { FaChalkboard, FaArrowLeft, FaPlus, FaLightbulb } from "react-icons/fa";
+import api from "../utils/api";
 
 const CreateRoom = () => {
   const [topic, setTopic] = useState("");
@@ -18,11 +19,9 @@ const CreateRoom = () => {
     setIsCreating(true);
     try {
       const token = getToken();
-      const res = await axios.post(
-        // "http://localhost:5000/rooms",
-        `https://boardly-api.onrender.com/rooms`,
-        { topic: topic.trim() },
-        {
+      const res = await api.post("/rooms", 
+      { topic: topic.trim() },
+       {
           headers: {
             Authorization: `Bearer ${token}`,
           },

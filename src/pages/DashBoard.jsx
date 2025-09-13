@@ -18,6 +18,7 @@ import {
   FaClock,
   FaArrowRight
 } from "react-icons/fa";
+import api from '../utils/api';
 
 const Dashboard = () => {
   const [userData, setUserData] = useState(null);
@@ -53,10 +54,8 @@ const Dashboard = () => {
         );
         setRooms(roomsRes.data);
 
-        const statsResponse = await axios.get(
-          // "http://localhost:5000/auth/stats",
-          `https://boardly-api.onrender.com/auth/stats`,
-          {
+        const statsResponse = await api.get("/auth/stats",
+        {
             headers: { Authorization: `Bearer ${token}` }
         });
         setStats(statsResponse.data);

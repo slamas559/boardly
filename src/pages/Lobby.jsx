@@ -14,6 +14,7 @@ import {
   FaTimes,
   FaArrowLeft,
 } from "react-icons/fa";
+import api from '../utils/api';
 
 const Lobby = () => {
   const [rooms, setRooms] = useState([]);
@@ -25,7 +26,8 @@ const Lobby = () => {
   useEffect(() => {
     const fetchRooms = async () => {
       try {
-        const res = await axios.get("http://localhost:5000/rooms", {
+        const res = await api.get("/rooms",
+       {
           headers: { Authorization: `Bearer ${getToken()}` }
         });
         setRooms(res.data);
@@ -40,13 +42,7 @@ const Lobby = () => {
 
   const handleDeleteRoom = async (roomId) => {
     try {
-      await axios.delete(
-        // `http://localhost:5000/rooms/${roomId}`,
-        `https://boardly-api.onrender.com/rooms/${roomId}`,
-        {
-          headers: { Authorization: `Bearer ${getToken()}` }
-        }
-      );
+      await api.delete(`/rooms/${roomId}`);
       setRooms(rooms.filter(room => room._id !== roomId));
       setDeleteConfirm(null);
     } catch (err) {

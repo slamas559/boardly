@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { getToken, isLogout } from '../utils/auth';
+import api from '../utils/api';
 import {
   FaUser,
   FaEnvelope,
@@ -44,7 +45,7 @@ const Profile = () => {
   const fetchProfile = async () => {
     try {
       const token = getToken();
-      const res = await axios.get('http://localhost:5000/auth/profile', {
+      const res = await api.get("/auth/profile", {
         headers: { Authorization: `Bearer ${token}` }
       });
       setUser(res.data);
@@ -112,7 +113,7 @@ const Profile = () => {
         data.append('avatar', avatarInput.files[0]);
       }
 
-      const res = await axios.put('http://localhost:5000/auth/profile', data, {
+      const res = await api.put("/auth/profile", data, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'multipart/form-data'
@@ -145,9 +146,7 @@ const Profile = () => {
 
     try {
       const token = getToken();
-      await axios.delete(
-        // 'http://localhost:5000/auth/profile',
-        `https://boardly-api.onrender.com/auth/profile`,
+      await api.delete("/auth/profile",
         {
           headers: { Authorization: `Bearer ${token}` }
         }

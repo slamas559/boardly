@@ -2,6 +2,7 @@ import { useState } from "react";
 import axios from "axios";
 import { useNavigate, Link } from "react-router-dom";
 import { saveToken } from "../utils/auth";
+import api from "../utils/api";
 import {
   FaEnvelope,
   FaLock,
@@ -35,10 +36,7 @@ const Login = () => {
     }
 
     try {
-      const res = await axios.post(
-        // "http://localhost:5000/auth/login", 
-      `https://boardly-api.onrender.com/auth/login`,
-      {
+      const res = await api.post("/auth/login", {
         email: form.email,
         password: form.password
       });
