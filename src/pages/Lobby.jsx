@@ -40,9 +40,13 @@ const Lobby = () => {
 
   const handleDeleteRoom = async (roomId) => {
     try {
-      await axios.delete(`http://localhost:5000/rooms/${roomId}`, {
-        headers: { Authorization: `Bearer ${getToken()}` }
-      });
+      await axios.delete(
+        // `http://localhost:5000/rooms/${roomId}`,
+        `https://boardly-api.onrender.com/rooms/${roomId}`,
+        {
+          headers: { Authorization: `Bearer ${getToken()}` }
+        }
+      );
       setRooms(rooms.filter(room => room._id !== roomId));
       setDeleteConfirm(null);
     } catch (err) {

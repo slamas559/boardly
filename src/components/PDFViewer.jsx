@@ -11,12 +11,15 @@ import PDFToolbar from "./pdf/PDFToolBar";
 import PDFNavigation from "./pdf/PDFNavigation";
 import PDFDocumentViewer from "./pdf/PDFDocumentViewer";
 import usePDFAnnotations from "./pdf/hooks/usePDFAnnotations";
+import pdfWorker from "pdfjs-dist/build/pdf.worker.min.js?url";
 
+// Point pdf.js to the correct worker file
+pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 // Worker setup
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  "pdfjs-dist/build/pdf.worker.min.mjs",
-  import.meta.url
-).toString();
+// pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+//   "pdfjs-dist/build/pdf.worker.min.js",
+//   import.meta.url
+// ).toString();
 
 // Suppress repetitive pdf.js warnings
 (() => {
@@ -87,7 +90,8 @@ const PDFViewer = ({ isTutor, room }) => {
     saveStateTimeout.current = setTimeout(async () => {
       try {
         await axios.post(
-          "http://localhost:5000/pdf/save-state",
+          // "http://localhost:5000/pdf/save-state",
+          "https://boardly-api.onrender.com/pdf/save-state",
           {
             roomId: room._id,
             currentPage: newPage ?? pageNumber,
@@ -209,7 +213,10 @@ const PDFViewer = ({ isTutor, room }) => {
       const formData = new FormData();
       formData.append("pdf", pdfFile);
 
-      const res = await axios.post(`http://localhost:5000/pdf/upload/${room._id}`, formData, {
+      const res = await axios.post(
+        // `http://localhost:5000/pdf/upload/${room._id}`,
+        `https://boardly-api.onrender.com/pdf/upload/${room._id}`,
+        formData, {
         headers: {
           Authorization: `Bearer ${getToken()}`,
           "Content-Type": "multipart/form-data",
@@ -268,7 +275,10 @@ const PDFViewer = ({ isTutor, room }) => {
   useEffect(() => {
     const fetchState = async () => {
       try {
-        const res = await axios.get(`http://localhost:5000/pdf/state/${room._id}`, {
+        const res = await axios.get(
+          // `http://localhost:5000/pdf/state/${room._id}`,
+          `https://boardly-api.onrender.com/pdf/state/${room._id}`,
+           {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("tutor_token")}`,
           },

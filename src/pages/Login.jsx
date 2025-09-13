@@ -35,7 +35,10 @@ const Login = () => {
     }
 
     try {
-      const res = await axios.post("http://localhost:5000/auth/login", {
+      const res = await axios.post(
+        // "http://localhost:5000/auth/login", 
+      `https://boardly-api.onrender.com/auth/login`,
+      {
         email: form.email,
         password: form.password
       });

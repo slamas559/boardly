@@ -19,7 +19,8 @@ const CreateRoom = () => {
     try {
       const token = getToken();
       const res = await axios.post(
-        "http://localhost:5000/rooms",
+        // "http://localhost:5000/rooms",
+        `https://boardly-api.onrender.com/rooms`,
         { topic: topic.trim() },
         {
           headers: {

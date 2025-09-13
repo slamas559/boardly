@@ -134,7 +134,10 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
   const saveBoardState = async () => {
     if (!canvasRef.current) return;
     try {
-      await fetch(`http://localhost:5000/board/${room._id}/whiteboard`, {
+      await fetch(
+        // `http://localhost:5000/board/${room._id}/whiteboard`,
+        `https://boardly-api.onrender.com/board/${room._id}/whiteboard`,
+         {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -151,7 +154,10 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
 
   const loadBoardState = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/board/${room._id}/whiteboard`, {
+      const res = await fetch(
+        // `http://localhost:5000/board/${room._id}/whiteboard`,
+        `https://boardly-api.onrender.com/board/${room._id}/whiteboard`,
+         {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("tutor_token")}`,
         },
@@ -430,7 +436,10 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
     if (isTutor && isRoomActive) {
       setView(newView);
 
-      axios.put(`http://localhost:5000/rooms/${room._id}/view`, { view: newView }, {
+      axios.put(
+        // `http://localhost:5000/rooms/${room._id}/view`,
+        `https://boardly-api.onrender.com/rooms/${room._id}/view`,
+        { view: newView }, {
         headers: { Authorization: `Bearer ${getToken()}` }
       });
 
@@ -443,7 +452,8 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
     try {
       const token = getToken();
       const res = await axios.put(
-        `http://localhost:5000/rooms/end-room/${room._id}`,
+        // `http://localhost:5000/rooms/end-room/${room._id}`,
+        `https://boardly-api.onrender.com/rooms/end-room/${room._id}`,
         {mode},
         {
           headers: { 

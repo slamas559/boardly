@@ -11,10 +11,10 @@ import Lobby from "./pages/Lobby";
 import Dashboard from "./pages/DashBoard";
 import Profile from "./pages/Profile";
 
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-      'pdfjs-dist/build/pdf.worker.min.mjs',
-      import.meta.url,
-    ).toString();
+// pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+//       'pdfjs-dist/build/pdf.worker.min.js',
+//       import.meta.url,
+//     ).toString();
 
 
 function App() {

@@ -44,12 +44,19 @@ const Dashboard = () => {
         // console.log("User Data:", userRes.data);
 
         // Fetch rooms
-        const roomsRes = await axios.get("http://localhost:5000/rooms", {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const roomsRes = await axios.get(
+          // "http://localhost:5000/rooms",
+          `https://boardly-api.onrender.com/rooms`,
+          {
+            headers: { Authorization: `Bearer ${token}` }
+          }
+        );
         setRooms(roomsRes.data);
 
-        const statsResponse = await axios.get("http://localhost:5000/auth/stats", {
+        const statsResponse = await axios.get(
+          // "http://localhost:5000/auth/stats",
+          `https://boardly-api.onrender.com/auth/stats`,
+          {
             headers: { Authorization: `Bearer ${token}` }
         });
         setStats(statsResponse.data);

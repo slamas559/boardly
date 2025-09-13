@@ -33,10 +33,14 @@ const Register = () => {
         data.append("avatar", avatar);
       }
 
-      const res = await axios.post("http://localhost:5000/auth/register", data);
-        saveToken(res.data.token);
-        navigate("/dashboard"); // Redirect to dashboard instead of login
-        window.location.reload();
+      const res = await axios.post(
+        // "http://localhost:5000/auth/register",
+        `https://boardly-api.onrender.com/auth/register`,
+        data
+      );
+      saveToken(res.data.token);
+      navigate("/dashboard"); // Redirect to dashboard instead of login
+      window.location.reload();
     } catch (err) {
       console.error("Registration error:", err);
       setError(err.response?.data?.message || "Registration failed. Please try again.");

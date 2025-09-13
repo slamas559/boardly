@@ -145,10 +145,14 @@ const Profile = () => {
 
     try {
       const token = getToken();
-      await axios.delete('http://localhost:5000/auth/profile', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
+      await axios.delete(
+        // 'http://localhost:5000/auth/profile',
+        `https://boardly-api.onrender.com/auth/profile`,
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+
       isLogout();
       navigate('/');
       alert('Your account has been deleted successfully.');

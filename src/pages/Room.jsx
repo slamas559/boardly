@@ -21,7 +21,10 @@ const Room = () => {
         setError(null);
         
         // Get room data
-        const res = await axios.get(`http://localhost:5000/rooms/${code}`);
+        const res = await axios.get(
+          // `http://localhost:5000/rooms/${code}`
+          `https://boardly-api.onrender.com/rooms/${code}`
+        );
         
         // Check if user is tutor
         const token = getToken();
