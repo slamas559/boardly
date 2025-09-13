@@ -7,7 +7,7 @@ import "react-pdf/dist/Page/TextLayer.css";
 import { getToken } from "../utils/auth";
 
 // Child Components
-import PDFToolbar from "./pdf/PDFToolBar";
+import PDFToolbar from "./pdf/PDFToolbar";
 import PDFNavigation from "./pdf/PDFNavigation";
 import PDFDocumentViewer from "./pdf/PDFDocumentViewer";
 import usePDFAnnotations from "./pdf/hooks/usePDFAnnotations";
