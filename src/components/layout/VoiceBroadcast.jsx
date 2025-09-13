@@ -22,9 +22,33 @@ const VoiceBroadcast = ({ room, socket, isTutor }) => {
   const iceServers = {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' }
+      { urls: 'stun:stun1.l.google.com:19302' },
+      {
+        urls: "stun:stun.relay.metered.ca:80",
+      },
+      {
+        urls: "turn:global.relay.metered.ca:80",
+        username: "2cfa1595142a47dbb11045c5",
+        credential: "ERtjygb2qEQukVHt",
+      },
+      {
+        urls: "turn:global.relay.metered.ca:80?transport=tcp",
+        username: "2cfa1595142a47dbb11045c5",
+        credential: "ERtjygb2qEQukVHt",
+      },
+      {
+        urls: "turn:global.relay.metered.ca:443",
+        username: "2cfa1595142a47dbb11045c5",
+        credential: "ERtjygb2qEQukVHt",
+      },
+      {
+        urls: "turns:global.relay.metered.ca:443?transport=tcp",
+        username: "2cfa1595142a47dbb11045c5",
+        credential: "ERtjygb2qEQukVHt",
+      },
     ]
   };
+
 
   // Create peer connection for a specific student (tutor side)
   const createStudentConnection = useCallback(async (studentSocketId) => {
