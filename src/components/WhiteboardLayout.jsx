@@ -33,7 +33,7 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
   const [drawing, setDrawing] = useState(false);
   const [tool, setTool] = useState("pen");
   const [color, setColor] = useState("#000000");
-  const [lineWidth, setLineWidth] = useState(2);
+  const [lineWidth, setLineWidth] = useState(1);
   const [view, setView] = useState("whiteboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });

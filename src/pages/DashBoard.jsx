@@ -38,20 +38,15 @@ const Dashboard = () => {
         const token = getToken();
         
         // Fetch user data
-        const userRes = await axios.get("http://localhost:5000/auth/profile", {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const userRes = await api.get("/auth/profile");
         setUserData(userRes.data);
         // console.log("User Data:", userRes.data);
 
         // Fetch rooms
-        const roomsRes = await axios.get(
-          // "http://localhost:5000/rooms",
-          `https://boardly-api.onrender.com/rooms`,
+        const roomsRes = await api.get("/rooms",
           {
             headers: { Authorization: `Bearer ${token}` }
-          }
-        );
+          });
         setRooms(roomsRes.data);
 
         const statsResponse = await api.get("/auth/stats",
