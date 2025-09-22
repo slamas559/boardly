@@ -301,7 +301,7 @@ const Dashboard = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Section */}
-        <div className="bg-gray-900 p-8 text-white mb-8 rounded-lg">
+        <div className="bg-gray-900 p-6 md:p-8 text-white mb-8 rounded-lg">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between">
             <div>
               <h1 className="text-2xl md:text-3xl font-bold mb-2">
@@ -399,7 +399,7 @@ const Dashboard = () => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               {/* Recent Sessions */}
               <div className="lg:col-span-2">
-                <div className="bg-white shadow-sm p-6 border border-gray-200 rounded-lg">
+                <div className="bg-white shadow-sm p-4 border border-gray-200 rounded-lg">
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="text-xl font-bold text-gray-900">Recent Sessions</h2>
                     <Link
@@ -419,13 +419,13 @@ const Dashboard = () => {
                             <FaChalkboard className="w-5 h-5 text-white" />
                           </div>
                           <div>
-                            <h3 className="font-semibold text-gray-900">{room.topic}</h3>
-                            <p className="text-sm text-gray-500">Code: {room.code}</p>
+                            <h3 className="font-semibold text-sm text-gray-900">{room.topic}</h3>
+                            <p className="text-sm text-gray-500 text-sm">Code: {room.code}</p>
                           </div>
                         </div>
                         <Link
                           to={`/room/${room.code}`}
-                          className="px-4 py-2 bg-gray-900 text-white text-sm rounded-md hover:bg-gray-800 transition-colors font-medium"
+                          className="px-4 py-2 bg-gray-900 text-white text-xs rounded-md hover:bg-gray-800 transition-colors font-medium"
                         >
                           Open
                         </Link>
@@ -453,7 +453,7 @@ const Dashboard = () => {
               {/* Sidebar */}
               <div className="space-y-6">
                 {/* Quick Actions */}
-                <div className="bg-white shadow-sm p-6 border border-gray-200 rounded-lg">
+                <div className="bg-white shadow-sm p-4 border border-gray-200 rounded-lg">
                   <h2 className="text-xl font-bold text-gray-900 mb-4">Quick Actions</h2>
                   <div className="space-y-3">
                     <Link
@@ -463,7 +463,7 @@ const Dashboard = () => {
                       <div className="w-10 h-10 bg-gray-900 rounded-lg flex items-center justify-center">
                         <FaPlus className="w-5 h-5 text-white" />
                       </div>
-                      <span className="font-medium text-gray-900">Create New Session</span>
+                      <span className="font-medium text-sm text-gray-900">Create New Session</span>
                     </Link>
                     
                     <Link
@@ -473,7 +473,7 @@ const Dashboard = () => {
                       <div className="w-10 h-10 bg-gray-900 rounded-lg flex items-center justify-center">
                         <FaChalkboard className="w-5 h-5 text-white" />
                       </div>
-                      <span className="font-medium text-gray-900">Manage Sessions</span>
+                      <span className="font-medium text-sm text-gray-900">Manage Sessions</span>
                     </Link>
 
                     <Link
@@ -483,13 +483,13 @@ const Dashboard = () => {
                       <div className="w-10 h-10 bg-gray-900 rounded-lg flex items-center justify-center">
                         <FaUser className="w-5 h-5 text-white" />
                       </div>
-                      <span className="font-medium text-gray-900">Profile Settings</span>
+                      <span className="font-medium text-sm text-gray-900">Profile Settings</span>
                     </Link>
                   </div>
                 </div>
 
                 {/* Profile Card */}
-                <div className="bg-white shadow-sm p-6 border border-gray-200 rounded-lg">
+                <div className="bg-white shadow-sm p-4 border border-gray-200 rounded-lg">
                   <h2 className="text-xl font-bold text-gray-900 mb-4">Profile Information</h2>
                   <div className="flex items-center gap-4 mb-4">
                     {userData?.avatar ? (

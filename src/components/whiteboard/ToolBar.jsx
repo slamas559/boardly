@@ -123,7 +123,7 @@ export const MobileFloatingToolbar = ({
         >
           <FaBrush size={16} />
         </button>
-        <button
+        {/* <button
           onClick={() => {
             setTool("text");
             setIsTextMode(true);
@@ -136,7 +136,7 @@ export const MobileFloatingToolbar = ({
           title="Text"
         >
           <FaPencilAlt size={16} />
-        </button>
+        </button> */}
         <button
           onClick={() => setTool("eraser")}
           className={`p-2 rounded-lg transition-all ${

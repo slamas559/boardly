@@ -92,12 +92,12 @@ const Lobby = () => {
 
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">Session Management</h1>
-          <p className="text-xl text-gray-600">Manage your teaching sessions and continue where you left off</p>
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Session Management</h1>
+          <p className="text-gray-600">Manage your teaching sessions and continue where you left off</p>
         </div>
 
         {/* Actions Bar */}
-        <div className="bg-white border border-gray-200 rounded-lg p-6 mb-8">
+        <div className="bg-white border border-gray-200 rounded-lg p-4 mb-8">
           <div className="flex flex-col sm:flex-row gap-4 justify-between">
             <div className="flex-1 relative max-w-lg">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -157,7 +157,7 @@ const Lobby = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
             {filteredRooms.map((room) => (
-              <div key={room._id} className="bg-white border border-gray-200 rounded-lg hover:shadow-lg transition-all p-6">
+              <div key={room._id} className="bg-white border border-gray-200 rounded-lg hover:shadow-lg transition-all p-4">
                 {/* Session Header */}
                 <div className='flex flex-col h-full justify-between'>
                   <div className=''>
