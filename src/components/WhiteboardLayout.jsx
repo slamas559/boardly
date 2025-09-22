@@ -261,48 +261,12 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
       }, 1000);
     };
 
-    // const handleForceDisconnect = (data) => {
-    //   console.log("Force disconnect received:", data);
-    //   setConnectionStatus('disconnected');
-      
-    //   // Clear any intervals
-    //   if (activityIntervalRef.current) {
-    //     clearInterval(activityIntervalRef.current);
-    //   }
-      
-    //   // Show user-friendly message based on reason
-    //   let message = data.message || "Your session was ended.";
-    //   if (data.reason === 'concurrent_session') {
-    //     message = "Your session was ended because you joined from another device or browser tab.";
-    //   }
-      
-    //   toast.error(message, {
-    //     position: "top-center",
-    //     autoClose: false,
-    //     closeOnClick: false,
-    //     draggable: false
-    //   });
-      
-    //   // Acknowledge the disconnect
-    //   socket.emit("disconnect-ack");
-      
-    //   // Redirect after a short delay
-    //   setTimeout(() => {
-    //     navigate('/dashboard');
-    //   }, 3000);
-    // };
-
     socket.on("whiteboard-text", handleText);
     socket.on("whiteboard-draw", handleDraw);
     socket.on("whiteboard-clear", handleClearBoard);
     socket.on("change-view", handleChangeView);
     socket.on("tutor-cursor-move", handleTutorCursor);
 
-    socket.on("force-disconnect", (data) => {
-      alert(data.message);
-      window.location.href = '/dashboard';
-    });
-    // socket.on("force-disconnect", handleForceDisconnect)
     loadBoardState();
 
     return () => {
@@ -311,8 +275,6 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
       socket.off("whiteboard-clear", handleClearBoard);
       socket.off("change-view", handleChangeView);
       socket.off("tutor-cursor-move", handleTutorCursor);
-      // socket.on("force-disconnect", handleForceDisconnect)
-
       
       if (cursorTimeoutRef.current) {
         clearTimeout(cursorTimeoutRef.current);
