@@ -231,7 +231,7 @@ export const WhiteboardCanvas = ({
     <div className="bg-white shadow-sm border border-gray-200 h-full flex items-center justify-center relative">
       <canvas
         ref={canvasRef}
-        className={`${isTutor && (getCursorClass())} bg-white rounded-lg touch-none`}
+        className={`${isTutor && (getCursorClass())} w-full h-full bg-white touch-none`}
         // Mouse events
         onMouseDown={tool === "text" ? onCanvasClick : onMouseDown}
         onMouseMove={onMouseMove}
