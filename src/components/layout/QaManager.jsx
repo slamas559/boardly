@@ -1,3 +1,4 @@
+// Fixed QaManager.js
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useSocket } from "../../context/SocketContext";
 import { useNavigate } from "react-router-dom";
@@ -29,7 +30,7 @@ import { getToken } from "../../utils/auth";
 import axios from "axios";
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-
+import api from "../../utils/api";
 
 // Extracted Q&A Popup Component
 export const QaPopup = ({ showQaPopup, onClose }) => {
@@ -53,112 +54,29 @@ export const QaPopup = ({ showQaPopup, onClose }) => {
   );
 };
 
-// Extracted Q&A Panel Component with its own state management
+// Updated Q&A Panel Component - receives all props from parent
 export const QaPanel = ({ 
   qaPanelOpen, 
   onClose, 
   room, 
   isTutor, 
   qaEnabled,
-  socket 
+  socket,
+  studentQuestions, // Received from parent
+  onSubmitQuestion, // Function from parent
+  onMarkQuestionAnswered // Function from parent
 }) => {
-  const [studentQuestions, setStudentQuestions] = useState([]);
   const [newQuestion, setNewQuestion] = useState("");
 
-  // Fetch questions from backend
-  const fetchQuestions = useCallback(async () => {
-    try {
-      const res = await axios.get(
-        // `http://localhost:5000/rooms/${room._id}/questions`,
-        `https://boardly-api.onrender.com/rooms/${room._id}/questions`,
-         {
-        headers: { Authorization: `Bearer ${getToken()}` }
-      });
-      setStudentQuestions(res.data.questions);
-    } catch (err) {
-      console.error("Failed to fetch questions:", err);
-    }
-  }, [room._id]);
-
-  // Submit a new question
+  // Submit a new question - call parent function
   const submitQuestion = async () => {
     if (!newQuestion.trim()) return;
     
-    try {
-      const res = await axios.post(
-        // `http://localhost:5000/rooms/${room._id}/questions`,
-        `https://boardly-api.onrender.com/rooms/${room._id}/questions`,
-        { text: newQuestion },
-        { headers: { Authorization: `Bearer ${getToken()}` } }
-      );
-      
-      socket.emit("new-question", {
-        roomId: room._id,
-        question: res.data.question
-      });
-      setStudentQuestions(prev => [...prev, res.data.question]);
+    const success = await onSubmitQuestion(newQuestion);
+    if (success) {
       setNewQuestion("");
-      toast.success("Question submitted!");
-    } catch (err) {
-      console.error("Failed to submit question:", err);
-      toast.error("Failed to submit question");
     }
   };
-
-  // Mark question as answered
-  const markQuestionAnswered = async (questionId) => {
-    try {
-      setStudentQuestions(prev => 
-        prev.map(q => q._id === questionId ? { ...q, answered: true } : q)
-      );
-      await axios.put(
-        // `http://localhost:5000/rooms/${room._id}/questions/${questionId}`,
-        `https://boardly-api.onrender.com/rooms/${room._id}/questions/${questionId}`, 
-        { answered: true },
-        { headers: { Authorization: `Bearer ${getToken()}` } }
-      );
-      
-      socket.emit("question-answered", {
-        roomId: room._id,
-        questionId
-      });
-      toast.success("Question marked as answered!");
-    } catch (err) {
-      console.error("Failed to mark question as answered:", err);
-      toast.error("Failed to update question");
-    }
-  };
-
-  // Socket event handlers for Q&A
-  useEffect(() => {
-    const handleNewQuestion = (question) => {
-      setStudentQuestions(prev => [...prev, question]);
-    };
-
-    const handleQuestionAnswered = ({ questionId }) => {
-      setStudentQuestions(prev => {
-        const updated = prev.map(q =>
-          String(q._id) === String(questionId)
-            ? { ...q, answered: true }
-            : q
-        );
-        return updated;
-      });
-    };
-
-    socket.on("new-question", handleNewQuestion);
-    socket.on("question-answered", handleQuestionAnswered);
-
-    // Load initial questions when panel opens
-    if (qaPanelOpen) {
-      fetchQuestions();
-    }
-
-    return () => {
-      socket.off("new-question", handleNewQuestion);
-      socket.off("question-answered", handleQuestionAnswered);
-    };
-  }, [socket, fetchQuestions, qaPanelOpen]);
 
   if (!qaPanelOpen) return null;
 
@@ -185,7 +103,7 @@ export const QaPanel = ({
               studentQuestions.map((question) => (
                 <div key={question._id} className="flex items-start p-3 bg-gray-50 rounded-lg">
                   <button
-                    onClick={() => markQuestionAnswered(question._id)}
+                    onClick={() => onMarkQuestionAnswered(question._id)}
                     className="mt-1 mr-3 text-blue-500 hover:text-blue-700 cursor-pointer"
                   >
                     {question.answered ? (
@@ -258,7 +176,7 @@ export const QaPanel = ({
   );
 };
 
-// Extracted Q&A Controls Component
+// Extracted Q&A Controls Component - same as before
 export const QaControls = ({ 
   qaEnabled, 
   onToggleQa, 
@@ -271,8 +189,8 @@ export const QaControls = ({
     return (
       <>
         {/* Q&A Toggle in Sidebar */}
-        <div className="pt-4 mt-4 border-t border-gray-200">
-          <div className="flex flex-col items-center justify-between">
+        <div className="pt-2 border-gray-200">
+          <div className="">
             <button
               title={qaEnabled ? "Disable Q&A" : "Enable Q&A"}
               disabled={qaLoading}
@@ -290,9 +208,6 @@ export const QaControls = ({
                 }`}
               />
             </button>
-            <p className="text-xs text-gray-500 mt-1">
-                Q&A
-            </p>
           </div>
         </div>
 
@@ -300,17 +215,18 @@ export const QaControls = ({
         {qaEnabled && studentQuestions.length > 0 && (
           <div className="pt-2">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-700">Pending</span>
-              <span className="bg-blue-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                {studentQuestions.filter(q => !q.answered).length}
-              </span>
+              <button
+                onClick={onOpenPanel}
+                className="w-full bg-gray-200 text-sm flex items-center justify-between text-xs gap-1 p-2 px-3 rounded-lg text-blue-600 hover:text-blue-800"
+              >
+                Q&A
+                {studentQuestions.filter(q => !q.answered).length > 0 && (
+                  <span className="bg-blue-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                    {studentQuestions.filter(q => !q.answered).length}
+                  </span>
+                )}
+              </button>
             </div>
-            <button
-              onClick={onOpenPanel}
-              className="mt-2 w-full text-sm text-blue-600 hover:text-blue-800"
-            >
-              View
-            </button>
           </div>
         )}
       </>
@@ -320,7 +236,6 @@ export const QaControls = ({
   // Student header controls
   return (
     <>
-      {/* Q&A Toggle Button for Tutor in Header */}
       <button
         onClick={onToggleQa}
         disabled={qaLoading}
@@ -340,7 +255,7 @@ export const QaControls = ({
   );
 };
 
-// Extracted Q&A Manager Hook for state management
+// Updated Q&A Manager Hook with centralized question management
 export const useQaManager = (room, socket, isTutor) => {
   const [qaEnabled, setQaEnabled] = useState(room?.qaEnabled || false);
   const [showQaPopup, setShowQaPopup] = useState(false);
@@ -351,7 +266,7 @@ export const useQaManager = (room, socket, isTutor) => {
   // Fetch Q&A status from backend
   const fetchQaStatus = useCallback(async () => {
     try {
-      const res = await axios.get(`http://localhost:5000/rooms/${room._id}/qa-status`, {
+      const res = await api.get(`/rooms/${room._id}/qa-status`, {
         headers: { Authorization: `Bearer ${getToken()}` }
       });
       if (res.data && typeof res.data.qaEnabled === 'boolean') {
@@ -371,7 +286,7 @@ export const useQaManager = (room, socket, isTutor) => {
   // Fetch questions from backend
   const fetchQuestions = useCallback(async () => {
     try {
-      const res = await axios.get(`http://localhost:5000/rooms/${room._id}/questions`, {
+      const res = await api.get(`/rooms/${room._id}/questions`, {
         headers: { Authorization: `Bearer ${getToken()}` }
       });
       setStudentQuestions(res.data.questions);
@@ -380,8 +295,64 @@ export const useQaManager = (room, socket, isTutor) => {
     }
   }, [room._id]);
 
+  // Submit a new question - centralized function
+  const submitQuestion = useCallback(async (questionText) => {
+    if (!questionText.trim()) return false;
+    
+    try {
+      const res = await api.post(
+        `/rooms/${room._id}/questions`,
+        { text: questionText },
+        { headers: { Authorization: `Bearer ${getToken()}` } }
+      );
+      
+      // Update local state immediately
+      const newQuestion = res.data.question;
+      setStudentQuestions(prev => [...prev, newQuestion]);
+      
+      // Emit socket event
+      socket.emit("new-question", {
+        roomId: room._id,
+        question: newQuestion
+      });
+      
+      toast.success("Question submitted!");
+      return true;
+    } catch (err) {
+      console.error("Failed to submit question:", err);
+      toast.error("Failed to submit question");
+      return false;
+    }
+  }, [room._id, socket]);
+
+  // Mark question as answered - centralized function
+  const markQuestionAnswered = useCallback(async (questionId) => {
+    try {
+      await api.put(`/rooms/${room._id}/questions/${questionId}`, 
+        { answered: true },
+        { headers: { Authorization: `Bearer ${getToken()}` } }
+      );
+      
+      // Update local state immediately
+      setStudentQuestions(prev => 
+        prev.map(q => q._id === questionId ? { ...q, answered: true } : q)
+      );
+      
+      // Emit socket event
+      socket.emit("question-answered", {
+        roomId: room._id,
+        questionId
+      });
+      
+      toast.success("Question marked as answered!");
+    } catch (err) {
+      console.error("Failed to mark question as answered:", err);
+      toast.error("Failed to update question");
+    }
+  }, [room._id, socket]);
+
   // Toggle Q&A enabled status
-  const toggleQaEnabled = async () => {
+  const toggleQaEnabled = useCallback(async () => {
     setQaLoading(true);
     try {
       const newStatus = !qaEnabled;
@@ -389,7 +360,7 @@ export const useQaManager = (room, socket, isTutor) => {
       localStorage.setItem(`qaStatus-${room._id}`, newStatus.toString());
       setQaEnabled(newStatus);
       
-      await axios.put(`http://localhost:5000/rooms/${room._id}/qa-status`, 
+      await api.put(`/rooms/${room._id}/qa-status`, 
         { qaEnabled: newStatus },
         { headers: { Authorization: `Bearer ${getToken()}` } }
       );
@@ -411,7 +382,7 @@ export const useQaManager = (room, socket, isTutor) => {
     } finally {
       setQaLoading(false);
     }
-  };
+  }, [qaEnabled, room._id, socket]);
 
   // Socket event handlers for Q&A
   useEffect(() => {
@@ -467,6 +438,8 @@ export const useQaManager = (room, socket, isTutor) => {
     qaPanelOpen,
     setQaPanelOpen,
     studentQuestions,
-    toggleQaEnabled
+    toggleQaEnabled,
+    submitQuestion,
+    markQuestionAnswered
   };
 };

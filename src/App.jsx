@@ -3,13 +3,16 @@ import Home from "./pages/Home";
 import CreateRoom from "./pages/CreateRoom";
 import Room from "./pages/Room";
 import { isLoggedIn } from "./utils/auth";
-import Register from "./pages/Register";
-import Login from "./pages/Login";
+import Register from "./pages/Auth/Register";
+import Login from "./pages/Auth/Login";
 import './App.css'
 import { pdfjs } from "react-pdf";
 import Lobby from "./pages/Lobby";
 import Dashboard from "./pages/DashBoard";
 import Profile from "./pages/Profile";
+import PaymentSuccess from "./components/payment/PaymentSuccess";
+import BankAccountSetup from "./pages/BankAccountSetup";
+import EmailVerification from "./pages/EmailVerificationComponents/EmailVerification";
 
 // pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 //       'pdfjs-dist/build/pdf.worker.min.js',
@@ -29,6 +32,9 @@ function App() {
         <Route path="/lobby" element={isLoggedIn() ? <Lobby /> : <Login />} />
         <Route path="/dashboard" element={isLoggedIn() ? <Dashboard /> : <Login />} />
         <Route path="/profile" element={isLoggedIn() ? <Profile /> : <Login />} />
+        <Route path="/bank-setup" element={isLoggedIn() ? <BankAccountSetup /> : <Login />} />
+        <Route path="/payment/success" element={<PaymentSuccess />} />
+        <Route path="/verify-email" element={<EmailVerification />} />
       </Routes>
     </Router>
   )

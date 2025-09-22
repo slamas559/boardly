@@ -15,7 +15,13 @@ import {
   FaEye,
   FaEyeSlash,
   FaCalendar,
-  FaArrowLeft
+  FaArrowLeft,
+  FaUniversity,
+  FaCreditCard,
+  FaCheckCircle,
+  FaExclamationTriangle,
+  FaEdit,
+  FaDollarSign
 } from 'react-icons/fa';
 
 const Profile = () => {
@@ -28,6 +34,15 @@ const Profile = () => {
   const [showPasswordFields, setShowPasswordFields] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
+  const [banks, setBanks] = useState([]);
+  const [showBankSetup, setShowBankSetup] = useState(false);
+  const [bankForm, setBankForm] = useState({
+    bankCode: '',
+    accountNumber: '',
+    accountName: ''
+  });
+  const [resolvingAccount, setResolvingAccount] = useState(false);
+  const [settingUpBank, setSettingUpBank] = useState(false);
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
@@ -40,7 +55,19 @@ const Profile = () => {
 
   useEffect(() => {
     fetchProfile();
+    // if (user?.role === 'tutor') {
+      fetchBanks();
+    // }
   }, []);
+
+  const fetchBanks = async () => {
+    try {
+      const res = await api.get("/auth/banks");
+      setBanks(res.data.banks);
+    } catch (err) {
+      console.error('Error fetching banks:', err);
+    }
+  };
 
   const fetchProfile = async () => {
     try {
@@ -75,6 +102,80 @@ const Profile = () => {
     // Clear messages when user starts typing
     if (error) setError('');
     if (success) setSuccess('');
+  };
+
+  const handleBankFormChange = (e) => {
+    setBankForm({
+      ...bankForm,
+      [e.target.name]: e.target.value
+    });
+    
+    // Clear account name if bank or account number changes
+    if (e.target.name === 'bankCode' || e.target.name === 'accountNumber') {
+      setBankForm(prev => ({ ...prev, accountName: '' }));
+    }
+  };
+
+  const resolveAccount = async () => {
+    if (!bankForm.bankCode || !bankForm.accountNumber) {
+      setError('Please select a bank and enter account number');
+      return;
+    }
+
+    if (bankForm.accountNumber.length !== 10) {
+      setError('Account number must be 10 digits');
+      return;
+    }
+
+    setResolvingAccount(true);
+    try {
+      const token = getToken();
+      const res = await api.post('/auth/resolve-account', {
+        bankCode: bankForm.bankCode,
+        accountNumber: bankForm.accountNumber
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (res.data.success) {
+        setBankForm(prev => ({ ...prev, accountName: res.data.accountName }));
+        setSuccess('Account resolved successfully!');
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to resolve account');
+    } finally {
+      setResolvingAccount(false);
+    }
+  };
+
+  const handleBankSetup = async (e) => {
+    e.preventDefault();
+    if (!bankForm.accountName) {
+      setError('Please resolve your account first');
+      return;
+    }
+
+    setSettingUpBank(true);
+    try {
+      const token = getToken();
+      const res = await api.post('/auth/setup-bank', {
+        bankCode: bankForm.bankCode,
+        accountNumber: bankForm.accountNumber
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (res.data.success) {
+        setSuccess('Bank account setup successful!');
+        setShowBankSetup(false);
+        fetchProfile(); // Refresh user data
+        setBankForm({ bankCode: '', accountNumber: '', accountName: '' });
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to setup bank account');
+    } finally {
+      setSettingUpBank(false);
+    }
   };
 
   const handleAvatarChange = (e) => {
@@ -159,6 +260,15 @@ const Profile = () => {
       console.error('Error deleting account:', err);
       setError('Failed to delete account');
     }
+  };
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-NG', {
+      style: 'currency',
+      currency: 'NGN',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount / 100); // Convert from kobo to naira
   };
 
   if (loading) {
@@ -376,6 +486,176 @@ const Profile = () => {
                 </button>
               </form>
             </div>
+
+            {/* Bank Details Section for Tutors */}
+            {user?.role === 'tutor' && (
+              <div className="bg-white rounded-2xl shadow-sm p-6 mt-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Bank Details</h3>
+                    <p className="text-sm text-gray-600">Manage your payment information</p>
+                  </div>
+                  {user.bankDetails?.isVerified && (
+                    <div className="flex items-center gap-2 text-green-600">
+                      <FaCheckCircle className="w-4 h-4" />
+                      <span className="text-sm font-medium">Verified</span>
+                    </div>
+                  )}
+                </div>
+
+                {user.bankDetails?.isVerified ? (
+                  <div className="space-y-4">
+                    <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                      <div className="flex items-start gap-3">
+                        <FaUniversity className="w-5 h-5 text-green-600 mt-0.5" />
+                        <div className="flex-1">
+                          <h4 className="font-medium text-green-900">{user.bankDetails.accountName}</h4>
+                          <p className="text-sm text-green-700">
+                            {banks.find(bank => bank.code === user.bankDetails.bankCode)?.name || 'Bank'}
+                          </p>
+                          <p className="text-sm text-green-600 font-mono">
+                            {user.bankDetails.accountNumber}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowBankSetup(true)}
+                      className="text-blue-600 hover:text-blue-700 font-medium text-sm flex items-center gap-2"
+                    >
+                      <FaEdit className="w-4 h-4" />
+                      Update Bank Details
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                      <div className="flex items-start gap-3">
+                        <FaExclamationTriangle className="w-5 h-5 text-yellow-600 mt-0.5" />
+                        <div>
+                          <h4 className="font-medium text-yellow-900">Bank Account Required</h4>
+                          <p className="text-sm text-yellow-700">
+                            Set up your bank account to receive payments from students.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowBankSetup(true)}
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                    >
+                      <FaUniversity className="w-4 h-4" />
+                      Setup Bank Account
+                    </button>
+                  </div>
+                )}
+
+                {/* Bank Setup Modal/Form */}
+                {showBankSetup && (
+                  <div className="mt-6 border-t pt-6">
+                    <form onSubmit={handleBankSetup} className="space-y-4">
+                      <h4 className="font-medium text-gray-900 mb-4">
+                        {user.bankDetails?.isVerified ? 'Update Bank Details' : 'Setup Bank Account'}
+                      </h4>
+                      
+                      {/* Bank Selection */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Select Bank
+                        </label>
+                        <select
+                          name="bankCode"
+                          value={bankForm.bankCode}
+                          onChange={handleBankFormChange}
+                          required
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value="">Select your bank</option>
+                          {banks.map((bank) => (
+                            <option key={`${bank.code}-${bank.name}`} value={bank.code}>
+                              {bank.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Account Number */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Account Number
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            name="accountNumber"
+                            value={bankForm.accountNumber}
+                            onChange={handleBankFormChange}
+                            placeholder="Enter 10-digit account number"
+                            maxLength="10"
+                            required
+                            className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={resolveAccount}
+                            disabled={resolvingAccount || !bankForm.bankCode || bankForm.accountNumber.length !== 10}
+                            className="px-4 py-3 bg-gray-600 text-white rounded-xl hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {resolvingAccount ? 'Resolving...' : 'Verify'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Account Name */}
+                      {bankForm.accountName && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Account Name
+                          </label>
+                          <input
+                            type="text"
+                            value={bankForm.accountName}
+                            disabled
+                            className="w-full px-4 py-3 border border-gray-300 rounded-xl bg-gray-50 text-gray-600"
+                          />
+                        </div>
+                      )}
+
+                      {/* Action Buttons */}
+                      <div className="flex gap-3 pt-4">
+                        <button
+                          type="submit"
+                          disabled={settingUpBank || !bankForm.accountName}
+                          className="flex-1 bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                          {settingUpBank ? (
+                            <>
+                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                              Setting up...
+                            </>
+                          ) : (
+                            <>
+                              <FaSave className="w-4 h-4" />
+                              Save Bank Details
+                            </>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowBankSetup(false);
+                            setBankForm({ bankCode: '', accountNumber: '', accountName: '' });
+                          }}
+                          className="px-6 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Sidebar */}
@@ -392,8 +672,39 @@ const Profile = () => {
                   <FaCalendar className="w-4 h-4" />
                   <span>Joined {new Date(user.createdAt).toLocaleDateString()}</span>
                 </div>
+                <div className="flex items-center gap-2 text-gray-600">
+                  <FaUser className="w-4 h-4" />
+                  <span className="capitalize">{user.role}</span>
+                </div>
               </div>
             </div>
+
+            {/* Payment Status for Tutors */}
+            {user?.role === 'tutor' && (
+              <div className="bg-white rounded-2xl shadow-sm p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Payment Status</h3>
+                <div className="space-y-3 text-sm">
+                  <div className="flex items-center gap-2">
+                    {user.hasPaymentSetup ? (
+                      <>
+                        <FaCheckCircle className="w-4 h-4 text-green-600" />
+                        <span className="text-green-600">Payment setup complete</span>
+                      </>
+                    ) : (
+                      <>
+                        <FaExclamationTriangle className="w-4 h-4 text-yellow-600" />
+                        <span className="text-yellow-600">Payment setup required</span>
+                      </>
+                    )}
+                  </div>
+                  {user.paystackSubaccountCode && (
+                    <div className="text-xs text-gray-500">
+                      Subaccount: {user.paystackSubaccountCode}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Danger Zone */}
             <div className="bg-red-50 border border-red-200 rounded-2xl p-6">

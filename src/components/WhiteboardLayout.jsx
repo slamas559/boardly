@@ -13,7 +13,7 @@ import { QaPanel, QaPopup, useQaManager } from "./layout/QaManager";
 import Header from "./layout/Header";
 import { MobileFloatingToolbar, DesktopToolbar, MobileToolbarToggle } from "./whiteboard/ToolBar";
 import { WhiteboardCanvas, TextInputComponent } from "./whiteboard/Canvas";
-import { DesktopSidebar, MobileSidebarOverlay } from "./layout/SideBar";
+import { DesktopSidebar } from "./layout/SideBar";
 import InactiveRoom from "./layout/InactiveRoom";
 import api from "../utils/api";
 
@@ -62,7 +62,9 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
     qaPanelOpen,
     setQaPanelOpen,
     studentQuestions,
-    toggleQaEnabled
+    toggleQaEnabled,
+    submitQuestion,      // New centralized function
+    markQuestionAnswered, // New centralized function
   } = useQaManager(room, socket, isTutor);
 
   // Check if room is active
@@ -206,7 +208,15 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
     ctx.lineJoin = "round";
     ctxRef.current = ctx;
 
-    socket.emit("join-room", room._id);
+    // socket.emit("join-room", room._id);
+    socket.emit("join-room", {
+      roomId: room._id,
+      user: {
+        id: user.id,
+        name: user.name,
+        isTutor: user.isTutor
+      }
+    });
 
     const handleDraw = ({ x0, y0, x1, y1, color, lineWidth }) => {
       drawLine(x0, y0, x1, y1, color, lineWidth, false);
@@ -227,6 +237,7 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
         const ctx = ctxRef.current;
         const deviceCoords = denormalizeCoordinates(x, y);
         const deviceFontSize = denormalizeFontSize(fontSize);
+        
         ctx.font = `${deviceFontSize}px ${fontFamily}`;
         ctx.fillStyle = color;
         ctx.fillText(text, deviceCoords.x, deviceCoords.y);
@@ -250,12 +261,48 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
       }, 1000);
     };
 
+    // const handleForceDisconnect = (data) => {
+    //   console.log("Force disconnect received:", data);
+    //   setConnectionStatus('disconnected');
+      
+    //   // Clear any intervals
+    //   if (activityIntervalRef.current) {
+    //     clearInterval(activityIntervalRef.current);
+    //   }
+      
+    //   // Show user-friendly message based on reason
+    //   let message = data.message || "Your session was ended.";
+    //   if (data.reason === 'concurrent_session') {
+    //     message = "Your session was ended because you joined from another device or browser tab.";
+    //   }
+      
+    //   toast.error(message, {
+    //     position: "top-center",
+    //     autoClose: false,
+    //     closeOnClick: false,
+    //     draggable: false
+    //   });
+      
+    //   // Acknowledge the disconnect
+    //   socket.emit("disconnect-ack");
+      
+    //   // Redirect after a short delay
+    //   setTimeout(() => {
+    //     navigate('/dashboard');
+    //   }, 3000);
+    // };
+
     socket.on("whiteboard-text", handleText);
     socket.on("whiteboard-draw", handleDraw);
     socket.on("whiteboard-clear", handleClearBoard);
     socket.on("change-view", handleChangeView);
     socket.on("tutor-cursor-move", handleTutorCursor);
 
+    socket.on("force-disconnect", (data) => {
+      alert(data.message);
+      window.location.href = '/dashboard';
+    });
+    // socket.on("force-disconnect", handleForceDisconnect)
     loadBoardState();
 
     return () => {
@@ -264,6 +311,8 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
       socket.off("whiteboard-clear", handleClearBoard);
       socket.off("change-view", handleChangeView);
       socket.off("tutor-cursor-move", handleTutorCursor);
+      // socket.on("force-disconnect", handleForceDisconnect)
+
       
       if (cursorTimeoutRef.current) {
         clearTimeout(cursorTimeoutRef.current);
@@ -497,6 +546,8 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
       });
       
       setTextInputPosition({ x: deviceX, y: deviceY });
+      // setTextInputPosition({ x: normalizedCoords.x, y: normalizedCoords.y });
+
       setShowTextInput(true);
       setText("");
     }
@@ -562,9 +613,7 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
   const handleRoomStatus = async (mode) => {
     try {
       const token = getToken();
-      const res = await axios.put(
-        // `http://localhost:5000/rooms/end-room/${room._id}`,
-        `https://boardly-api.onrender.com/rooms/end-room/${room._id}`,
+      const res = await api.put(`/rooms/end-room/${room._id}`,
         {mode},
         {
           headers: { 
@@ -649,6 +698,9 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
         isTutor={isTutor}
         qaEnabled={qaEnabled}
         socket={socket}
+        studentQuestions={studentQuestions}
+        onSubmitQuestion={submitQuestion}           // Pass centralized function
+        onMarkQuestionAnswered={markQuestionAnswered} // Pass centralized function
       />
       
       {/* Header */}
@@ -659,11 +711,16 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
         qaEnabled={qaEnabled}
         qaLoading={qaLoading}
         qaPanelOpen={qaPanelOpen}
+        onOpenQaPanel={() => setQaPanelOpen(true)}
         sidebarOpen={sidebarOpen}
-        onNavigateBack={() => navigate('/lobby')}
+        onNavigateBack={() => {isTutor ? (navigate('/lobby')):(navigate(`/dashboard`))}}
         onToggleQa={toggleQaEnabled}
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
         onToggleQaPanel={() => setQaPanelOpen(!qaPanelOpen)}
+        view={view}
+        onViewChange={handleViewChange}
+        onEndRoom={handleEndRoom}
+        studentQuestions={studentQuestions}
       />
 
       <ToastContainer/>
@@ -769,21 +826,6 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
           isTutor={isTutor}
         />
       </div>
-
-      {/* Mobile Sidebar Overlay */}
-      <MobileSidebarOverlay 
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        view={view}
-        onViewChange={handleViewChange}
-        qaEnabled={qaEnabled}
-        onToggleQa={toggleQaEnabled}
-        qaLoading={qaLoading}
-        studentQuestions={studentQuestions}
-        onOpenQaPanel={() => setQaPanelOpen(true)}
-        onEndRoom={handleEndRoom}
-        isTutor={isTutor}
-      />
     </div>
   );
 };

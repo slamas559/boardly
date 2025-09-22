@@ -8,9 +8,10 @@ export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const [user, setUser] = useState(null);
 
+  const apiUrl = import.meta.env.VITE_API_URL;
+
   useEffect(() => {
-    // const newSocket = io("http://localhost:5000", {
-    const newSocket = io("https://boardly-api.onrender.com", {
+    const newSocket = io(apiUrl, {
       transports: ["websocket", "polling"],
       autoConnect: true,
       reconnection: true,

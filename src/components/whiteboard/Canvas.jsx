@@ -1,7 +1,7 @@
 // components/Canvas.jsx
 import React, { useCallback } from 'react';
 
-// Text Input Component
+// Text Input Component - CorelDraw/Paint Style
 export const TextInputComponent = ({ 
   showTextInput, 
   textInputPosition, 
@@ -19,35 +19,36 @@ export const TextInputComponent = ({
 }) => {
   if (!showTextInput || !textInputPosition) return null;
 
-  // Improved position calculation with better viewport awareness
-  const getInputPosition = useCallback(() => {
+  // Calculate position for the input dialog, ensuring it stays within viewport
+  const getDialogPosition = useCallback(() => {
     if (!canvasContainerRef.current || !canvasRef.current) return { left: 0, top: 0 };
     
-    // Input dimensions
-    const inputWidth = 250;
-    const inputHeight = 120;
+    const dialogWidth = 280;
+    const dialogHeight = 140;
+    const padding = 20;
     
-    // Calculate position relative to canvas
-    let left = textInputPosition.x + 10;
-    let top = textInputPosition.y + 10;
+    // Start with click position
+    let left = textInputPosition.x;
+    let top = textInputPosition.y;
     
-    // Ensure input stays within canvas bounds
-    if (left + inputWidth > canvasSize.width) {
-      left = canvasSize.width - inputWidth - 10;
+    // Adjust if dialog would go outside canvas bounds
+    if (left + dialogWidth + padding > canvasSize.width) {
+      left = textInputPosition.x - dialogWidth - padding;
     }
-    if (top + inputHeight > canvasSize.height) {
-      top = canvasSize.height - inputHeight - 10;
+    if (top + dialogHeight + padding > canvasSize.height) {
+      top = textInputPosition.y - dialogHeight - padding;
     }
     
-    // Ensure minimum distance from edges
-    left = Math.max(10, left);
-    top = Math.max(10, top);
+    // Ensure dialog stays within canvas bounds
+    left = Math.max(padding, Math.min(left, canvasSize.width - dialogWidth - padding));
+    top = Math.max(padding, Math.min(top, canvasSize.height - dialogHeight - padding));
     
     return { left, top };
   }, [textInputPosition, canvasSize, canvasContainerRef, canvasRef]);
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
       onTextSubmit();
     }
     if (e.key === 'Escape') {
@@ -55,85 +56,132 @@ export const TextInputComponent = ({
     }
   };
 
-  const position = getInputPosition();
+  const dialogPosition = getDialogPosition();
 
   return (
-    <div
-      className="absolute bg-white border border-gray-300 rounded-lg shadow-xl p-3 z-50 text-input-container"
-      style={{
-        left: position.left,
-        top: position.top,
-        minWidth: '250px',
-        maxWidth: '300px',
-        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
-      }}
-    >
-      <div className="flex flex-col gap-2">
-        <input
-          type="text"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Type your text..."
-          className="px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm focus:outline-none"
-          autoFocus
-          onKeyDown={handleKeyDown}
-        />
-        
-        <div className="flex items-center gap-2">
-          <select
-            value={fontSize}
-            onChange={(e) => setFontSize(parseInt(e.target.value))}
-            className="px-2 py-1 border border-gray-300 rounded text-sm flex-1"
+    <>
+      {/* Text cursor/crosshair at exact click position */}
+      <div
+        className="absolute pointer-events-none z-40"
+        style={{
+          left: textInputPosition.x - 1,
+          top: textInputPosition.y - 1,
+          width: 2,
+          height: parseInt(fontSize) + 4,
+          backgroundColor: '#007ACC',
+          animation: 'blink 1s infinite'
+        }}
+      />
+      
+      {/* Input dialog positioned smartly near click point */}
+      <div
+        className="absolute p-2 bg-transparent border-2 border-gray-400 rounded-lg shadow-2xl z-50 text-input-dialog"
+        style={{
+          left: dialogPosition.left,
+          top: dialogPosition.top,
+          minWidth: '280px',
+          boxShadow: '0 8px 25px rgba(0, 0, 0, 0.15), 0 4px 10px rgba(0, 0, 0, 0.1)',
+          border: '2px solid #ccc',
+          fontFamily: 'system-ui, -apple-system, sans-serif'
+        }}
+      >
+        <div className="flex flex-col gap-3">
+          {/* Preview text at actual size and font */}
+          <div
+            className="hidden md:block min-h-8 p-2 border border-gray-200 rounded bg-gray-50"
+            style={{
+              fontSize: `${fontSize}px`,
+              fontFamily: fontFamily,
+              lineHeight: '1.2'
+            }}
           >
-            <option value="10">10px</option>
-            <option value="12">12px</option>
-            <option value="14">14px</option>
-            <option value="16">16px</option>
-            <option value="18">18px</option>
-            <option value="20">20px</option>
-            <option value="24">24px</option>
-            <option value="28">28px</option>
-            <option value="32">32px</option>
-            <option value="36">36px</option>
-            <option value="40">40px</option>
-          </select>
+            {text || 'Type your text...'}
+          </div>
           
-          <select
-            value={fontFamily}
-            onChange={(e) => setFontFamily(e.target.value)}
-            className="px-2 py-1 border border-gray-300 rounded text-sm flex-1"
-          >
-            <option value="Arial" style={{ fontFamily: "Arial" }}>Arial</option>
-            <option value="Times New Roman" style={{ fontFamily: "Times New Roman" }}>Times New Roman</option>
-            <option value="Courier New" style={{ fontFamily: "Courier New" }}>Courier</option>
-            <option value="Georgia" style={{ fontFamily: "Georgia" }}>Georgia</option>
-            <option value="Verdana" style={{ fontFamily: "Verdana" }}>Verdana</option>
-            <option value="Impact" style={{ fontFamily: "Impact" }}>Impact</option>
-            <option value="Comic Sans MS" style={{ fontFamily: "Comic Sans MS" }}>Comic Sans MS</option>
-            <option value="Trebuchet MS" style={{ fontFamily: "Trebuchet MS" }}>Trebuchet MS</option>
-          </select>
-        </div>
-        
-        <div className="flex gap-2 mt-1">
-          <button
-            onClick={onTextSubmit}
-            className="flex-1 px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm transition-colors"
-          >
-            Add Text
-          </button>
-          <button
-            onClick={onTextCancel}
-            className="flex-1 px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm transition-colors"
-          >
-            Cancel
-          </button>
+          <input
+            type="text"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Enter text here..."
+            className="px-3 py-2 border-2 border-gray-300 bg-transparent rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm focus:outline-none"
+            autoFocus
+            onKeyDown={handleKeyDown}
+            style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+          />
+          
+          {/* Font controls */}
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium text-gray-600 min-w-10">Size:</label>
+            <select
+              value={fontSize}
+              onChange={(e) => setFontSize(parseInt(e.target.value))}
+              className="px-2 py-1 border border-gray-300 rounded text-sm flex-1 focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="8">8px</option>
+              <option value="10">10px</option>
+              <option value="12">12px</option>
+              <option value="14">14px</option>
+              <option value="16">16px</option>
+              <option value="18">18px</option>
+              <option value="20">20px</option>
+              <option value="24">24px</option>
+              <option value="28">28px</option>
+              <option value="32">32px</option>
+              <option value="36">36px</option>
+              <option value="48">48px</option>
+              <option value="60">60px</option>
+              <option value="72">72px</option>
+            </select>
+            
+            <label className="text-xs font-medium text-gray-600 min-w-10">Font:</label>
+            <select
+              value={fontFamily}
+              onChange={(e) => setFontFamily(e.target.value)}
+              className="px-2 py-1 border border-gray-300 rounded text-sm flex-1 focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="Arial">Arial</option>
+              <option value="Times New Roman">Times</option>
+              <option value="Courier New">Courier</option>
+              <option value="Georgia">Georgia</option>
+              <option value="Verdana">Verdana</option>
+              <option value="Impact">Impact</option>
+              <option value="Comic Sans MS">Comic Sans</option>
+              <option value="Trebuchet MS">Trebuchet</option>
+              <option value="system-ui">System</option>
+            </select>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex gap-2 mt-2">
+            <button
+              onClick={onTextSubmit}
+              disabled={!text.trim()}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+            >
+              OK
+            </button>
+            <button
+              onClick={onTextCancel}
+              className="flex-1 px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm font-medium transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+      
+      {/* Add blinking animation for cursor */}
+      <style jsx>{`
+        @keyframes blink {
+          0%, 50% { opacity: 1; }
+          51%, 100% { opacity: 0; }
+        }
+      `}</style>
+    </>
   );
 };
 
-// Tutor Cursor Component
+// Tutor Cursor Component (unchanged)
 export const TutorCursor = ({ cursor }) => {
   if (!cursor) return null;
   
@@ -154,7 +202,7 @@ export const TutorCursor = ({ cursor }) => {
   );
 };
 
-// Main Canvas Component
+// Main Canvas Component (unchanged)
 export const WhiteboardCanvas = ({ 
   canvasRef, 
   canvasSize, 

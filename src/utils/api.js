@@ -2,9 +2,9 @@
 import axios from "axios";
 import { getToken } from "./auth";
 
+const apiUrl = import.meta.env.VITE_API_URL;
 const api = axios.create({
-  baseURL: "https://boardly-api.onrender.com",
-  // baseURL: "http://localhost:5000",
+  baseURL: apiUrl,
 });
 
 api.interceptors.request.use((config) => {

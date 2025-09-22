@@ -46,6 +46,16 @@ const PDFToolbar = ({
     "#9C27B0", "#F44336", "#2196F3", "#FF5722", "#607D8B"
   ];
 
+  // Handle file selection with auto-upload
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setPdfFile(file);
+      // Automatically trigger upload after file selection
+      handleUpload(file);
+    }
+  };
+
   if (!isTutor) return (
     <div className="h-16 bg-white shadow-sm border-b border-gray-200 py-3"></div>
   );
@@ -55,7 +65,7 @@ const PDFToolbar = ({
       {/* Floating Toolbar Toggle Button (Mobile Only) */}
       <button
         onClick={() => setToolbarOpen(!toolbarOpen)}
-        className="sm:hidden absolute top-4 left-4 z-20 w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center hover:bg-gray-100 transition-colors"
+        className="sm:hidden absolute top-10 left-4 z-20 w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center hover:bg-gray-100 transition-colors"
       >
         {toolbarOpen ? <FaTimes /> : <FaFilePdf />}
       </button>
@@ -159,25 +169,35 @@ const PDFToolbar = ({
               ref={fileInputRef}
               type="file"
               accept="application/pdf"
-              onChange={(e) => setPdfFile(e.target.files[0])}
+              onChange={handleFileSelect}
               className="hidden"
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm text-gray-600"
+              disabled={isUploading}
+              className={`px-3 py-2 border rounded-lg transition-colors text-sm flex items-center gap-2 ${
+                isUploading 
+                  ? "border-blue-300 bg-blue-50 text-blue-700 cursor-not-allowed"
+                  : "border-gray-200 hover:bg-gray-50 text-gray-600"
+              }`}
             >
-              {pdfFile ? pdfFile.name : "Choose PDF"}
+              {isUploading ? (
+                <>
+                  <span className="animate-spin">⟳</span>
+                  <span>Uploading...</span>
+                </>
+              ) : (
+                <>
+                  <FaUpload size={12} />
+                  <span>{pdfFile ? "Change PDF" : "Upload PDF"}</span>
+                </>
+              )}
             </button>
-            <button
-              onClick={handleUpload}
-              disabled={!pdfFile || isUploading}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-            >
-              <FaUpload size={12} />
-              <span className="text-sm font-medium">
-                {isUploading ? "Uploading..." : "Upload"}
+            {pdfFile && !isUploading && (
+              <span className="text-xs text-gray-500 max-w-[120px] truncate" title={pdfFile.name}>
+                {pdfFile.name}
               </span>
-            </button>
+            )}
           </div>
         </div>
       </div>
@@ -249,63 +269,6 @@ const PDFToolbar = ({
               title="View"
             >
               <FaEye size={14} />
-            </button>
-          </div>
-
-          {/* Page Navigation */}
-          <div className="border-t pt-2 flex flex-col items-center gap-2">
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => goToPage(pageNumber - 1)}
-                disabled={pageNumber <= 1}
-                className="p-1 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title="Previous page"
-              >
-                <FaChevronLeft className="text-gray-600 text-xs" />
-              </button>
-              
-              <span className="text-xs font-medium text-gray-700 min-w-[40px] text-center">
-                {pageNumber}/{numPages || "?"}
-              </span>
-              
-              <button
-                onClick={() => goToPage(pageNumber + 1)}
-                disabled={!numPages || pageNumber >= numPages}
-                className="p-1 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title="Next page"
-              >
-                <FaChevronRight className="text-gray-600 text-xs" />
-              </button>
-            </div>
-          </div>
-
-          {/* Upload Section */}
-          <div className="border-t pt-2 flex flex-col gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/pdf"
-              onChange={(e) => setPdfFile(e.target.files[0])}
-              className="hidden"
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-xs text-gray-600 flex items-center justify-center"
-              title={pdfFile ? pdfFile.name : "Choose PDF"}
-            >
-              <FaFileUpload size={12} />
-            </button>
-            <button
-              onClick={handleUpload}
-              disabled={!pdfFile || isUploading}
-              className="p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
-              title="Upload PDF"
-            >
-              {isUploading ? (
-                <span className="animate-spin">⟳</span>
-              ) : (
-                <FaUpload size={12} />
-              )}
             </button>
           </div>
         </div>

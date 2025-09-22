@@ -1,6 +1,6 @@
-export const saveToken = (token) => localStorage.setItem("tutor_token", token);
-export const getToken = () => localStorage.getItem("tutor_token");
-export const removeToken = () => localStorage.removeItem("tutor_token");
+export const saveToken = (token) => localStorage.setItem("token", token);
+export const getToken = () => localStorage.getItem("token");
+export const removeToken = () => localStorage.removeItem("token");
 
 export const isLoggedIn = () => !!getToken();
 export const isLogout = () => {

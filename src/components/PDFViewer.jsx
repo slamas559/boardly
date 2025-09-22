@@ -98,7 +98,7 @@ const PDFViewer = ({ isTutor, room }) => {
           },
           {
             headers: {
-              Authorization: `Bearer ${localStorage.getItem("tutor_token")}`,
+              Authorization: `Bearer ${localStorage.getItem("token")}`,
             },
           }
         );
@@ -204,13 +204,13 @@ const PDFViewer = ({ isTutor, room }) => {
     }, 1000);
   }, [denormalizeCoordinates]);
 
-  const handleUpload = async () => {
-    if (!pdfFile) return;
+  const handleUpload = async (file=pdfFile) => {
+    if (!file) return;
     setIsUploading(true);
     
     try {
       const formData = new FormData();
-      formData.append("pdf", pdfFile);
+      formData.append("pdf", file);
 
       const res = await api.post(
         `/pdf/upload/${room._id}`,
@@ -275,7 +275,7 @@ const PDFViewer = ({ isTutor, room }) => {
       try {
         const res = await api.get(`/pdf/state/${room._id}`, {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem("tutor_token")}`,
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
         });
         if (res.data) {
@@ -350,7 +350,12 @@ const PDFViewer = ({ isTutor, room }) => {
         isTutor={isTutor}
         pageNumber={pageNumber}
         numPages={numPages}
+        isUploading={isUploading}
         goToPage={goToPage}
+        pdfFile={pdfFile}
+        handleUpload={handleUpload}
+        setPdfFile={setPdfFile}
+        fileInputRef={fileInputRef}
         mode={mode}
       />
 
