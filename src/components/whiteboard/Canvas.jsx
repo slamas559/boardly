@@ -15,7 +15,7 @@ export const TextInputComponent = ({
   onTextCancel, 
   canvasSize, 
   canvasContainerRef, 
-  canvasRef 
+  canvasRef,
 }) => {
   if (!showTextInput || !textInputPosition) return null;
 
@@ -202,7 +202,7 @@ export const TutorCursor = ({ cursor }) => {
   );
 };
 
-// Main Canvas Component (unchanged)
+// Main Canvas Component - FIXED VERSION
 export const WhiteboardCanvas = ({ 
   canvasRef, 
   canvasSize, 
@@ -216,7 +216,7 @@ export const WhiteboardCanvas = ({
   onTouchMove, 
   onTouchEnd, 
   tutorCursor, 
-  isTutor 
+  isTutor ,
 }) => {
   const getCursorClass = () => {
     switch(tool) {
@@ -228,10 +228,10 @@ export const WhiteboardCanvas = ({
   };
 
   return (
-    <div className="bg-white shadow-sm border border-gray-200 h-full flex items-center justify-center relative">
+    <div className="w-full h-full bg-white shadow-sm border border-gray-200 flex items-center justify-center relative overflow-hidden">
       <canvas
         ref={canvasRef}
-        className={`${isTutor && (getCursorClass())} w-full h-full bg-white touch-none`}
+        className={`${isTutor ? getCursorClass() : 'cursor-default'} bg-white touch-none block`}
         // Mouse events
         onMouseDown={tool === "text" ? onCanvasClick : onMouseDown}
         onMouseMove={onMouseMove}
@@ -244,13 +244,18 @@ export const WhiteboardCanvas = ({
         width={canvasSize.width}
         height={canvasSize.height}
         style={{ 
+          // Remove any CSS width/height to prevent scaling conflicts
+          // The canvas will use its natural dimensions set by width/height attributes
           touchAction: 'none',
           WebkitTouchCallout: 'none',
           WebkitUserSelect: 'none',
           KhtmlUserSelect: 'none',
           MozUserSelect: 'none',
           msUserSelect: 'none',
-          userSelect: 'none'
+          userSelect: 'none',
+          // Ensure the canvas takes exactly the space calculated by JavaScript
+          maxWidth: '100%',
+          maxHeight: '100%'
         }}
       />
       {/* Show tutor cursor for students */}

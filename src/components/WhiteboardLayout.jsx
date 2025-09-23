@@ -127,6 +127,7 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
     }
   }, []);
 
+
   useEffect(() => {
     updateCanvasSize();
     window.addEventListener('resize', updateCanvasSize);
@@ -629,6 +630,15 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
     setTextInputPosition(null);
   };
 
+  const navigateBack = () => {
+    {isTutor ? (
+          navigate('/lobby')
+        ):(
+          navigate(`/dashboard`)
+        )
+      }
+    // socket.emit("disconnect",{});
+  }
   // If room is not active, show inactive state
   if (!isRoomActive) {
     return (
@@ -641,6 +651,16 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
     );
   }
 
+  {/* Canvas Container */}
+  const canvasContainerStyles = {
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden', // Prevent scrollbars
+    position: 'relative'
+  };
   // Main render
   return (
     <div className="flex flex-col w-full h-screen bg-gray-50">
@@ -675,7 +695,7 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
         qaPanelOpen={qaPanelOpen}
         onOpenQaPanel={() => setQaPanelOpen(true)}
         sidebarOpen={sidebarOpen}
-        onNavigateBack={() => {isTutor ? (navigate('/lobby')):(navigate(`/dashboard`))}}
+        onNavigateBack={navigateBack}
         onToggleQa={toggleQaEnabled}
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
         onToggleQaPanel={() => setQaPanelOpen(!qaPanelOpen)}
@@ -729,11 +749,11 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
             />
           )}
 
-          {/* Canvas Container */}
           <div 
             ref={canvasContainerRef}
             className="flex-1 overflow-auto"
-          >
+            // style={canvasContainerStyles}
+          > 
             {/* Whiteboard View */}
             <div className={`w-full h-full ${view === "whiteboard" ? 'block' : 'hidden'}`}>
               <WhiteboardCanvas 
