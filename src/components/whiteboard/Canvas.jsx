@@ -205,6 +205,7 @@ export const TutorCursor = ({ cursor }) => {
 // Main Canvas Component - FIXED VERSION
 export const WhiteboardCanvas = ({ 
   canvasRef, 
+  canvasContainerRef,
   canvasSize, 
   tool, 
   onCanvasClick, 

@@ -116,8 +116,8 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
   const updateCanvasSize = useCallback(() => {
     if (canvasContainerRef.current && canvasRef.current) {
       const container = canvasContainerRef.current;
-      const width = container.clientWidth - 40;
-      const height = container.clientHeight - 40;
+      const width = container.clientWidth;
+      const height = container.clientHeight;
       
       setCanvasSize({ width, height });
       canvasRef.current.width = width;
@@ -787,6 +787,7 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
             {/* Whiteboard View */}
             <div className={`w-full h-full ${view === "whiteboard" ? 'block' : 'hidden'}`}>
               <WhiteboardCanvas 
+                canvasContainerRef={canvasContainerRef}
                 canvasRef={canvasRef}
                 canvasSize={canvasSize}
                 tool={tool}
