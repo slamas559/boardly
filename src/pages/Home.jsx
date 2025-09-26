@@ -14,7 +14,22 @@ import {
   FaUserPlus,
   FaSignInAlt,
   FaCheck,
-  FaSearch
+  FaSearch,
+  FaMoneyBillWave,
+  FaChartLine,
+  FaReceipt,
+  FaCreditCard,
+  FaWallet,
+  FaPiggyBank,
+  FaCalculator,
+  FaShieldAlt,
+  FaHandHoldingUsd,
+  FaClock,
+  FaTrophy,
+  FaHeart,
+  FaBookOpen,
+  FaBrain,
+  FaLightbulb
 } from "react-icons/fa";
 
 const Home = () => {
@@ -41,7 +56,7 @@ const Home = () => {
     if (!isLoggedIn()) {
       return {
         title: "Professional Online Learning Platform",
-        subtitle: "Whether you're teaching or learning, connect through real-time collaboration tools, interactive whiteboards, and seamless document sharing.",
+        subtitle: "Connect, teach, and learn through real-time collaboration tools, interactive whiteboards, and seamless document sharing. Create free sessions to help others or offer paid sessions to share your expertise.",
         primaryCTA: "Start Free Trial",
         primaryLink: "/register",
         secondaryCTA: "Sign In",
@@ -52,7 +67,7 @@ const Home = () => {
     if (userRole === 'tutor') {
       return {
         title: "Ready to Teach?",
-        subtitle: "Create engaging learning experiences with your professional teaching tools and start your next session.",
+        subtitle: "Create engaging learning experiences with professional teaching tools. Choose to offer free sessions to help students or create paid sessions to monetize your expertise.",
         primaryCTA: "Create Session",
         primaryLink: "/create",
         secondaryCTA: "View Dashboard",
@@ -62,11 +77,11 @@ const Home = () => {
 
     return {
       title: "Ready to Learn?",
-      subtitle: "Join interactive learning sessions, collaborate with instructors, and enhance your knowledge with professional teaching tools.",
-      // primaryCTA: "Browse Sessions",
-      // primaryLink: "/browse-sessions",
+      subtitle: "Join interactive learning sessions, collaborate with instructors, and enhance your knowledge. Access both free community sessions and premium paid courses from expert tutors.",
       primaryCTA: "View Dashboard", 
-      primaryLink: "/dashboard"
+      primaryLink: "/dashboard",
+      secondaryCTA: "Browse Sessions",
+      secondaryLink: "/dashboard"
     };
   };
 
@@ -153,6 +168,133 @@ const Home = () => {
         </div>
       </section>
 
+      {/* Teaching & Learning Options Section */}
+      <section className="py-24 bg-gray-900 text-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl font-bold mb-6">
+              Flexible Teaching & Learning Options
+            </h2>
+            <p className="text-xl text-gray-300 max-w-3xl mx-auto">
+              Whether you want to share knowledge freely or build a teaching business, 
+              our platform supports both community learning and professional instruction.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+            {/* Free Sessions Section */}
+            <div className="bg-white/10 backdrop-blur-sm p-8 rounded-lg border border-white/20">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center">
+                  <FaHeart className="w-6 h-6 text-gray-900" />
+                </div>
+                <h3 className="text-2xl font-bold">Community Learning</h3>
+              </div>
+              
+              <div className="space-y-6">
+                <p className="text-gray-300">
+                  Share your knowledge with the community through free sessions. Help fellow learners, 
+                  build your teaching reputation, and contribute to the learning ecosystem.
+                </p>
+                
+                <div className="space-y-4">
+                  <div className="flex items-start gap-3">
+                    <FaUsers className="w-5 h-5 text-white mt-1 flex-shrink-0" />
+                    <div>
+                      <h4 className="font-semibold mb-1">Free Access for All</h4>
+                      <p className="text-gray-300 text-sm">Create sessions accessible to any student without payment barriers</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-start gap-3">
+                    <FaBookOpen className="w-5 h-5 text-white mt-1 flex-shrink-0" />
+                    <div>
+                      <h4 className="font-semibold mb-1">Build Your Profile</h4>
+                      <p className="text-gray-300 text-sm">Establish credibility and showcase your teaching skills to the community</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-start gap-3">
+                    <FaBrain className="w-5 h-5 text-white mt-1 flex-shrink-0" />
+                    <div>
+                      <h4 className="font-semibold mb-1">Knowledge Sharing</h4>
+                      <p className="text-gray-300 text-sm">Contribute to collaborative learning and help students discover new topics</p>
+                    </div>
+                  </div>
+                </div>
+
+                {!isLoggedIn() && (
+                  <div className="pt-6 border-t border-white/20">
+                    <Link
+                      to="/register"
+                      className="inline-flex items-center gap-2 bg-white text-gray-900 px-6 py-3 rounded-md hover:bg-gray-100 transition-colors font-semibold"
+                    >
+                      <FaHeart className="w-4 h-4" />
+                      Start Teaching for Free
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Paid Sessions Section */}
+            <div className="bg-white/10 backdrop-blur-sm p-8 rounded-lg border border-white/20">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center">
+                  <FaLightbulb className="w-6 h-6 text-gray-900" />
+                </div>
+                <h3 className="text-2xl font-bold">Professional Teaching</h3>
+              </div>
+              
+              <div className="space-y-6">
+                <p className="text-gray-300">
+                  Monetize your expertise by creating paid sessions. Set your own prices, 
+                  track your progress, and build a sustainable teaching practice.
+                </p>
+                
+                <div className="space-y-4">
+                  <div className="flex items-start gap-3">
+                    <FaMoneyBillWave className="w-5 h-5 text-white mt-1 flex-shrink-0" />
+                    <div>
+                      <h4 className="font-semibold mb-1">Set Your Own Prices</h4>
+                      <p className="text-gray-300 text-sm">Choose what your expertise is worth and earn from your teaching sessions</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-start gap-3">
+                    <FaChartLine className="w-5 h-5 text-white mt-1 flex-shrink-0" />
+                    <div>
+                      <h4 className="font-semibold mb-1">Track Your Progress</h4>
+                      <p className="text-gray-300 text-sm">Monitor your teaching activity and earnings through detailed analytics</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-start gap-3">
+                    <FaShieldAlt className="w-5 h-5 text-white mt-1 flex-shrink-0" />
+                    <div>
+                      <h4 className="font-semibold mb-1">Secure Payments</h4>
+                      <p className="text-gray-300 text-sm">Reliable payment processing with transparent fee structure</p>
+                    </div>
+                  </div>
+                </div>
+
+                {!isLoggedIn() && (
+                  <div className="pt-6 border-t border-white/20">
+                    <Link
+                      to="/register"
+                      className="inline-flex items-center gap-2 bg-white text-gray-900 px-6 py-3 rounded-md hover:bg-gray-100 transition-colors font-semibold"
+                    >
+                      <FaLightbulb className="w-4 h-4" />
+                      Start Professional Teaching
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Features Section */}
       <section className="py-24 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -229,20 +371,20 @@ const Home = () => {
                 <FaSearch className="w-6 h-6 text-white" />
               </div>
               <h3 className="text-xl font-semibold text-gray-900 mb-4">
-                Session Discovery
+                Session Discovery & Management
               </h3>
               <p className="text-gray-600 mb-6">
-                Students can easily find and join learning sessions. Browse available 
-                sessions, view instructor profiles, and connect with the right learning opportunities.
+                Easily find learning opportunities or manage your teaching sessions. 
+                Access both free community sessions and premium courses with transparent pricing.
               </p>
               <ul className="space-y-3">
                 <li className="flex items-center text-gray-600">
                   <FaCheck className="w-4 h-4 text-gray-400 mr-3" />
-                  Browse available sessions
+                  Browse free & paid sessions
                 </li>
                 <li className="flex items-center text-gray-600">
                   <FaCheck className="w-4 h-4 text-gray-400 mr-3" />
-                  Instructor profiles & ratings
+                  Simple payment tracking
                 </li>
                 <li className="flex items-center text-gray-600">
                   <FaCheck className="w-4 h-4 text-gray-400 mr-3" />
@@ -287,11 +429,11 @@ const Home = () => {
                 <div className="w-10 h-10 bg-gray-900 rounded-full flex items-center justify-center text-white font-bold text-lg mr-4">
                   2
                 </div>
-                <h3 className="text-xl font-semibold text-gray-900">Start Learning</h3>
+                <h3 className="text-xl font-semibold text-gray-900">Start Teaching or Learning</h3>
               </div>
               <p className="text-gray-600 pl-14">
-                Instructors create interactive sessions while students discover and 
-                join learning opportunities that match their interests and goals.
+                Instructors can create free or paid sessions while students discover and 
+                join learning opportunities that match their interests and budget.
               </p>
             </div>
 
@@ -340,21 +482,29 @@ const Home = () => {
       <section className="py-24">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-4xl font-bold text-gray-900 mb-6">
-            Ready to Start Learning?
+            Ready to Start Learning or Teaching?
           </h2>
           <p className="text-xl text-gray-600 mb-10">
             Join thousands of instructors and students who use our platform for 
-            professional online learning and collaborative educational experiences.
+            collaborative learning experiences. Choose your path: share knowledge freely or build your teaching business.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             {isLoggedIn() ? (
               userRole === 'tutor' && (
-                <Link
-                  to="/create"
-                  className="bg-gray-900 text-white px-8 py-4 rounded-md hover:bg-gray-800 transition-colors font-semibold text-lg"
-                >
-                  Create Your First Session
-                </Link>
+                <>
+                  <Link
+                    to="/create"
+                    className="bg-gray-900 text-white px-8 py-4 rounded-md hover:bg-gray-800 transition-colors font-semibold text-lg"
+                  >
+                    Create Your First Session
+                  </Link>
+                  <Link
+                    to="/dashboard"
+                    className="border-2 border-gray-300 text-gray-700 px-8 py-4 rounded-md hover:border-gray-400 hover:text-gray-900 transition-colors font-semibold text-lg"
+                  >
+                    View Dashboard
+                  </Link>
+                </>
               )
             ) : (
               <>

@@ -76,6 +76,7 @@ const Profile = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
       setUser(res.data);
+      // console.log(res.data);
       setForm({
         name: res.data.name || '',
         email: res.data.email || '',

@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useSocket } from "../context/SocketContext";
 import { useNavigate } from "react-router-dom";
-import { ToastContainer } from 'react-toastify';
+import { Flip, Slide, ToastContainer, Zoom } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import PDFViewer from "./PDFViewer";
 import { getToken } from "../utils/auth";
@@ -48,10 +48,12 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
   const [tutorCursor, setTutorCursor] = useState(null);
 
   const [user, setUser] = useState({
-    id: localStorage.getItem('user_id') || 'unknown',
-    name: localStorage.getItem('user_name') || 'User',
-    isTutor: isTutor
+    id: "",
+    name: "",
+    isTutor: ""
   });
+
+  const [userData, setUserData] = useState(null);
 
   // Use the extracted Q&A manager hook
   const {
@@ -197,6 +199,22 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
     }
   }, [socket, room._id, isRoomActive, denormalizeCoordinates, denormalizeLineWidth]);
 
+  useEffect(()=>{
+    const fetchUserData = async () => {
+      const token = getToken();
+      const res = await api.get("/auth/profile", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setUserData(res.data);
+      setUser({
+        id: res.data._id,
+        name: res.data.name,
+        isTutor: res.data.isTutor
+      });
+    };
+    fetchUserData();
+  }, []);
+
   // Socket event setup
   useEffect(() => {
     if (!isRoomActive) return;
@@ -281,7 +299,7 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
         clearTimeout(cursorTimeoutRef.current);
       }
     };
-  }, [room._id, socket, drawLine, isRoomActive, denormalizeCoordinates, denormalizeFontSize]);
+  }, [room._id, socket, user, drawLine, isRoomActive, denormalizeCoordinates, denormalizeFontSize]);
 
   // Touch event handlers
   const getTouchPos = useCallback((e, canvas) => {
@@ -705,7 +723,19 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
         studentQuestions={studentQuestions}
       />
 
-      <ToastContainer/>
+      <ToastContainer
+        position="top-right" // Default position
+        transition={Slide} // Animation type
+        autoClose={1000} // Default auto-close time in ms
+        hideProgressBar={true} // Show/hide progress bar
+        newestOnTop={false} // Stack new toasts on top or bottom
+        closeOnClick // Close on click
+        rtl={false} // Right-to-left support
+        pauseOnFocusLoss // Pause on window focus loss
+        draggable // Allow dragging to close
+        pauseOnHover // Pause on hover
+        theme="light" // Theme: "light", "dark", or "colored"
+        />
 
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">

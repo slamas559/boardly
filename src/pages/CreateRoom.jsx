@@ -80,7 +80,7 @@ const CreateRoom = () => {
         </div>
 
         {/* Main Card */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           {/* Room Type Selector */}
           <div className="mb-8">
             <label className="block text-sm font-semibold text-gray-900 mb-4">
@@ -88,7 +88,7 @@ const CreateRoom = () => {
             </label>
             <div className="flex rounded-lg border border-gray-300 p-1">
               <button
-                className={`flex-1 px-4 py-3 text-sm font-medium rounded-md transition-colors ${
+                className={`flex-1 px-4 py-3 text-xs md:text-sm font-medium rounded-md transition-colors ${
                   isRoomType === "Regular"
                     ? "bg-gray-900 text-white"
                     : "text-gray-700 hover:text-gray-900"
@@ -101,7 +101,7 @@ const CreateRoom = () => {
                 Free Session
               </button>
               <button
-                className={`flex-1 px-4 py-3 text-sm font-medium rounded-md transition-colors ${
+                className={`flex-1 px-4 py-3 text-xs md:text-sm font-medium rounded-md transition-colors ${
                   isRoomType === "Paid"
                     ? "bg-gray-900 text-white"
                     : "text-gray-700 hover:text-gray-900"
@@ -142,7 +142,7 @@ const CreateRoom = () => {
                     <button
                       key={index}
                       onClick={() => setTopic(example)}
-                      className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-md transition-colors border border-gray-200"
+                      className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-md transition-colors border border-gray-200"
                       disabled={isCreating}
                     >
                       {example}
