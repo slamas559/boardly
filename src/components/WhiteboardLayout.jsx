@@ -46,6 +46,7 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
   const [showTextInput, setShowTextInput] = useState(false);
   const [toolbarOpen, setToolbarOpen] = useState(false);
   const [tutorCursor, setTutorCursor] = useState(null);
+  const [showStopRoom, setShowStopRoom] = useState(false);
 
   const [user, setUser] = useState({
     id: "",
@@ -615,9 +616,7 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
   };
 
   const handleEndRoom = () => {
-    if (window.confirm("Are you sure you want to end the room? This will disconnect all students.")) {
       handleRoomStatus("inactive");
-    }
   };
 
   // Event handlers for components
@@ -721,6 +720,8 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
         onViewChange={handleViewChange}
         onEndRoom={handleEndRoom}
         studentQuestions={studentQuestions}
+        showStopRoom={showStopRoom}
+        setShowStopRoom={setShowStopRoom}
       />
 
       <ToastContainer
@@ -837,6 +838,8 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
           onOpenQaPanel={() => setQaPanelOpen(true)}
           onEndRoom={handleEndRoom}
           isTutor={isTutor}
+          showStopRoom={showStopRoom}
+          setShowStopRoom={setShowStopRoom}
         />
       </div>
     </div>

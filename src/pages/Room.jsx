@@ -48,7 +48,7 @@ const Room = () => {
 
         const roomData = res.data;
         setRoom(roomData);
-        console.log(roomData)
+        // console.log(roomData)
         setIsTutor(roomData.isTutor || false);
         // console.log("Fetched room data:", roomData);
         // Check if tutor has payment setup for paid rooms

@@ -21,6 +21,8 @@ const Header = ({
   onViewChange,
   onEndRoom,
   studentQuestions,
+  showStopRoom,
+  setShowStopRoom, 
 }) => {
   const [roomStats, setRoomStats] = useState({
     totalUsers: 0,
@@ -38,6 +40,8 @@ const Header = ({
     const handleRoomStatsUpdate = (stats) => {
       setRoomStats(stats);
     };
+
+    console.log(roomStats)
 
     socket.on("room-stats-update", handleRoomStatsUpdate);
 
@@ -250,7 +254,7 @@ const Header = ({
 
             <button
               onClick={() => {
-                onEndRoom();
+                setShowStopRoom(true);
                 setIsMobileMenuOpen(false);
               }}
               className="flex items-center space-x-2 px-3 py-2 bg-red-100 text-red-700 hover:bg-red-200 rounded-lg text-sm transition-colors w-full text-left"
@@ -258,9 +262,36 @@ const Header = ({
               <FaStop />
               <span>End Session</span>
             </button>
-            
           </div>
         </div>
+        {showStopRoom && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-lg p-6 max-w-md w-full">
+                  <h3 className="text-xl font-bold text-gray-900 mb-4">
+                    🚫 Stop Session
+                  </h3>
+                  <p className="text-gray-600 mb-6">
+                    Are you sure you want to stop room?
+                    You can resume it later,<br />
+                    <span className="font-medium">⚠️ This action will disconnect all participants.</span>
+                  </p>
+                  <div className="flex gap-3 justify-end">
+                    <button
+                      onClick={() => setShowStopRoom(false)}
+                      className="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors font-medium"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => onEndRoom()}
+                      className="px-6 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors font-medium"
+                    >
+                      Stop Session
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
       </header>
     </>
   );

@@ -235,13 +235,6 @@ const Dashboard = () => {
     >
       <Icon className="w-4 h-4" />
       {label}
-      {count !== undefined && (
-        <span className={`px-2 py-1 text-xs rounded-full font-medium ${
-          activeTab === tabId ? 'bg-white/20' : 'bg-gray-200 text-gray-600'
-        }`}>
-          {count}
-        </span>
-      )}
     </button>
   );
 
