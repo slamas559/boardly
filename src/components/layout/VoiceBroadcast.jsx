@@ -1,5 +1,7 @@
+// VoiceBroadcast.jsx - Enhanced with independent subtitle control
+
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { FaMicrophone, FaMicrophoneSlash, FaVolumeUp, FaVolumeDown, FaSpinner, FaCamera, FaPodcast, FaHeadphones, FaHeadphonesAlt, FaVolumeMute, FaVolumeOff } from 'react-icons/fa';
+import { FaMicrophone, FaMicrophoneSlash, FaVolumeUp, FaVolumeDown, FaSpinner, FaVolumeMute, FaClosedCaptioning } from 'react-icons/fa';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import "./Audio.css"
@@ -10,13 +12,23 @@ const VoiceBroadcast = ({ room, socket, isTutor }) => {
   const [isReceivingAudio, setIsReceivingAudio] = useState(false);
   const [volume, setVolume] = useState(0.8);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  
+  // Subtitle states - now independent per user
+  const [subtitlesEnabled, setSubtitlesEnabled] = useState(false);
+  const [subtitles, setSubtitles] = useState([]);
+  const [currentTranscript, setCurrentTranscript] = useState('');
 
   // Refs for WebRTC
   const localStreamRef = useRef(null);
-  const peerConnectionRef = useRef(null); // Single connection for students, managed connections for tutors
-  const studentConnectionsRef = useRef(new Map()); // For tutors to track student connections
+  const peerConnectionRef = useRef(null);
+  const studentConnectionsRef = useRef(new Map());
   const audioElementRef = useRef(null);
   const localAudioRef = useRef(null);
+  
+  // Refs for audio processing
+  const audioContextRef = useRef(null);
+  const processorRef = useRef(null);
+  const isTranscribingRef = useRef(false);
 
   // ICE servers configuration
   const iceServers = {
@@ -49,6 +61,66 @@ const VoiceBroadcast = ({ room, socket, isTutor }) => {
     ]
   };
 
+  const setupAudioProcessing = useCallback((stream) => {
+    if (!isTutor) return;
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)({
+        sampleRate: 16000
+      });
+      
+      console.log('Audio context created with sample rate:', audioContext.sampleRate);
+      
+      const source = audioContext.createMediaStreamSource(stream);
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+      processor.onaudioprocess = (e) => {
+        if (!isTranscribingRef.current) return;
+        
+        const inputData = e.inputBuffer.getChannelData(0);
+        const int16Data = new Int16Array(inputData.length);
+        for (let i = 0; i < inputData.length; i++) {
+          const s = Math.max(-1, Math.min(1, inputData[i]));
+          int16Data[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+        
+        const hasAudio = int16Data.some(sample => Math.abs(sample) > 100);
+        
+        if (hasAudio) {
+          socket.emit('audio-data', {
+            roomId: room._id,
+            audioData: int16Data.buffer
+          });
+        }
+      };
+      
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+      
+      audioContextRef.current = audioContext;
+      processorRef.current = processor;
+      
+      console.log('✓ Audio processing setup complete');
+      
+    } catch (error) {
+      console.error('Error setting up audio processing:', error);
+      toast.error('Failed to setup audio processing');
+    }
+  }, [socket, room._id, isTutor]);
+
+  // Toggle subtitles - now only controls local display
+  const toggleSubtitles = () => {
+    const newState = !subtitlesEnabled;
+    setSubtitlesEnabled(newState);
+    
+    if (newState) {
+      toast.success('Caption enabled for you');
+    } else {
+      toast.info('Caption disabled for you');
+      // Only clear local display, don't emit clear event
+      setSubtitles([]);
+      setCurrentTranscript('');
+    }
+  };
 
   // Create peer connection for a specific student (tutor side)
   const createStudentConnection = useCallback(async (studentSocketId) => {
@@ -58,7 +130,6 @@ const VoiceBroadcast = ({ room, socket, isTutor }) => {
 
     const peerConnection = new RTCPeerConnection(iceServers);
 
-    // Handle ICE candidates
     peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
         socket.emit('voice-ice-candidate', {
@@ -69,7 +140,6 @@ const VoiceBroadcast = ({ room, socket, isTutor }) => {
       }
     };
 
-    // Handle connection state
     peerConnection.onconnectionstatechange = () => {
       const state = peerConnection.connectionState;
       console.log(`Connection state with student ${studentSocketId}: ${state}`);
@@ -82,15 +152,12 @@ const VoiceBroadcast = ({ room, socket, isTutor }) => {
       }
     };
 
-    // Add local stream
     localStreamRef.current.getTracks().forEach(track => {
       peerConnection.addTrack(track, localStreamRef.current);
     });
 
-    // Store the connection
     studentConnectionsRef.current.set(studentSocketId, peerConnection);
 
-    // Create and send offer
     const offer = await peerConnection.createOffer();
     await peerConnection.setLocalDescription(offer);
 
@@ -112,7 +179,6 @@ const VoiceBroadcast = ({ room, socket, isTutor }) => {
 
     const peerConnection = new RTCPeerConnection(iceServers);
 
-    // Handle ICE candidates
     peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
         socket.emit('voice-ice-candidate', {
@@ -122,7 +188,6 @@ const VoiceBroadcast = ({ room, socket, isTutor }) => {
       }
     };
 
-    // Handle remote stream
     peerConnection.ontrack = (event) => {
       console.log('Received remote stream from tutor');
       const [remoteStream] = event.streams;
@@ -137,7 +202,6 @@ const VoiceBroadcast = ({ room, socket, isTutor }) => {
       }
     };
 
-    // Handle connection state changes
     peerConnection.onconnectionstatechange = () => {
       const state = peerConnection.connectionState;
       console.log(`Student connection state: ${state}`);
@@ -165,19 +229,25 @@ const VoiceBroadcast = ({ room, socket, isTutor }) => {
     
     setIsConnecting(true);
     try {
-      // Get user media
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true
+          autoGainControl: true,
+          sampleRate: 16000
         } 
       });
       
       localStreamRef.current = stream;
       console.log('Got local stream, starting broadcast...');
       
-      // Signal that broadcast is starting
+      // Setup audio processing for transcription
+      setupAudioProcessing(stream);
+      
+      // Auto-start transcription when mic is enabled
+      isTranscribingRef.current = true;
+      socket.emit('start-transcription', { roomId: room._id });
+      
       socket.emit('voice-broadcast-started', {
         roomId: room._id
       });
@@ -186,14 +256,13 @@ const VoiceBroadcast = ({ room, socket, isTutor }) => {
       setIsConnecting(false);
       setConnectionStatus('connected');
       
-      // Optional: Add local audio preview (muted to avoid feedback)
       if (localAudioRef.current) {
         localAudioRef.current.srcObject = stream;
         localAudioRef.current.muted = true;
       }
 
       toast.success('Voice broadcast started');
-      console.log('Voice broadcast started - ready for student connections');
+      console.log('Voice broadcast and transcription started');
 
     } catch (error) {
       console.error('Error starting voice broadcast:', error);
@@ -215,20 +284,32 @@ const VoiceBroadcast = ({ room, socket, isTutor }) => {
 
     console.log('Stopping voice broadcast...');
 
-    // Stop local stream
+    // Stop transcription
+    isTranscribingRef.current = false;
+    socket.emit('stop-transcription', { roomId: room._id });
+
+    // Clean up audio processing
+    if (processorRef.current) {
+      processorRef.current.disconnect();
+      processorRef.current = null;
+    }
+    
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
       localStreamRef.current = null;
     }
 
-    // Close all student connections
     studentConnectionsRef.current.forEach((peerConnection, studentId) => {
       console.log(`Closing connection to student: ${studentId}`);
       peerConnection.close();
     });
     studentConnectionsRef.current.clear();
 
-    // Notify students that broadcast has ended
     socket.emit('voice-broadcast-ended', { roomId: room._id });
 
     setIsMicOn(false);
@@ -237,7 +318,6 @@ const VoiceBroadcast = ({ room, socket, isTutor }) => {
     toast.success('Voice broadcast stopped');
   };
 
-  // Handle volume change (students only)
   const handleVolumeChange = (newVolume) => {
     setVolume(newVolume);
     if (audioElementRef.current) {
@@ -249,33 +329,48 @@ const VoiceBroadcast = ({ room, socket, isTutor }) => {
   useEffect(() => {
     if (!socket) return;
 
-    // Handle broadcast started notification for students
+    // Subtitle events - now received by all users but only displayed if enabled
+    const handleSubtitleReceived = (data) => {
+      if (data.isFinal) {
+        setSubtitles(prev => {
+          const newSubtitles = [...prev, {
+            id: data.timestamp,
+            text: data.text,
+            timestamp: data.timestamp,
+            confidence: data.confidence
+          }];
+          return newSubtitles.slice(-50);
+        });
+        console.log('Final subtitle received:', data.text);
+        setCurrentTranscript('');
+      } else {
+        setCurrentTranscript(data.text);
+      }
+    };
+
+    const handleTranscriptionStarted = () => {
+      console.log('Transcription started successfully');
+    };
+
+    const handleTranscriptionError = (data) => {
+      console.error('Transcription error:', data.error);
+      toast.error('Transcription error: ' + data.error);
+      isTranscribingRef.current = false;
+    };
+
+    // Existing voice events
     const handleBroadcastStarted = (data) => {
       if (isTutor || data.roomId !== room._id) return;
       
       console.log('Tutor started broadcast, connecting...');
       setIsConnecting(true);
       
-      // Request to join the broadcast
       socket.emit('student-join-broadcast', { 
         roomId: room._id,
         studentSocketId: socket.id 
       });
     };
 
-    // Handle broadcast status check for late-joining students
-    const handleBroadcastStatusCheck = (data) => {
-      if (!isTutor && data.roomId === room._id) {
-        console.log('Checking for active broadcast...');
-        // Request current broadcast status when joining late
-        socket.emit('request-broadcast-status', { 
-          roomId: room._id,
-          studentSocketId: socket.id 
-        });
-      }
-    };
-
-    // Handle student join broadcast request (tutor side)
     const handleStudentJoinBroadcast = async (data) => {
       if (!isTutor || data.roomId !== room._id || !isMicOn) return;
       
@@ -283,14 +378,12 @@ const VoiceBroadcast = ({ room, socket, isTutor }) => {
       await createStudentConnection(data.studentSocketId);
     };
 
-    // Handle voice offer (students only)
     const handleVoiceOffer = async (data) => {
       if (isTutor || data.roomId !== room._id) return;
       
       console.log('Received voice offer from tutor');
       
       try {
-        // Clean up existing connection
         if (peerConnectionRef.current) {
           peerConnectionRef.current.close();
         }
@@ -316,7 +409,6 @@ const VoiceBroadcast = ({ room, socket, isTutor }) => {
       }
     };
 
-    // Handle voice answer (tutor only)
     const handleVoiceAnswer = async (data) => {
       if (!isTutor || data.roomId !== room._id) return;
       
@@ -333,30 +425,26 @@ const VoiceBroadcast = ({ room, socket, isTutor }) => {
       }
     };
 
-    // Handle ICE candidates
     const handleIceCandidate = async (data) => {
       if (data.roomId !== room._id) return;
       
       try {
         if (isTutor) {
-          // Add to specific student connection if targetStudentId is provided
           if (data.targetStudentId) {
             const peerConnection = studentConnectionsRef.current.get(data.targetStudentId);
             if (peerConnection) {
               await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
             }
           } else {
-            // Add to all student connections
             studentConnectionsRef.current.forEach(async (peerConnection) => {
               try {
                 await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
               } catch (err) {
-                // Ignore errors for candidates not meant for this connection
+                // Ignore
               }
             });
           }
         } else {
-          // For students, add to tutor connection
           if (peerConnectionRef.current) {
             await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
           }
@@ -366,21 +454,18 @@ const VoiceBroadcast = ({ room, socket, isTutor }) => {
       }
     };
 
-    // Handle broadcast ended
     const handleBroadcastEnded = (data) => {
       if (data.roomId !== room._id) return;
       
       console.log('Voice broadcast ended');
       
       if (isTutor) {
-        // Clean up tutor side
         studentConnectionsRef.current.forEach((peerConnection) => {
           peerConnection.close();
         });
         studentConnectionsRef.current.clear();
         setIsMicOn(false);
       } else {
-        // Clean up student side
         if (peerConnectionRef.current) {
           peerConnectionRef.current.close();
           peerConnectionRef.current = null;
@@ -403,8 +488,10 @@ const VoiceBroadcast = ({ room, socket, isTutor }) => {
       }
     };
 
+    socket.on('subtitle-received', handleSubtitleReceived);
+    socket.on('transcription-started', handleTranscriptionStarted);
+    socket.on('transcription-error', handleTranscriptionError);
     socket.on('voice-broadcast-started', handleBroadcastStarted);
-    socket.on('check-broadcast-status', handleBroadcastStatusCheck);
     socket.on('student-join-broadcast', handleStudentJoinBroadcast);
     socket.on('voice-offer', handleVoiceOffer);
     socket.on('voice-answer', handleVoiceAnswer);
@@ -412,8 +499,10 @@ const VoiceBroadcast = ({ room, socket, isTutor }) => {
     socket.on('voice-broadcast-ended', handleBroadcastEnded);
 
     return () => {
+      socket.off('subtitle-received', handleSubtitleReceived);
+      socket.off('transcription-started', handleTranscriptionStarted);
+      socket.off('transcription-error', handleTranscriptionError);
       socket.off('voice-broadcast-started', handleBroadcastStarted);
-      socket.off('check-broadcast-status', handleBroadcastStatusCheck);
       socket.off('student-join-broadcast', handleStudentJoinBroadcast);
       socket.off('voice-offer', handleVoiceOffer);
       socket.off('voice-answer', handleVoiceAnswer);
@@ -422,7 +511,7 @@ const VoiceBroadcast = ({ room, socket, isTutor }) => {
     };
   }, [socket, room._id, isTutor, createStudentConnection, createStudentPeerConnection, volume, isMicOn]);
 
-  // Auto-request broadcast status for students when component mounts
+  // Auto-request broadcast status for students
   useEffect(() => {
     if (!isTutor && socket && room._id) {
       const timer = setTimeout(() => {
@@ -443,7 +532,6 @@ const VoiceBroadcast = ({ room, socket, isTutor }) => {
         stopBroadcast();
       }
       
-      // Clean up connections
       if (peerConnectionRef.current) {
         peerConnectionRef.current.close();
       }
@@ -456,13 +544,34 @@ const VoiceBroadcast = ({ room, socket, isTutor }) => {
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(track => track.stop());
       }
+
+      if (processorRef.current) {
+        processorRef.current.disconnect();
+      }
+      
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
     };
+  }, []);
+
+  // Auto-cleanup old subtitles
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setSubtitles(prev => 
+        prev.filter(sub => now - sub.timestamp < 30000)
+      );
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, []);
 
   // Render tutor controls
   if (isTutor) {
     return (
-      <div className="flex items-center ml-3 mr-3 border-gray-200">
+      <div className="flex items-center gap-2 ml-3 mr-3 border-gray-200">
+        {/* Microphone button */}
         <button
           onClick={isMicOn ? stopBroadcast : startBroadcast}
           disabled={isConnecting}
@@ -484,16 +593,65 @@ const VoiceBroadcast = ({ room, socket, isTutor }) => {
           )}
         </button>
         
-        <div className={`ml-[-4px] mt-6 w-2 h-2 rounded-full ${
+        {/* Connection indicator */}
+        <div className={`absolute ml-[33px] mt-7 w-2 h-2 rounded-full ${
           isMicOn && connectionStatus === 'connected'
             ? 'bg-green-500 animate-pulse' 
             : isConnecting
             ? 'bg-yellow-500'
             : 'bg-gray-400'
-        }`}>
-        </div>
+        }`} />
+
+        {/* Subtitle toggle button - always available when mic is on */}
+        {isMicOn && (
+          <button
+            onClick={toggleSubtitles}
+            className={`flex items-center cursor-pointer justify-center w-5 h-5 transition-all ${
+              subtitlesEnabled
+                ? 'bg-green-100 text-green-600 hover:bg-green-200'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+            title={subtitlesEnabled ? "Hide Captions" : "Show Captions"}
+          >
+            <FaClosedCaptioning />
+          </button>
+        )}
+
+        {/* Subtitle display for tutor - only shown if enabled */}
+        {subtitlesEnabled && isMicOn && (
+          <div className="fixed bottom-10 left-0 right-0 px-4 z-40 pointer-events-none">
+            <div className="max-w-2xl mx-auto text-left">
+              {subtitles.slice(-3).map((subtitle) => (
+                <div
+                  key={subtitle.id}
+                  className="px-2 py-2 inline-block"
+                  style={{
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    color: '#ffffff',
+                    fontSize: '13px',
+                    lineHeight: '1.4'
+                  }}
+                >
+                  {subtitle.text}
+                </div>
+              ))}
+              {currentTranscript && (
+                <div
+                  className="px-2 py-2 inline-block"
+                  style={{
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    color: '#ffffff',
+                    fontSize: '13px',
+                    lineHeight: '1.4'
+                  }}
+                >
+                  {currentTranscript}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         
-        {/* Hidden local audio preview */}
         <audio ref={localAudioRef} style={{ display: 'none' }} />
       </div>
     );
@@ -501,45 +659,75 @@ const VoiceBroadcast = ({ room, socket, isTutor }) => {
 
   // Render student controls
   return (
-    <div className="flex items-center ml-2 mr-2 border-gray-200">
-      
+    <div className="flex items-center gap-2 ml-2 mr-2 border-gray-200">
+      {/* Audio status indicator */}
       <div className={`relative flex items-center justify-center w-10 h-10 rounded-full transition-all ${
         isReceivingAudio 
           ? 'bg-green-400 animate-pulse' 
           : isConnecting
           ? 'bg-yellow-500'
           : 'bg-gray-400'
-      }`}>{isConnecting ? (
-            <FaSpinner className="animate-spin" />
-          ) : isReceivingAudio ? (
-            <FaVolumeUp />
-          ) : (
-            <FaVolumeMute />
-          )}</div>
-      <span className="text-xs text-gray-500 truncate">
-        {/* {isReceivingAudio ? 'Connected' : isConnecting ? 'Connecting...' : 'Waiting'} */}
-      </span>
-      
+      }`}>
+        {isConnecting ? (
+          <FaSpinner className="animate-spin" />
+        ) : isReceivingAudio ? (
+          <FaVolumeUp />
+        ) : (
+          <FaVolumeMute />
+        )}
+      </div>
 
-      
-      {/* {isReceivingAudio && (
-        <div className="flex items-center gap-2">
-          <FaVolumeDown className="text-gray-500 text-xs" />
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.1"
-            value={volume}
-            onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
-            className="w-16 accent-blue-500"
-            title="Volume Control"
-          />
-          <FaVolumeUp className="text-gray-500 text-xs" />
+      {/* Subtitle toggle for students - available when receiving audio */}
+      {isReceivingAudio && (
+        <button
+          onClick={toggleSubtitles}
+          className={`flex items-center justify-center w-5 h-5 cursor-pointer transition-all ${
+            subtitlesEnabled
+              ? 'bg-green-100 text-green-600 hover:bg-green-200'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+          title={subtitlesEnabled ? "Hide Captions" : "Show Captions"}
+        >
+          <FaClosedCaptioning />
+        </button>
+      )}
+
+      {/* Subtitle display for students - only shown if enabled */}
+      {subtitlesEnabled && isReceivingAudio && (
+        <div className="fixed bottom-10 left-0 right-0 px-4 z-40 pointer-events-none">
+          <div className="max-w-2xl mx-auto text-left">
+            {subtitles.slice(-3).map((subtitle) => (
+              <div
+                key={subtitle.id}
+                className="px-2 py-2 inline-block"
+                style={{
+                  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                  color: '#ffffff',
+                  fontSize: '13px',
+                  lineHeight: '1.4'
+                }}
+              >
+                {subtitle.text}
+              </div>
+            ))}
+
+            {currentTranscript && (
+              <div
+                className="px-2 py-2 inline-block"
+                style={{
+                  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                  color: '#ffffff',
+                  fontSize: '13px',
+                  lineHeight: '1.4'
+                }}
+              >
+                {currentTranscript}
+              </div>
+            )}
+          </div>
         </div>
-      )} */}
+      )}
       
-      {/* Audio element for receiving broadcast */}
       <audio 
         ref={audioElementRef} 
         autoPlay 

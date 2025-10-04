@@ -29,7 +29,8 @@ import {
   FaHeart,
   FaBookOpen,
   FaBrain,
-  FaLightbulb
+  FaLightbulb,
+  FaMobileAlt
 } from "react-icons/fa";
 
 const Home = () => {
@@ -366,6 +367,35 @@ const Home = () => {
             </div>
 
             {/* Feature 3 */}
+            {/* Mobile friendly whiteboard and document collaboration */}
+            <div className="bg-white p-8 rounded-lg border border-gray-200">
+              <div className="w-12 h-12 bg-gray-900 rounded-lg flex items-center justify-center mb-6">
+                <FaMobileAlt className="w-6 h-6 text-white" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-4">
+                Mobile Friendly Collaboration
+              </h3>
+              <p className="text-gray-600 mb-6">
+                Seamlessly collaborate on whiteboards and documents from any device. 
+                Our platform is optimized for both desktop and mobile, ensuring you can teach or learn on the go.
+              </p>
+              <ul className="space-y-3">
+                <li className="flex items-center text-gray-600">
+                  <FaCheck className="w-4 h-4 text-gray-400 mr-3" />
+                  Cross-device compatibility
+                </li>
+                <li className="flex items-center text-gray-600">
+                  <FaCheck className="w-4 h-4 text-gray-400 mr-3" />
+                  Touch-friendly interface
+                </li>
+                <li className="flex items-center text-gray-600">
+                  <FaCheck className="w-4 h-4 text-gray-400 mr-3" />
+                  Full feature set on mobile
+                </li>
+              </ul>
+            </div>
+
+            {/* Feature 4 */}
             <div className="bg-white p-8 rounded-lg border border-gray-200">
               <div className="w-12 h-12 bg-gray-900 rounded-lg flex items-center justify-center mb-6">
                 <FaSearch className="w-6 h-6 text-white" />
