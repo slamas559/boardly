@@ -4,6 +4,7 @@ import { useNavigate, Link, useLocation, useSearchParams } from "react-router-do
 import { saveToken } from "../../utils/auth";
 import api from "../../utils/api";
 import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
+import boardlyIcon from '../../assets/boardly-icon.svg';
 import {
   FaEnvelope,
   FaLock,
@@ -117,7 +118,7 @@ const Login = () => {
           {/* Header */}
           <div className="text-center">
             <Link to="/" className="inline-flex items-center gap-2 mb-8">
-              <FaGraduationCap className="h-8 w-8 text-gray-900" />
+              <img src={boardlyIcon} alt="Boardly" className="h-7 w-7" />
               <span className="font-semibold text-2xl text-gray-900">
                 Boardly
               </span>
