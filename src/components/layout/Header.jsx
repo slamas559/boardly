@@ -41,7 +41,7 @@ const Header = ({
       setRoomStats(stats);
     };
 
-    console.log(roomStats)
+    // console.log(roomStats)
 
     socket.on("room-stats-update", handleRoomStatsUpdate);
 
@@ -180,7 +180,7 @@ const Header = ({
         <div className={`fixed top-16 right-0 bg-white shadow-lg rounded-lg p-4 z-50 transition-all duration-300 ease-in-out transform md:hidden ${isMobileMenuOpen ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}`}>
           <div className="flex flex-col space-y-3 min-w-[200px]">
             {/* View Controls Section - Only for Tutors */}
-            {isTutor && (
+            {isTutor ? (
               <>
                 <div className="text-sm font-medium text-gray-500 px-1 mb-1">
                   View Options
@@ -226,18 +226,27 @@ const Header = ({
                 <div className="text-sm font-medium text-gray-500 px-1 mb-1">
                   Q&A Controls
                 </div>
+                {/* Q&A Controls */}
+                <QaControls 
+                  qaEnabled={qaEnabled}
+                  onToggleQa={onToggleQa}
+                  qaLoading={qaLoading}
+                  studentQuestions={studentQuestions}
+                  onOpenPanel={onOpenQaPanel}
+                  isTutor={isTutor}
+                />
+              </>
+            ): (
+              <>
+                <button
+                  onClick={onToggleQaPanel}
+                  className="flex items-center space-x-1 px-3 py-2 bg-blue-100 text-blue-800 hover:bg-blue-200 rounded-lg text-sm transition-colors"
+                >
+                  <FaQuestionCircle />
+                  <span>Ask Question</span>
+                </button>
               </>
             )}
-
-            {/* Q&A Controls */}
-            <QaControls 
-              qaEnabled={qaEnabled}
-              onToggleQa={onToggleQa}
-              qaLoading={qaLoading}
-              studentQuestions={studentQuestions}
-              onOpenPanel={onOpenQaPanel}
-              isTutor={isTutor}
-            />
             
             
             {/* Copy Link Button */}
@@ -252,16 +261,20 @@ const Header = ({
               <span>Copy Link</span>
             </button>
 
-            <button
-              onClick={() => {
-                setShowStopRoom(true);
-                setIsMobileMenuOpen(false);
-              }}
-              className="flex items-center space-x-2 px-3 py-2 bg-red-100 text-red-700 hover:bg-red-200 rounded-lg text-sm transition-colors w-full text-left"
-            >
-              <FaStop />
-              <span>End Session</span>
-            </button>
+            { isTutor && (
+              <>
+                <button
+                  onClick={() => {
+                    setShowStopRoom(true);
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className="flex items-center space-x-2 px-3 py-2 bg-red-100 text-red-700 hover:bg-red-200 rounded-lg text-sm transition-colors w-full text-left"
+                >
+                  <FaStop />
+                  <span>End Session</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
         {showStopRoom && (

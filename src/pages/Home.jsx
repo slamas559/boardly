@@ -32,6 +32,8 @@ import {
   FaLightbulb,
   FaMobileAlt
 } from "react-icons/fa";
+import boardlyIcon from '../assets/boardly-icon.svg';
+
 
 const Home = () => {
   const [userRole, setUserRole] = useState(null);
@@ -94,7 +96,7 @@ const Home = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <Link to="/" className="flex items-center space-x-2">
-              <FaGraduationCap className="h-7 w-7 text-gray-900" />
+              <img src={boardlyIcon} alt="Boardly" className="h-7 w-7" />
               <span className="font-semibold text-xl text-gray-900">
                 Boardly
               </span>

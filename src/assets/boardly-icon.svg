@@ -1,15 +1,22 @@
-<!-- Save as boardly-icon.svg (64x64) -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">
-  <!-- rounded background -->
-  <rect rx="12" ry="12" width="64" height="64" fill="#601EF9"/>
-  <!-- white board -->
-  <rect x="10" y="12" width="44" height="32" rx="4" fill="#ffffff" />
-  <!-- three teal lines on the board -->
-  <rect x="14" y="18" width="36" height="3" rx="1.5" fill="#601EF9"/>
-  <rect x="14" y="25" width="28" height="3" rx="1.5" fill="#601EF9"/>
-  <rect x="14" y="32" width="20" height="3" rx="1.5" fill="#601EF9"/>
-  <!-- small pin / status dot -->
-  <circle cx="46" cy="14" r="3" fill="#034f4a"/>
-  <!-- subtle shadow under the board -->
-  <ellipse cx="32" cy="48" rx="14" ry="3" fill="#000" opacity="0.06"/>
+<!-- Boardly Tilted / Lying-Down Logo — White "B" in Quicksand on Black -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 160" width="220" height="160" role="img" aria-labelledby="title desc">
+  <title id="title">Boardly Tilted Logo</title>
+  <desc id="desc">A circular black Boardly logo with a white letter B, appearing to lie slightly on its side.</desc>
+
+  <!-- Slight 3D perspective: flattened vertically and rotated -->
+  <g transform="skewX(-10) scale(1, 0.8) rotate(-10, 100, 100)">
+    <!-- Circle (appears like an ellipse when flattened) -->
+    <circle cx="100" cy="100" r="100" fill="#000000" />
+
+    <!-- Centered white "B" -->
+    <text x="50%" y="60%"
+          text-anchor="middle"
+          dominant-baseline="middle"
+          font-family="'Quicksand', 'Poppins', 'Inter', system-ui, sans-serif"
+          font-weight="500"
+          font-size="120"
+          fill="#FFFFFF">
+      B
+    </text>
+  </g>
 </svg>

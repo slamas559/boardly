@@ -31,6 +31,7 @@ import {
   FaUniversity,
   FaCheck
 } from "react-icons/fa";
+import boardlyIcon from '../assets/boardly-icon.svg';
 import api from '../utils/api';
 
 const Dashboard = () => {
@@ -92,7 +93,7 @@ const Dashboard = () => {
 
       } catch (err) {
         console.error("Failed to fetch dashboard data", err);
-        setError('Failed to load dashboard data');
+        setError('Failed to load dashboard data try logout and login again');
       } finally {
         setLoading(false);
       }
@@ -245,7 +246,8 @@ const Dashboard = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <Link to="/" className="flex items-center space-x-2 flex-shrink-0">
-              <FaGraduationCap className="h-6 w-6 sm:h-7 sm:w-7 text-gray-900" />
+              {/* <FaGraduationCap className="h-6 w-6 sm:h-7 sm:w-7 text-gray-900" /> */}
+              <img src={boardlyIcon} alt="Boardly" className="h-7 w-7" />
               <span className="font-semibold text-lg sm:text-xl text-gray-900">
                 Boardly
               </span>

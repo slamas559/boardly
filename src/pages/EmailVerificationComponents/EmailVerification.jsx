@@ -36,7 +36,7 @@ const EmailVerification = () => {
           if (response.data.user.role === 'tutor') {
             navigate('/bank-setup');
           } else {
-            navigate('/lobby');
+            navigate('/dashboard');
           }
           window.location.reload();
         }, 3000);
