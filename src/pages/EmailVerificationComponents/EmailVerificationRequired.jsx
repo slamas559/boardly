@@ -93,8 +93,8 @@ const EmailVerificationRequired = ({ email, onResendSuccess }) => {
         <div className="mt-4">
           <p className="text-xs text-gray-500">
             Need help? Contact our support team at{' '}
-            <a href="mailto:support@educonnect.com" className="text-blue-600 hover:text-blue-700">
-              support@educonnect.com
+            <a href="mailto:support@boardly.com" className="text-blue-600 hover:text-blue-700">
+              support@boardly.com
             </a>
           </p>
         </div>

@@ -5,7 +5,6 @@ import { useNavigate } from "react-router-dom";
 import { Flip, Slide, ToastContainer, Zoom } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import PDFViewer from "./PDFViewer";
-import { getToken } from "../utils/auth";
 import axios from "axios";
 import { QaPanel, QaPopup, useQaManager } from "./layout/QaManager";
 
@@ -17,7 +16,7 @@ import { DesktopSidebar } from "./layout/SideBar";
 import InactiveRoom from "./layout/InactiveRoom";
 import api from "../utils/api";
 
-const WhiteboardLayout = ({ room, isTutor, token }) => {
+const WhiteboardLayout = ({ room, isTutor }) => {
   const canvasRef = useRef(null);
   const canvasContainerRef = useRef(null);
   const ctxRef = useRef(null);
@@ -202,10 +201,7 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
 
   useEffect(()=>{
     const fetchUserData = async () => {
-      const token = getToken();
-      const res = await api.get("/auth/profile", {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get("/auth/profile");
       setUserData(res.data);
       setUser({
         id: res.data._id,
@@ -583,9 +579,7 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
     if (isTutor && isRoomActive) {
       setView(newView);
       api.put(`/rooms/${room._id}/view`,
-        { view: newView }, {
-        headers: { Authorization: `Bearer ${getToken()}` }
-      });
+        { view: newView });
 
       socket.emit("change-view", { roomId: room._id, view: newView });
     }
@@ -594,14 +588,8 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
 
   const handleRoomStatus = async (mode) => {
     try {
-      const token = getToken();
       const res = await api.put(`/rooms/end-room/${room._id}`,
-        {mode},
-        {
-          headers: { 
-            Authorization: `Bearer ${token}` 
-          }
-        }
+        {mode}
       );
       if (mode === "inactive") {
         navigate('/lobby');
@@ -822,7 +810,7 @@ const WhiteboardLayout = ({ room, isTutor, token }) => {
 
             {/* PDF View */}
             <div className={`w-full h-full ${view === "pdf" ? 'block' : 'hidden'}`}>
-              <PDFViewer isTutor={isTutor} room={room} token={token} />
+              <PDFViewer isTutor={isTutor} room={room} />
             </div>
           </div>
         </div>

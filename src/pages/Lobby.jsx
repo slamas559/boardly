@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { getToken } from "../utils/auth";
 import {
   FaPlus,
   FaTrash,
@@ -28,9 +27,7 @@ const Lobby = () => {
   useEffect(() => {
     const fetchRooms = async () => {
       try {
-        const res = await api.get("/rooms", {
-          headers: { Authorization: `Bearer ${getToken()}` }
-        });
+        const res = await api.get("/rooms");
         setRooms(res.data);
       } catch (err) {
         console.error("Failed to fetch rooms", err);

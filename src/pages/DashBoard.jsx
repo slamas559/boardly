@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
-import { getToken, isLogout } from "../utils/auth";
 import {
   FaChalkboard,
   FaUser,
@@ -31,6 +30,7 @@ import {
   FaUniversity,
   FaCheck
 } from "react-icons/fa";
+import { isLogout } from '../utils/auth';
 import boardlyIcon from '../assets/boardly-icon.svg';
 import api from '../utils/api';
 
@@ -58,21 +58,16 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const token = getToken();
         
         const userRes = await api.get("/auth/profile");
         setUserData(userRes.data);
 
         {userRes.data.role === "student" && (setActiveTab("payments"))}
         
-        const roomsRes = await api.get("/rooms", {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const roomsRes = await api.get("/rooms");
         setRooms(roomsRes.data);
 
-        const statsResponse = await api.get("/auth/stats", {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const statsResponse = await api.get("/auth/stats");
         setStats(statsResponse.data);
 
         await fetchPayments();
@@ -104,10 +99,7 @@ const Dashboard = () => {
 
   const fetchPayments = async () => {
     try {
-      const token = getToken();
-      const res = await api.get("/payments", {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get("/payments");
       
       if (res.data.success) {
         setPayments(res.data.data);
@@ -119,10 +111,7 @@ const Dashboard = () => {
 
   const fetchPaymentStats = async () => {
     try {
-      const token = getToken();
-      const res = await api.get("/payments/stats", {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get("/payments/stats");
       
       if (res.data.success) {
         setPaymentStats(res.data.stats);
@@ -134,10 +123,7 @@ const Dashboard = () => {
 
   const fetchReceipt = async (reference) => {
     try {
-      const token = getToken();
-      const res = await api.get(`/payments/receipt/${reference}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get(`/payments/receipt/${reference}`);
       
       if (res.data.success) {
         setSelectedReceipt(res.data.receipt);
@@ -149,9 +135,17 @@ const Dashboard = () => {
     }
   };
 
-  const handleLogout = () => {
-    isLogout();
-    navigate('/login');
+  const handleLogout = async () => {
+    try {
+      // Call the logout endpoint to clear the HTTP-Only cookie
+      await api.post('/auth/logout');
+      // Redirect to login
+      navigate('/login');
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Still redirect even if logout fails
+      navigate('/login');
+    }
   };
 
   const formatNumber = (num) => {

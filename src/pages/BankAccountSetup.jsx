@@ -2,7 +2,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../utils/api";
-import { getToken } from "../utils/auth";
 
 const BankAccountSetup = ({ onComplete }) => {
   const [banks, setBanks] = useState([]);
@@ -51,9 +50,7 @@ const BankAccountSetup = ({ onComplete }) => {
       const bankCode = formData.bankCode; // Hardcoded to GTBank for now
       const accountNumber = formData.accountNumber;
       // console.log(bankCode, accountNumber);
-      const res = await api.post("/auth/resolve-account", { bankCode, accountNumber },{
-        headers: { Authorization: `Bearer ${getToken()}` }
-      });
+      const res = await api.post("/auth/resolve-account", { bankCode, accountNumber });
       const data = res.data;
       console.log('Resolve response:', data);
 
@@ -76,11 +73,7 @@ const BankAccountSetup = ({ onComplete }) => {
     setErrors({});
 
     try {
-      const token = getToken();
-      // console.log(formData, token);
-      const res = await api.post('/auth/setup-bank', formData, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.post('/auth/setup-bank', formData);
 
       if (res.data.success) {
         onComplete?.({

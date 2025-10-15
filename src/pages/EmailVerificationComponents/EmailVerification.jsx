@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { FaSpinner, FaCheckCircle, FaExclamationTriangle } from 'react-icons/fa';
-import { saveToken } from '../../utils/auth';
+// import { saveToken } from '../../utils/auth';
 import api from '../../utils/api';
 
 const EmailVerification = () => {
@@ -26,7 +26,7 @@ const EmailVerification = () => {
         const response = await api.get(`/auth/verify-email?token=${token}`);
         
         // Save token and user data
-        saveToken(response.data.token);
+        // saveToken(response.data.token);
         setUserData(response.data.user);
         setStatus('success');
         setMessage(response.data.message);

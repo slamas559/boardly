@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import { getToken, isLogout } from '../utils/auth';
 import api from '../utils/api';
 import {
   FaUser,
@@ -23,6 +22,7 @@ import {
   FaEdit,
   FaDollarSign
 } from 'react-icons/fa';
+import { isLogout } from '../utils/auth';
 
 const Profile = () => {
   const [user, setUser] = useState(null);
@@ -71,10 +71,7 @@ const Profile = () => {
 
   const fetchProfile = async () => {
     try {
-      const token = getToken();
-      const res = await api.get("/auth/profile", {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get("/auth/profile");    
       setUser(res.data);
       // console.log(res.data);
       setForm({
@@ -130,12 +127,9 @@ const Profile = () => {
 
     setResolvingAccount(true);
     try {
-      const token = getToken();
       const res = await api.post('/auth/resolve-account', {
         bankCode: bankForm.bankCode,
         accountNumber: bankForm.accountNumber
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
       });
 
       if (res.data.success) {
@@ -158,12 +152,9 @@ const Profile = () => {
 
     setSettingUpBank(true);
     try {
-      const token = getToken();
       const res = await api.post('/auth/setup-bank', {
         bankCode: bankForm.bankCode,
         accountNumber: bankForm.accountNumber
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
       });
 
       if (res.data.success) {
@@ -198,7 +189,6 @@ const Profile = () => {
     setSuccess('');
 
     try {
-      const token = getToken();
       const data = new FormData();
       
       data.append('name', form.name);
@@ -215,12 +205,7 @@ const Profile = () => {
         data.append('avatar', avatarInput.files[0]);
       }
 
-      const res = await api.put("/auth/profile", data, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data'
-        }
-      });
+      const res = await api.put("/auth/profile", data);
 
       setSuccess('Profile updated successfully!');
       setUser(res.data.user);
@@ -247,12 +232,7 @@ const Profile = () => {
     }
 
     try {
-      const token = getToken();
-      await api.delete("/auth/profile",
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
+      await api.delete("/auth/profile");
 
       isLogout();
       navigate('/');

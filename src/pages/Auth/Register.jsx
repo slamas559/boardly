@@ -1,7 +1,6 @@
 import { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
-import { saveToken } from "../../utils/auth";
 import { FaUser, FaEnvelope, FaLock, FaInfoCircle, FaUpload, FaEye, FaEyeSlash, FaUserTie, FaGraduationCap, FaGoogle, FaCheck } from "react-icons/fa";
 import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import api from "../../utils/api";
@@ -48,11 +47,10 @@ const Register = () => {
         setRegistrationSuccess(true);
         setUserEmail(res.data.email);
       } else {
-        saveToken(res.data.token);
         if (form.role === 'tutor') {
           navigate("/bank-setup");
         } else {
-          navigate("/lobby");
+          navigate("/dashboard");
         }
         window.location.reload();
       }
@@ -83,8 +81,6 @@ const Register = () => {
           googleId: decoded.sub
         }
       });
-
-      saveToken(res.data.token);
       
       if (res.data.user.role === 'tutor') {
         navigate("/bank-setup");

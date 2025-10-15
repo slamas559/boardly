@@ -1,7 +1,6 @@
 import { useState } from "react";
 import axios from "axios";
 import { useNavigate, Link, useLocation, useSearchParams } from "react-router-dom";
-import { saveToken } from "../../utils/auth";
 import api from "../../utils/api";
 import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import boardlyIcon from '../../assets/boardly-icon.svg';
@@ -50,7 +49,6 @@ const Login = () => {
         password: form.password
       });
       
-      saveToken(res.data.token);
       window.location.href = redirectPath;
       
     } catch (err) {
@@ -87,7 +85,6 @@ const Login = () => {
         }
       });
 
-      saveToken(res.data.token);
       window.location.href = redirectPath;
       
     } catch (err) {

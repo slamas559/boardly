@@ -26,7 +26,6 @@ import {
   FaToggleOff
 } from "react-icons/fa";
 import PDFViewer from "../PDFViewer";
-import { getToken } from "../../utils/auth";
 import axios from "axios";
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -266,9 +265,7 @@ export const useQaManager = (room, socket, isTutor) => {
   // Fetch Q&A status from backend
   const fetchQaStatus = useCallback(async () => {
     try {
-      const res = await api.get(`/rooms/${room._id}/qa-status`, {
-        headers: { Authorization: `Bearer ${getToken()}` }
-      });
+      const res = await api.get(`/rooms/${room._id}/qa-status`);
       if (res.data && typeof res.data.qaEnabled === 'boolean') {
         setQaEnabled(res.data.qaEnabled);
         
@@ -286,9 +283,7 @@ export const useQaManager = (room, socket, isTutor) => {
   // Fetch questions from backend
   const fetchQuestions = useCallback(async () => {
     try {
-      const res = await api.get(`/rooms/${room._id}/questions`, {
-        headers: { Authorization: `Bearer ${getToken()}` }
-      });
+      const res = await api.get(`/rooms/${room._id}/questions`);
       setStudentQuestions(res.data.questions);
     } catch (err) {
       console.error("Failed to fetch questions:", err);
@@ -303,7 +298,6 @@ export const useQaManager = (room, socket, isTutor) => {
       const res = await api.post(
         `/rooms/${room._id}/questions`,
         { text: questionText },
-        { headers: { Authorization: `Bearer ${getToken()}` } }
       );
       
       // Update local state immediately
@@ -329,8 +323,7 @@ export const useQaManager = (room, socket, isTutor) => {
   const markQuestionAnswered = useCallback(async (questionId) => {
     try {
       await api.put(`/rooms/${room._id}/questions/${questionId}`, 
-        { answered: true },
-        { headers: { Authorization: `Bearer ${getToken()}` } }
+        { answered: true }
       );
       
       // Update local state immediately
@@ -361,8 +354,7 @@ export const useQaManager = (room, socket, isTutor) => {
       setQaEnabled(newStatus);
       
       await api.put(`/rooms/${room._id}/qa-status`, 
-        { qaEnabled: newStatus },
-        { headers: { Authorization: `Bearer ${getToken()}` } }
+        { qaEnabled: newStatus }
       );
       
       socket.emit("qa-status-change", { 

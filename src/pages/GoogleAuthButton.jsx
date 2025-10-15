@@ -3,7 +3,6 @@ import React from 'react';
 import { GoogleLogin } from '@react-oauth/google';
 import { FaGoogle } from 'react-icons/fa';
 import axios from 'axios';
-import { saveToken } from '../utils/auth';
 import api from '../utils/api';
 
 const GoogleAuthButton = ({ 
@@ -32,9 +31,6 @@ const GoogleAuthButton = ({
         role: role
       });
 
-      // Save token and handle success
-      saveToken(response.data.token);
-      
       if (onSuccess) {
         onSuccess(response.data);
       }

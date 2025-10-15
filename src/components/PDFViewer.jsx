@@ -4,7 +4,6 @@ import { useSocket } from "../context/SocketContext";
 import axios from "axios";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
-import { getToken } from "../utils/auth";
 
 // Child Components
 import PDFToolbar from "./pdf/PDFToolbar";
@@ -95,11 +94,6 @@ const PDFViewer = ({ isTutor, room }) => {
             roomId: room._id,
             currentPage: newPage ?? pageNumber,
             annotations: newAnnotations ?? annotations,
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem("token")}`,
-            },
           }
         );
       } catch (err) {
@@ -214,12 +208,8 @@ const PDFViewer = ({ isTutor, room }) => {
 
       const res = await api.post(
         `/pdf/upload/${room._id}`,
-        formData, {
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
-          "Content-Type": "multipart/form-data",
-        },
-      });
+        formData
+      );
 
       const uploadedUrl = res.data.pdf.url;
       setPdfUrl(uploadedUrl);
@@ -273,11 +263,7 @@ const PDFViewer = ({ isTutor, room }) => {
   useEffect(() => {
     const fetchState = async () => {
       try {
-        const res = await api.get(`/pdf/state/${room._id}`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        });
+        const res = await api.get(`/pdf/state/${room._id}`);
         if (res.data) {
           if (res.data.currentPage) setPageNumber(res.data.currentPage);
           if (Array.isArray(res.data.annotations)) setAnnotations(res.data.annotations);

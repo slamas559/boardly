@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaChalkboard, FaArrowLeft, FaPlus, FaLightbulb, FaCheck } from "react-icons/fa";
-import { getToken } from "../utils/auth";
 import api from "../utils/api";
 
 const CreateRoom = () => {
@@ -24,8 +23,6 @@ const CreateRoom = () => {
 
     setIsCreating(true);
     try {
-      const token = getToken();
-
       const payload = {
         topic: topic.trim(),
         isPaid: isRoomType === "Paid",
@@ -33,9 +30,7 @@ const CreateRoom = () => {
         currency: "NGN",
       };
 
-      await api.post("/rooms", payload, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await api.post("/rooms", payload);
 
       navigate("/lobby");
     } catch (err) {

@@ -2,9 +2,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
-import { getToken } from "../utils/auth";
 import WhiteboardLayout from "../components/WhiteboardLayout";
 import api from "../utils/api";
+import { isLoggedIn } from "../utils/auth";
 
 const Room = () => {
   const { code } = useParams();
@@ -16,29 +16,38 @@ const Room = () => {
   const [accessGranted, setAccessGranted] = useState(false);
   const [paymentRequired, setPaymentRequired] = useState(false);
   const [paymentSetupWarning, setPaymentSetupWarning] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
 
   useEffect(() => {
     const fetchRoom = async () => {
+      let authenticated = false;
+      try {
+        const res = await api.get('/auth/check-auth');
+        // console.log("Auth check response:", res);
+        authenticated = true;
+        setIsAuthenticated(true);
+      } catch (err) {
+        authenticated = false;
+        setIsAuthenticated(false);
+      }
+
       try {
         setLoading(true);
         setError(null);
-
-        const token = getToken();
         
         // First, try to get basic room info (no auth needed for free rooms)
         let res;
         try {
-          if (token) {
+          if (authenticated) {
             // If user is logged in, get full room data with payment status
-            res = await api.get(`/rooms/${code}`, {
-              headers: { Authorization: `Bearer ${token}` }
-            });
+            res = await api.get(`/rooms/${code}`);
           } else {
             // If no token, get basic room info
             res = await api.get(`/rooms/${code}/public`);
           }
         } catch (err) {
-          if (err.response?.status === 401 && !token) {
+          if (err.response?.status === 401 && !authenticated) {
             // Try public endpoint if auth fails and no token
             res = await api.get(`/rooms/${code}/public`);
           } else {
@@ -66,7 +75,7 @@ const Room = () => {
           setAccessGranted(true);
           setPaymentRequired(false);
         } else if (roomData.isPaid) {
-          if (!token) {
+          if (!authenticated) {
             // Paid room but user not logged in - redirect to login
             navigate(`/login?redirect=/room/${code}`);
             return;
@@ -94,10 +103,9 @@ const Room = () => {
     }
   }, [code, navigate]);
 
-  // Handle Split Payment
+  // Handle SplitisAPayment
   const handlePayment = async () => {
-    const token = getToken();
-    if (!token) {
+    if (!isAuthenticated) {
       // Redirect to login if not authenticated
       navigate(`/login?redirect=/room/${code}`);
       return;
@@ -106,8 +114,7 @@ const Room = () => {
     try {
       const res = await api.post(
         `/payments/initiate`,
-        { roomId: room._id },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { roomId: room._id }
       );
       
       if (res.data.free) {
@@ -316,7 +323,7 @@ const Room = () => {
           </p>
         </div>
       )} */}
-      <WhiteboardLayout room={room} isTutor={isTutor} token={getToken()} />
+      <WhiteboardLayout room={room} isTutor={isTutor} />
     </div>
   ) : null;
 };

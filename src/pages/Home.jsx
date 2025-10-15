@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { isLoggedIn, getToken } from "../utils/auth";
+import { isLoggedIn } from "../utils/auth";
 import api from "../utils/api";
 import {
   FaChalkboardTeacher,
@@ -38,10 +38,22 @@ import boardlyIcon from '../assets/boardly-icon.svg';
 const Home = () => {
   const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
     const fetchUserRole = async () => {
-      if (isLoggedIn()) {
+      let authentication = false;
+      try {
+        const res = await api.get('/auth/check-auth');
+        // console.log("Auth check response:", res);
+        setIsAuthenticated(true);
+        authentication = true;
+      } catch (err) {
+        setIsAuthenticated(false);
+        authentication = false;
+      }
+
+      if (authentication) {
         try {
           const res = await api.get("/auth/profile");
           setUserRole(res.data.role);
@@ -51,12 +63,11 @@ const Home = () => {
       }
       setLoading(false);
     };
-    
     fetchUserRole();
   }, []);
 
   const getHeroContent = () => {
-    if (!isLoggedIn()) {
+    if (!isAuthenticated) {
       return {
         title: "Professional Online Learning Platform",
         subtitle: "Connect, teach, and learn through real-time collaboration tools, interactive whiteboards, and seamless document sharing. Create free sessions to help others or offer paid sessions to share your expertise.",
@@ -103,7 +114,7 @@ const Home = () => {
             </Link>
             
             <div className="flex items-center space-x-6">
-              {isLoggedIn() ? (
+              {isAuthenticated ? (
                 <>
                   <Link
                     to="/dashboard"
@@ -226,7 +237,7 @@ const Home = () => {
                   </div>
                 </div>
 
-                {!isLoggedIn() && (
+                {!isAuthenticated && (
                   <div className="pt-6 border-t border-white/20">
                     <Link
                       to="/register"
@@ -281,7 +292,7 @@ const Home = () => {
                   </div>
                 </div>
 
-                {!isLoggedIn() && (
+                {!isAuthenticated && (
                   <div className="pt-6 border-t border-white/20">
                     <Link
                       to="/register"
@@ -521,7 +532,7 @@ const Home = () => {
             collaborative learning experiences. Choose your path: share knowledge freely or build your teaching business.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            {isLoggedIn() ? (
+            {isAuthenticated ? (
               userRole === 'tutor' && (
                 <>
                   <Link
@@ -570,7 +581,7 @@ const Home = () => {
               <Link to="/" className="text-gray-400 hover:text-white transition-colors">
                 Home
               </Link>
-              {isLoggedIn() ? (
+              {isAuthenticated ? (
                 <>
                   <Link to="/dashboard" className="text-gray-400 hover:text-white transition-colors">
                     Dashboard
