@@ -13,6 +13,7 @@ import Profile from "./pages/Profile";
 import PaymentSuccess from "./components/payment/PaymentSuccess";
 import BankAccountSetup from "./pages/BankAccountSetup";
 import EmailVerification from "./pages/EmailVerificationComponents/EmailVerification";
+import ProtectedRoute from "./pages/ProtectedRoutes";
 
 // pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 //       'pdfjs-dist/build/pdf.worker.min.js',
@@ -27,12 +28,12 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/register" element={<Register />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/create" element={isLoggedIn() ? <CreateRoom /> : <Login />} />
+        <Route path="/create" element={<ProtectedRoute><CreateRoom /></ProtectedRoute>} />
         <Route path="/room/:code" element={<Room />} />
-        <Route path="/lobby" element={isLoggedIn() ? <Lobby /> : <Login />} />
-        <Route path="/dashboard" element={isLoggedIn() ? <Dashboard /> : <Login />} />
-        <Route path="/profile" element={isLoggedIn() ? <Profile /> : <Login />} />
-        <Route path="/bank-setup" element={isLoggedIn() ? <BankAccountSetup /> : <Login />} />
+        <Route path="/lobby" element={<ProtectedRoute><Lobby /></ProtectedRoute>} />
+        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        <Route path="/bank-setup" element={<ProtectedRoute><BankAccountSetup /></ProtectedRoute>} />
         <Route path="/payment/success" element={<PaymentSuccess />} />
         <Route path="/verify-email" element={<EmailVerification />} />
       </Routes>

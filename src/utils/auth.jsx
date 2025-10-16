@@ -6,7 +6,7 @@ const API_URL = import.meta.env.VITE_API_URL;
 export const isLoggedIn = async () => {
   try {
     // Check if user has valid session by calling a protected endpoint
-    const response = await api.post(`/${API_URL}/auth/check-auth`);
+    const response = await api.post(`/auth/check-auth`);
     return response.ok;
   } catch (error) {
     return false;
