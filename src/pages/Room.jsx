@@ -205,7 +205,7 @@ const Room = () => {
             Payment Required
           </h1>
           <p className="text-gray-600 mb-2">
-            This is a premium session with automatic payment splitting.
+            This is a paid session which requires payment.
           </p>
           <p className="text-sm text-gray-500 mb-6">
             Topic: <span className="font-medium">{room?.topic}</span>
@@ -216,24 +216,6 @@ const Room = () => {
               ₦{room?.price?.toLocaleString()}
             </p>
             <p className="text-sm text-gray-600">One-time payment</p>
-          </div>
-
-          {/* Payment Split Information */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-            <p className="text-sm font-semibold text-blue-800 mb-2">Payment Distribution</p>
-            <div className="text-xs text-blue-600 space-y-1">
-              <div className="flex justify-between">
-                <span>Tutor (70%):</span>
-                <span>₦{Math.round(room?.price * 0.7).toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Platform (30%):</span>
-                <span>₦{Math.round(room?.price * 0.3).toLocaleString()}</span>
-              </div>
-            </div>
-            <p className="text-xs text-blue-500 mt-2">
-              Your payment supports both the tutor and platform development
-            </p>
           </div>
 
           <button

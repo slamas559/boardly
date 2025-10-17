@@ -32,8 +32,9 @@ import {
   FaLightbulb,
   FaMobileAlt
 } from "react-icons/fa";
+import whiteboardFace from '../assets/whiteboard-face.png';
+import pdfFace from '../assets/pdf-face.png';
 import boardlyIcon from '../assets/boardly-icon.svg';
-
 
 const Home = () => {
   const [userRole, setUserRole] = useState(null);
@@ -45,7 +46,6 @@ const Home = () => {
       let authentication = false;
       try {
         const res = await api.get('/auth/check-auth');
-        // console.log("Auth check response:", res);
         setIsAuthenticated(true);
         authentication = true;
       } catch (err) {
@@ -100,6 +100,7 @@ const Home = () => {
   };
 
   const heroContent = getHeroContent();
+  
   return (
     <div className="min-h-screen bg-white">
       {/* Navigation */}
@@ -177,6 +178,96 @@ const Home = () => {
               >
                 {heroContent.secondaryCTA}
               </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* UI Showcase Section */}
+      <section className="py-24 bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl font-bold text-gray-900 mb-6">
+              Experience Powerful Collaboration Tools
+            </h2>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+              Our intuitive interface makes it easy to teach and learn in real-time
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            {/* Whiteboard Showcase */}
+            <div className="space-y-6">
+              <div className="bg-white rounded-lg shadow-lg overflow-hidden border border-gray-200">
+                <img 
+                  src={whiteboardFace} 
+                  alt="Interactive Whiteboard Interface"
+                  className="w-full h-auto object-cover"
+                />
+              </div>
+              <div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-4">
+                  Interactive Whiteboard
+                </h3>
+                <p className="text-gray-600 mb-6">
+                  Draw, write, and collaborate in real-time. Perfect for explaining complex concepts, solving problems, and creating visual content together.
+                </p>
+                <ul className="space-y-3">
+                  <li className="flex items-center text-gray-700">
+                    <FaCheck className="w-5 h-5 text-gray-900 mr-3" />
+                    Real-time synchronized drawing
+                  </li>
+                  <li className="flex items-center text-gray-700">
+                    <FaCheck className="w-5 h-5 text-gray-900 mr-3" />
+                    Multiple colors and brush sizes
+                  </li>
+                  <li className="flex items-center text-gray-700">
+                    <FaCheck className="w-5 h-5 text-gray-900 mr-3" />
+                    Undo/Redo functionality
+                  </li>
+                  <li className="flex items-center text-gray-700">
+                    <FaCheck className="w-5 h-5 text-gray-900 mr-3" />
+                    Session recordings
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            {/* PDF Showcase */}
+            <div className="space-y-6">
+              <div className="bg-white rounded-lg shadow-lg overflow-hidden border border-gray-200">
+                <img 
+                  src={pdfFace} 
+                  alt="PDF Collaboration Interface"
+                  className="w-full h-auto object-cover"
+                />
+              </div>
+              <div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-4">
+                  PDF Annotation & Sharing
+                </h3>
+                <p className="text-gray-600 mb-6">
+                  Upload and annotate documents with your students. Highlight, mark up, and discuss documents together in real-time.
+                </p>
+                <ul className="space-y-3">
+                  <li className="flex items-center text-gray-700">
+                    <FaCheck className="w-5 h-5 text-gray-900 mr-3" />
+                    Multi-page document support
+                  </li>
+                  <li className="flex items-center text-gray-700">
+                    <FaCheck className="w-5 h-5 text-gray-900 mr-3" />
+                    Annotation tools
+                  </li>
+                  <li className="flex items-center text-gray-700">
+                    <FaCheck className="w-5 h-5 text-gray-900 mr-3" />
+                    Synchronized page navigation
+                  </li>
+                  <li className="flex items-center text-gray-700">
+                    <FaCheck className="w-5 h-5 text-gray-900 mr-3" />
+                    Cloud storage integration
+                  </li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>
@@ -380,7 +471,6 @@ const Home = () => {
             </div>
 
             {/* Feature 3 */}
-            {/* Mobile friendly whiteboard and document collaboration */}
             <div className="bg-white p-8 rounded-lg border border-gray-200">
               <div className="w-12 h-12 bg-gray-900 rounded-lg flex items-center justify-center mb-6">
                 <FaMobileAlt className="w-6 h-6 text-white" />
@@ -390,7 +480,7 @@ const Home = () => {
               </h3>
               <p className="text-gray-600 mb-6">
                 Seamlessly collaborate on whiteboards and documents from any device. 
-                Our platform is optimized for both desktop and mobile, ensuring you can teach or learn on the go.
+                Our platform is optimized for both desktop and mobile.
               </p>
               <ul className="space-y-3">
                 <li className="flex items-center text-gray-600">
@@ -418,7 +508,7 @@ const Home = () => {
               </h3>
               <p className="text-gray-600 mb-6">
                 Easily find learning opportunities or manage your teaching sessions. 
-                Access both free community sessions and premium courses with transparent pricing.
+                Access both free community sessions and premium courses.
               </p>
               <ul className="space-y-3">
                 <li className="flex items-center text-gray-600">
@@ -476,7 +566,7 @@ const Home = () => {
               </div>
               <p className="text-gray-600 pl-14">
                 Instructors can create free or paid sessions while students discover and 
-                join learning opportunities that match their interests and budget.
+                join learning opportunities that match their interests.
               </p>
             </div>
 
@@ -490,7 +580,7 @@ const Home = () => {
               </div>
               <p className="text-gray-600 pl-14">
                 Engage in real-time collaboration with professional tools. 
-                Learn together, share knowledge, and achieve your educational goals.
+                Learn together and achieve your educational goals.
               </p>
             </div>
           </div>
@@ -574,7 +664,7 @@ const Home = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="flex items-center space-x-2 mb-4 md:mb-0">
-              <FaGraduationCap className="h-7 w-7 text-white" />
+              <img src={boardlyIcon} alt="Boardly" className="h-7 w-7" />
               <span className="font-semibold text-xl">Boardly</span>
             </div>
             <div className="flex space-x-8">

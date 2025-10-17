@@ -208,7 +208,10 @@ const PDFViewer = ({ isTutor, room }) => {
 
       const res = await api.post(
         `/pdf/upload/${room._id}`,
-        formData
+        formData,
+        {
+          timeout: 300000 // 5 minutes timeout for large files
+        }
       );
 
       const uploadedUrl = res.data.pdf.url;

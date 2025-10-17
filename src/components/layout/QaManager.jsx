@@ -36,7 +36,7 @@ export const QaPopup = ({ showQaPopup, onClose }) => {
   if (!showQaPopup) return null;
 
   return (
-    <div className="fixed top-4 right-4 bg-green-500 text-white p-4 rounded-lg shadow-lg z-50 max-w-sm">
+    <div className="fixed top-4 right-4 bg-white text-gray-800 p-4 rounded-lg shadow-lg z-50 max-w-sm">
       <div className="flex items-center justify-between">
         <div className="flex items-center">
           <FaComments className="mr-2" />
@@ -273,6 +273,7 @@ export const useQaManager = (room, socket, isTutor) => {
         if (res.data.qaEnabled && !isTutor) {
           setShowQaPopup(true);
           setTimeout(() => setShowQaPopup(false), 5000);
+          toast.success("Q&A is now enabled! You can ask questions.");
         }
       }
     } catch (err) {
@@ -386,9 +387,9 @@ export const useQaManager = (room, socket, isTutor) => {
     const handleQaStatusChange = ({ enabled }) => {
       setQaEnabled(enabled);
       if (enabled && !isTutor) {
-        setShowQaPopup(true);
-        // Auto-hide popup after 5 seconds
-        setTimeout(() => setShowQaPopup(false), 5000);
+        toast.success("Q&A is now enabled! You can ask questions.");
+      } else if (!enabled && !isTutor) {
+        toast.info("Q&A has been disabled");
       }
     };
 

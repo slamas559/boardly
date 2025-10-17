@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useSocket } from "../context/SocketContext";
 import { useNavigate } from "react-router-dom";
-import { Flip, Slide, ToastContainer, Zoom } from 'react-toastify';
+import { Flip, Slide, toast, ToastContainer, Zoom } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import PDFViewer from "./PDFViewer";
 import axios from "axios";
@@ -656,26 +656,9 @@ const WhiteboardLayout = ({ room, isTutor }) => {
     );
   }
 
-  {/* Canvas Container */}
-  const canvasContainerStyles = {
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden', // Prevent scrollbars
-    position: 'relative'
-  };
   // Main render
   return (
     <div className="flex flex-col w-full h-screen bg-gray-50">
-      {/* Q&A Popup for Students */}
-      {!isTutor && (
-        <QaPopup 
-          showQaPopup={showQaPopup} 
-          onClose={() => setShowQaPopup(false)} 
-        />
-      )}
       
       {/* Q&A Panel */}
       <QaPanel 
@@ -726,6 +709,7 @@ const WhiteboardLayout = ({ room, isTutor }) => {
         theme="light" // Theme: "light", "dark", or "colored"
         />
 
+      
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
         {/* Canvas Area */}
