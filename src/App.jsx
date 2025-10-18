@@ -18,7 +18,7 @@ import Contact from "./pages/Legal/Contact";
 import Terms from "./pages/Legal/Terms";
 import Privacy from "./pages/Legal/Privacy";
 import Refund from "./pages/Legal/Refund";
-import Faq from "./pages/Legal/Faq";
+// import Faq from "./pages/Legal/Faq";
 import { StateProvider } from "./context/StateContext";
 
 
@@ -42,7 +42,7 @@ function App() {
         <Route path="/contact" element={<Contact />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
-        <Route path="/faq" element={<Faq />} />
+        {/* <Route path="/faq" element={<Faq />} /> */}
         <Route path="/refund" element={<Refund />} />
       </Routes>
     </Router>
