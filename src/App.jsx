@@ -21,11 +21,6 @@ import Faq from "./pages/Legal/Faq";
 import Refund from "./pages/Legal/Refund";
 import { StateProvider } from "./context/StateContext";
 
-// pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-//       'pdfjs-dist/build/pdf.worker.min.js',
-//       import.meta.url,
-//     ).toString();
-
 
 function App() {
   return (
