@@ -14,6 +14,12 @@ import PaymentSuccess from "./components/payment/PaymentSuccess";
 import BankAccountSetup from "./pages/BankAccountSetup";
 import EmailVerification from "./pages/EmailVerificationComponents/EmailVerification";
 import ProtectedRoute from "./pages/ProtectedRoutes";
+import Contact from "./pages/Legal/Contact";
+import Terms from "./pages/Legal/Terms";
+import Privacy from "./pages/Legal/Privacy";
+import FAQ from "./pages/Legal/Faq";
+import Refund from "./pages/Legal/Refund";
+import { StateProvider } from "./context/StateContext";
 
 // pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 //       'pdfjs-dist/build/pdf.worker.min.js',
@@ -23,6 +29,7 @@ import ProtectedRoute from "./pages/ProtectedRoutes";
 
 function App() {
   return (
+    <StateProvider>
     <Router>
       <Routes>
         <Route path="/" element={<Home />} />
@@ -36,8 +43,15 @@ function App() {
         <Route path="/bank-setup" element={<ProtectedRoute><BankAccountSetup /></ProtectedRoute>} />
         <Route path="/payment/success" element={<PaymentSuccess />} />
         <Route path="/verify-email" element={<EmailVerification />} />
+        {/* legal routes can be added here */}
+        <Route path="/contact" element={<Contact />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/faq" element={<FAQ />} />
+        <Route path="/refund" element={<Refund />} />
       </Routes>
     </Router>
+    </StateProvider>
   )
 }
 

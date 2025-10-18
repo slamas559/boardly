@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { isLoggedIn } from "../utils/auth";
 import api from "../utils/api";
+import Footer from './Footer';
 import {
   FaChalkboardTeacher,
   FaUsers,
@@ -35,37 +36,14 @@ import {
 import whiteboardFace from '../assets/whiteboard-face.png';
 import pdfFace from '../assets/pdf-face.png';
 import boardlyIcon from '../assets/boardly-icon.svg';
+import { useContext } from 'react';
+import StateContext from '../context/StateContext';
+import Header from './Header';
 
 const Home = () => {
-  const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-  useEffect(() => {
-    const fetchUserRole = async () => {
-      let authentication = false;
-      try {
-        const res = await api.get('/auth/check-auth');
-        setIsAuthenticated(true);
-        authentication = true;
-      } catch (err) {
-        setIsAuthenticated(false);
-        authentication = false;
-      }
-
-      if (authentication) {
-        try {
-          const res = await api.get("/auth/profile");
-          setUserRole(res.data.role);
-        } catch (err) {
-          console.error("Failed to fetch user profile", err);
-        }
-      }
-      setLoading(false);
-    };
-    fetchUserRole();
-  }, []);
-
+  const { isAuthenticated, userRole } = useContext(StateContext);
+  
   const getHeroContent = () => {
     if (!isAuthenticated) {
       return {
@@ -104,56 +82,7 @@ const Home = () => {
   return (
     <div className="min-h-screen bg-white">
       {/* Navigation */}
-      <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <Link to="/" className="flex items-center space-x-2">
-              <img src={boardlyIcon} alt="Boardly" className="h-7 w-7" />
-              <span className="font-semibold text-xl text-gray-900">
-                Boardly
-              </span>
-            </Link>
-            
-            <div className="flex items-center space-x-6">
-              {isAuthenticated ? (
-                <>
-                  <Link
-                    to="/dashboard"
-                    className="text-gray-600 hover:text-gray-900 transition-colors font-medium"
-                  >
-                    Dashboard
-                  </Link>
-                  {userRole === "tutor" && (
-                    <Link
-                      to="/create"
-                      className="bg-gray-900 text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors font-medium"
-                    >
-                      New Room
-                    </Link>
-                    )}
-                  
-                </>
-              ) : (
-                <>
-                  <Link
-                    to="/login"
-                    className="text-gray-600 hover:text-gray-900 transition-colors font-medium"
-                  >
-                    Sign In
-                  </Link>
-                  <Link
-                    to="/register"
-                    className="bg-gray-900 text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors font-medium"
-                  >
-                    Get Started
-                  </Link>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </nav>
-
+      <Header />
       {/* Hero Section */}
       <section className="py-24 lg:py-32">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -660,45 +589,7 @@ const Home = () => {
       </section>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-white py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row justify-between items-center">
-            <div className="flex items-center space-x-2 mb-4 md:mb-0">
-              <img src={boardlyIcon} alt="Boardly" className="h-7 w-7" />
-              <span className="font-semibold text-xl">Boardly</span>
-            </div>
-            <div className="flex space-x-8">
-              <Link to="/" className="text-gray-400 hover:text-white transition-colors">
-                Home
-              </Link>
-              {isAuthenticated ? (
-                <>
-                  <Link to="/dashboard" className="text-gray-400 hover:text-white transition-colors">
-                    Dashboard
-                  </Link>
-                  {userRole === 'tutor' && (
-                    <Link to="/create" className="text-gray-400 hover:text-white transition-colors">
-                      New Session
-                    </Link>
-                  )}
-                </>
-              ) : (
-                <>
-                  <Link to="/login" className="text-gray-400 hover:text-white transition-colors">
-                    Sign In
-                  </Link>
-                  <Link to="/register" className="text-gray-400 hover:text-white transition-colors">
-                    Get Started
-                  </Link>
-                </>
-              )}
-            </div>
-          </div>
-          <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
-            <p>&copy; 2025 Boardly. All rights reserved.</p>
-          </div>
-        </div>
-      </footer>
+      <Footer userRole={userRole} isAuthenticated={isAuthenticated} />
     </div>
   );
 };
