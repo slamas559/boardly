@@ -3,7 +3,7 @@ import { useState } from 'react';
 import Footer from '../Footer';
 import Header from '../Header';
 
-const FAQ = () => {
+const Faq = () => {
   const [expandedIndex, setExpandedIndex] = useState(null);
 
   const faqs = [
@@ -149,4 +149,4 @@ const FAQ = () => {
   );
 };
 
-export default FAQ;
+export default Faq;
