@@ -17,8 +17,8 @@ import ProtectedRoute from "./pages/ProtectedRoutes";
 import Contact from "./pages/Legal/Contact";
 import Terms from "./pages/Legal/Terms";
 import Privacy from "./pages/Legal/Privacy";
-import Faq from "./pages/Legal/Faq";
 import Refund from "./pages/Legal/Refund";
+import Faq from "./pages/Legal/Faq";
 import { StateProvider } from "./context/StateContext";
 
 
