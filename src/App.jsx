@@ -17,7 +17,7 @@ import ProtectedRoute from "./pages/ProtectedRoutes";
 import Contact from "./pages/Legal/Contact";
 import Terms from "./pages/Legal/Terms";
 import Privacy from "./pages/Legal/Privacy";
-import FAQ from "./pages/Legal/Faq";
+import Faq from "./pages/Legal/Faq";
 import Refund from "./pages/Legal/Refund";
 import { StateProvider } from "./context/StateContext";
 
@@ -47,7 +47,7 @@ function App() {
         <Route path="/contact" element={<Contact />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
-        <Route path="/faq" element={<FAQ />} />
+        <Route path="/faq" element={<Faq />} />
         <Route path="/refund" element={<Refund />} />
       </Routes>
     </Router>
