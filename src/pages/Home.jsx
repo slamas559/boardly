@@ -31,7 +31,8 @@ import {
   FaBookOpen,
   FaBrain,
   FaLightbulb,
-  FaMobileAlt
+  FaMobileAlt,
+  FaMicrophone
 } from "react-icons/fa";
 import whiteboardFace from '../assets/whiteboard-face.png';
 import pdfFace from '../assets/pdf-face.png';
@@ -395,6 +396,33 @@ const Home = () => {
                 <li className="flex items-center text-gray-600">
                   <FaCheck className="w-4 h-4 text-gray-400 mr-3" />
                   Synchronized navigation
+                </li>
+              </ul>
+            </div>
+
+            {/* Feature 3 */}
+            <div className="bg-white p-8 rounded-lg border border-gray-200">
+              <div className="w-12 h-12 bg-gray-900 rounded-lg flex items-center justify-center mb-6">
+                <FaMicrophone className="w-6 h-6 text-white" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-4">
+                AI Live Voice Captioning
+              </h3>
+              <p className="text-gray-600 mb-6">
+                Experience real-time voice captioning during your sessions, making it easier to follow along and participate.
+              </p>
+              <ul className="space-y-3">
+                <li className="flex items-center text-gray-600">
+                  <FaCheck className="w-4 h-4 text-gray-400 mr-3" />
+                  AI voice transcription for all
+                </li>
+                <li className="flex items-center text-gray-600">
+                  <FaCheck className="w-4 h-4 text-gray-400 mr-3" />
+                  Supports multiple languages
+                </li>
+                <li className="flex items-center text-gray-600">
+                  <FaCheck className="w-4 h-4 text-gray-400 mr-3" />
+                  Real-time transcription
                 </li>
               </ul>
             </div>
