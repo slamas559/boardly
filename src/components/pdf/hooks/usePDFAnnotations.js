@@ -24,7 +24,12 @@ const usePDFAnnotations = ({
 }) => {
   const [annotations, setAnnotations] = useState([]);
   const touchStartRef = useRef(null);
-  const touchSelectionRef = useRef(null);
+  const annotationsRef = useRef(annotations);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    annotationsRef.current = annotations;
+  }, [annotations]);
 
   const createHighlightFromSelection = useCallback(() => {
     if (!isTutor) return;
@@ -64,18 +69,28 @@ const usePDFAnnotations = ({
       createdAt: Date.now(),
     };
 
-    setAnnotations((prev) => [...prev, annotation]);
+    setAnnotations((prev) => {
+      const newAnnotations = [...prev, annotation];
+      console.log("✅ Adding annotation:", annotation.id, "Total:", newAnnotations.length);
+      
+      // Save to backend immediately
+      setTimeout(() => {
+        savePdfState(pageNumber, newAnnotations);
+      }, 100);
+      
+      return newAnnotations;
+    });
+    
     socket.emit("pdf-annotation", { roomId: room._id, annotation });
     sel.removeAllRanges();
     return annotation;
-  }, [isTutor, highlightColor, socket, room, containerRef]);
+  }, [isTutor, highlightColor, socket, room._id, containerRef, pageNumber, savePdfState]);
 
   // Helper function to get text node from point
   const getTextNodeFromPoint = useCallback((x, y) => {
     let element = document.elementFromPoint(x, y);
     if (!element) return null;
 
-    // Find the deepest text node
     const walker = document.createTreeWalker(
       element,
       NodeFilter.SHOW_TEXT,
@@ -107,15 +122,12 @@ const usePDFAnnotations = ({
 
     const range = document.createRange();
     try {
-      // Determine start and end positions within text nodes
       const startOffset = getOffsetFromPoint(startNode.textNode, startX, startY);
       const endOffset = getOffsetFromPoint(endNode.textNode, endX, endY);
       
-      // Set range start and end
       range.setStart(startNode.textNode, startOffset);
       range.setEnd(endNode.textNode, endOffset);
       
-      // Clear any existing selection and add new range
       const selection = window.getSelection();
       selection.removeAllRanges();
       selection.addRange(range);
@@ -128,7 +140,6 @@ const usePDFAnnotations = ({
     }
   }, [getTextNodeFromPoint]);
 
-  // Helper function to get character offset from point within text node
   const getOffsetFromPoint = useCallback((textNode, x, y) => {
     const range = document.createRange();
     const text = textNode.textContent;
@@ -148,31 +159,64 @@ const usePDFAnnotations = ({
     return text.length;
   }, []);
 
+  // ✅ FIXED: handleEraseAnnotation with proper backend save
   const handleEraseAnnotation = useCallback((annotationId) => {
     if (!isTutor) return;
-    const updated = annotations.filter((a) => a.id !== annotationId);
-    setAnnotations(updated);
+    
+    console.log("🗑️ Erasing annotation:", annotationId);
+    
+    setAnnotations((prev) => {
+      const updated = prev.filter((a) => a.id !== annotationId);
+      
+      console.log("📊 Before erase:", prev.length, "After erase:", updated.length);
+      
+      // Save to backend immediately with updated annotations
+      setTimeout(() => {
+        console.log("💾 Saving after erase - annotations count:", updated.length);
+        savePdfState(pageNumber, updated);
+      }, 100);
+      
+      return updated;
+    });
+    
+    // Emit socket event for real-time sync
     socket.emit("pdf-annotation", {
       roomId: room._id,
       annotation: { id: annotationId, removed: true },
     });
-    savePdfState(pageNumber, updated);
-  }, [isTutor, annotations, socket, room, pageNumber, savePdfState]);
+    
+    console.log("✅ Annotation erase complete");
+  }, [isTutor, socket, room._id, pageNumber, savePdfState]);
 
   const handleAnnotation = useCallback(({ annotation }) => {
+    console.log("📥 Received annotation via socket:", annotation.id, "removed:", annotation.removed);
+    
     setAnnotations((prev) => {
+      let updated;
+      
       if (annotation.removed) {
-        return prev.filter((a) => a.id !== annotation.id);
+        updated = prev.filter((a) => a.id !== annotation.id);
+        console.log("🗑️ Removing annotation via socket:", annotation.id);
+      } else {
+        const idx = prev.findIndex((a) => a.id === annotation.id);
+        if (idx >= 0) {
+          updated = [...prev];
+          updated[idx] = annotation;
+          console.log("🔄 Updating existing annotation:", annotation.id);
+        } else {
+          updated = [...prev, annotation];
+          console.log("➕ Adding new annotation via socket:", annotation.id);
+        }
       }
-      const idx = prev.findIndex((a) => a.id === annotation.id);
-      if (idx >= 0) {
-        const updated = [...prev];
-        updated[idx] = annotation;
-        return updated;
-      }
-      return [...prev, annotation];
+      
+      // Save to backend after receiving annotation from socket
+      setTimeout(() => {
+        savePdfState(pageNumber, updated);
+      }, 100);
+      
+      return updated;
     });
-  }, []);
+  }, [pageNumber, savePdfState]);
 
   // Touch event handlers
   const handleTouchStart = useCallback((e) => {
@@ -185,20 +229,17 @@ const usePDFAnnotations = ({
       timestamp: Date.now()
     };
     
-    // Clear any existing selection
     window.getSelection().removeAllRanges();
   }, [mode, isTutor]);
 
   const handleTouchMove = useCallback((e) => {
     if (mode !== "highlight" || !isTutor || !touchStartRef.current) return;
     
-    // Prevent default scrolling behavior during text selection
     e.preventDefault();
     
     const touch = e.touches[0];
     const startTouch = touchStartRef.current;
     
-    // Create selection from start point to current touch point
     createTouchSelection(
       startTouch.x, 
       startTouch.y, 
@@ -212,17 +253,15 @@ const usePDFAnnotations = ({
     
     const touchDuration = Date.now() - touchStartRef.current.timestamp;
     
-    // Only create highlight if touch was long enough to be intentional selection
     if (touchDuration > 100) {
       setTimeout(() => {
         createHighlightFromSelection();
-      }, 50); // Small delay to ensure selection is complete
+      }, 50);
     }
     
     touchStartRef.current = null;
   }, [mode, isTutor, createHighlightFromSelection]);
 
-  // Mouse event handlers (keeping existing functionality)
   const handleMouseUp = useCallback(() => {
     if (mode === "highlight" && isTutor) {
       createHighlightFromSelection();
@@ -230,10 +269,8 @@ const usePDFAnnotations = ({
   }, [mode, isTutor, createHighlightFromSelection]);
 
   useEffect(() => {
-    // Mouse events
     document.addEventListener("mouseup", handleMouseUp);
     
-    // Touch events - add to the container or document
     const targetElement = containerRef.current || document;
     
     if (targetElement) {
