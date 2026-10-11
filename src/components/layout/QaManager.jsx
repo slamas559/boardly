@@ -25,7 +25,6 @@ import {
   FaToggleOn,
   FaToggleOff
 } from "react-icons/fa";
-import PDFViewer from "../PDFViewer";
 import axios from "axios";
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -80,7 +79,7 @@ export const QaPanel = ({
   if (!qaPanelOpen) return null;
 
   return (
-    <div className="fixed right-4 bottom-4 w-80 bg-white rounded-lg shadow-xl z-40 border border-gray-200 flex flex-col max-h-96">
+    <div className="fixed inset-x-2 bottom-2 sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-80 bg-white rounded-lg shadow-xl z-40 border border-gray-200 flex flex-col max-h-[70dvh] sm:max-h-96">
       <div className="p-4 border-b border-gray-200 flex justify-between items-center">
         <h3 className="font-semibold text-gray-800">Questions & Answers</h3>
         <button 

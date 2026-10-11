@@ -1,710 +1,152 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion'; // For the "Cool Animations"
-import { isLoggedIn } from "../utils/auth";
-import api from "../utils/api";
-import Footer from './Footer';
-import {
-  FaChalkboardTeacher,
-  FaUsers,
-  FaFilePdf,
-  FaPenNib,
-  FaRocket,
-  FaGraduationCap,
-  FaArrowRight,
-  FaPlayCircle,
-  FaUserPlus,
-  FaSignInAlt,
-  FaCheck,
-  FaSearch,
-  FaMoneyBillWave,
-  FaChartLine,
-  FaReceipt,
-  FaCreditCard,
-  FaWallet,
-  FaPiggyBank,
-  FaCalculator,
-  FaShieldAlt,
-  FaHandHoldingUsd,
-  FaClock,
-  FaTrophy,
-  FaHeart,
-  FaBookOpen,
-  FaBrain,
-  FaLightbulb,
-  FaMobileAlt,
-  FaMicrophone
-} from "react-icons/fa";
-import whiteboardFace from '../assets/whiteboard-face.png';
-import pdfFace from '../assets/pdf-face.png';
-import boardlyIcon from '../assets/boardly-icon.svg';
-import { useContext } from 'react';
-import StateContext from '../context/StateContext';
-import Header from './Header';
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { ArrowRight } from "lucide-react";
+import Header from "./Header";
+import Footer from "./Footer";
 
-const Home = () => {
-  const [loading, setLoading] = useState(true);
-  const { isAuthenticated, userRole } = useContext(StateContext);
-  
-  const getHeroContent = () => {
-    if (!isAuthenticated) {
-      return {
-        title: "Professional Online Learning Platform",
-        subtitle: "Connect, teach, and learn through real-time collaboration tools, interactive whiteboards, and seamless document sharing. Create free sessions to help others or offer paid sessions to share your expertise.",
-        primaryCTA: "Start Free Trial",
-        primaryLink: "/register",
-        secondaryCTA: "Sign In",
-        secondaryLink: "/login"
-      };
-    }
+// A drawn-by-hand picture of the product, so the page shows the thing instead of describing it
+function BoardPreview() {
+  return (
+    <figure className="relative" aria-label="Preview of a Boardly room">
+      <div className="overflow-hidden rounded-lg border border-line-strong bg-white" style={{ boxShadow: "0 24px 48px -28px rgb(23 24 28 / 0.35)" }}>
+        <div className="flex h-9 items-center gap-2 border-b border-line bg-surface px-3 text-xs text-muted">
+          <span className="font-medium text-ink">Quadratics · Week 3</span>
+          <span className="ml-auto flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-ok" /> 14 listening</span>
+        </div>
+        <svg viewBox="0 0 640 400" className="block w-full" role="img" aria-hidden="true">
+          <defs>
+            <pattern id="hp-dots" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1.5" cy="1.5" r="1" fill="#d6d3cb" /></pattern>
+          </defs>
+          <rect width="640" height="400" fill="url(#hp-dots)" />
+          <g fill="none" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M120 300 H 560" stroke="#17181C" strokeWidth="2.5" />
+            <path d="M200 340 V 70" stroke="#17181C" strokeWidth="2.5" />
+            <path d="M200 300 C 250 120, 300 100, 350 180 S 450 330, 520 160" stroke="#2540D9" strokeWidth="4" />
+            <circle cx="350" cy="182" r="7" stroke="#E2492B" strokeWidth="3" />
+            <path d="M388 120 L 360 168" stroke="#E2492B" strokeWidth="3" />
+          </g>
+          <text x="392" y="112" fontFamily="Caveat, cursive" fontSize="30" fill="#E2492B">vertex</text>
+          <text x="236" y="60" fontFamily="Caveat, cursive" fontSize="30" fill="#17181C">y = ax² + bx + c</text>
+          <rect x="52" y="52" width="2" height="0" />
+        </svg>
+        {/* tool rail */}
+        <div className="absolute left-3 top-14 flex flex-col gap-1 rounded-lg border border-line bg-white p-1" aria-hidden="true">
+          {["M5 5l5 12 2-5 5-2z", "M4 20l4-1 11-11-3-3L5 16z", "M5 8h14M5 12h14M5 16h9", "M5 5h14v14H5z"].map((d, i) => (
+            <span key={i} className={`flex h-7 w-7 items-center justify-center rounded-md ${i === 1 ? "bg-ink text-paper" : "text-gray-600"}`}>
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"><path d={d} /></svg>
+            </span>
+          ))}
+        </div>
+      </div>
+    </figure>
+  );
+}
 
-    if (userRole === 'tutor') {
-      return {
-        title: "Ready to Teach?",
-        subtitle: "Create engaging learning experiences with professional teaching tools. Choose to offer free sessions to help students or create paid sessions to monetize your expertise.",
-        primaryCTA: "Create Session",
-        primaryLink: "/create",
-        secondaryCTA: "View Dashboard",
-        secondaryLink: "/dashboard"
-      };
-    }
+const hostPoints = [
+  "Draw, write and drop shapes on an endless board, with pages",
+  "Upload a PDF and highlight, underline and annotate it live",
+  "Point with a laser the whole room can see",
+  "Switch between board and document; everyone follows",
+  "Turn on Q&A and answer questions as they come in",
+];
+const listenerPoints = [
+  "Open a link. No account needed for free sessions",
+  "Sees exactly what you see, on a phone, tablet or laptop",
+  "Can pan and zoom on their own, then jump back to you",
+  "Asks questions without interrupting the board",
+  "Hears you with live captions",
+];
 
-    return {
-      title: "Ready to Learn?",
-      subtitle: "Join interactive learning sessions, collaborate with instructors, and enhance your knowledge. Access both free community sessions and premium paid courses from expert tutors.",
-      primaryCTA: "View Dashboard", 
-      primaryLink: "/dashboard",
-      secondaryCTA: "Browse Sessions",
-      secondaryLink: "/dashboard"
-    };
-  };
+export default function Home() {
+  const navigate = useNavigate();
+  const [code, setCode] = useState("");
 
-  const heroContent = getHeroContent();
-  
-  const fadeInUp = {
-    initial: { opacity: 0, y: 20 },
-    whileInView: { opacity: 1, y: 0 },
-    viewport: { once: true },
-    transition: { duration: 0.6 }
-  };
-
-  const staggerContainer = {
-    initial: {},
-    whileInView: { transition: { staggerChildren: 0.1 } }
+  const join = (e) => {
+    e.preventDefault();
+    const raw = code.trim();
+    if (!raw) return;
+    const match = raw.match(/room\/([A-Za-z0-9]+)/);
+    navigate(`/room/${match ? match[1] : raw}`);
   };
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Navigation */}
+    <div className="min-h-screen bg-paper">
       <Header />
-      {/* Hero Section */}
-      <section className="py-16 lg:py-32">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-          <motion.div 
-            initial={{ opacity: 0, x: -30 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.8 }}
-          >
-          <div className="max-w-4xl text-center lg:text-left">
-            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-6 sm:mb-8 leading-tight">
-              {heroContent.title}
+
+      <main>
+        <section className="mx-auto grid max-w-6xl items-center gap-12 px-4 pb-16 pt-12 sm:px-6 md:pt-20 lg:grid-cols-[1fr_1.15fr] lg:gap-16 lg:pb-24">
+          <div>
+            <h1 className="font-display text-[44px] leading-[1.02] sm:text-6xl lg:text-[68px]">
+              A live board for people who teach.
             </h1>
-            <p className="text-base sm:text-lg lg:text-xl text-gray-600 mb-8 sm:mb-10 leading-relaxed max-w-2xl mx-auto lg:mx-0">
-              {heroContent.subtitle}
+            <p className="mt-6 max-w-md text-lg leading-relaxed text-gray-700">
+              Draw, write and mark up PDFs in a room your students join with a link. Everything you do appears on their screen as you do it.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-              <Link
-                to={heroContent.primaryLink}
-                className="inline-flex items-center justify-center bg-gray-900 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-md hover:bg-gray-800 transition-colors font-semibold text-base sm:text-lg"
-              >
-                {heroContent.primaryCTA}
-                <FaArrowRight className="ml-2 w-4 h-4" />
+
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <Link to="/register" className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-ink px-5 text-sm font-medium text-paper hover:bg-gray-800">
+                Start a room <ArrowRight size={16} />
               </Link>
-              <Link
-                to={heroContent.secondaryLink}
-                className="inline-flex items-center justify-center border-2 border-gray-300 text-gray-700 px-6 sm:px-8 py-3 sm:py-4 rounded-md hover:border-gray-400 hover:text-gray-900 transition-colors font-semibold text-base sm:text-lg"
-              >
-                {heroContent.secondaryCTA}
-              </Link>
+              <form onSubmit={join} className="flex" role="search" aria-label="Join a room">
+                <label htmlFor="join-code" className="sr-only">Room code or link</label>
+                <input
+                  id="join-code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Have a code? Paste it here"
+                  className="h-11 min-w-0 flex-1 rounded-l-md border border-r-0 border-line-strong bg-white px-3 text-sm placeholder:text-gray-400 focus:border-accent focus:outline-none sm:w-60"
+                />
+                <button type="submit" className="h-11 rounded-r-md border border-line-strong bg-white px-4 text-sm font-medium hover:bg-sunken">Join</button>
+              </form>
             </div>
           </div>
-          </motion.div>
-          {/* Hero Visual - Floating UI Elements */}
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 1, delay: 0.2 }}
-            className="relative hidden lg:block"
-          >
-              <div className="relative z-10 bg-white shadow-2xl border border-gray-100 overflow-hidden transform rotate-4 hover:rotate-0 transition-transform duration-700">
-                <img src={whiteboardFace} alt="Dashboard" className="w-full h-auto" />
-              </div>
-              {/* Decorative elements */}
-              <div className="absolute -top-6 -right-6 w-32 h-32 bg-yellow-200 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
-              <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-indigo-200 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
-          </motion.div>
-          </div>
-        </div>
-      </section>
+          <BoardPreview />
+        </section>
 
-      {/* UI Showcase Section */}
-      <section className="py-16 sm:py-24 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12 sm:mb-16">
-            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-4 sm:mb-6">
-              Experience Powerful Collaboration Tools
-            </h2>
-            <p className="text-base sm:text-lg lg:text-xl text-gray-600 max-w-3xl mx-auto">
-              Our intuitive interface makes it easy to teach and learn in real-time
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            {/* Whiteboard Showcase */}
-            <div className="space-y-6">
-              <motion.div initial={{ x: 50, opacity: 0 }} whileInView={{ x: 0, opacity: 1 }}>
-                <div className="bg-white rounded-lg shadow-lg overflow-hidden border border-gray-200">
-                  <img 
-                    src={whiteboardFace} 
-                    alt="Interactive Whiteboard Interface"
-                    className="w-full h-auto object-cover"
-                  />
-                </div>
-              </motion.div>
-
-              <motion.div {...fadeInUp}>
-              <div>
-                <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3 sm:mb-4">
-                  Interactive Whiteboard
-                </h3>
-                <p className="text-sm sm:text-base text-gray-600 mb-6">
-                  Draw, write, and collaborate in real-time. Perfect for explaining complex concepts, solving problems, and creating visual content together.
-                </p>
-                <ul className="space-y-3">
-                  <li className="flex items-center text-sm sm:text-base text-gray-700">
-                    <FaCheck className="w-4 h-4 sm:w-5 sm:h-5 text-gray-900 mr-3" />
-                    Real-time synchronized drawing
-                  </li>
-                  <li className="flex items-center text-sm sm:text-base text-gray-700">
-                    <FaCheck className="w-4 h-4 sm:w-5 sm:h-5 text-gray-900 mr-3" />
-                    Multiple colors and brush sizes
-                  </li>
-                  <li className="flex items-center text-sm sm:text-base text-gray-700">
-                    <FaCheck className="w-4 h-4 sm:w-5 sm:h-5 text-gray-900 mr-3" />
-                    Undo/Redo functionality
-                  </li>
-                  <li className="flex items-center text-sm sm:text-base text-gray-700">
-                    <FaCheck className="w-4 h-4 sm:w-5 sm:h-5 text-gray-900 mr-3" />
-                    Session recordings
-                  </li>
+        <section className="border-y border-line bg-surface">
+          <div className="mx-auto grid max-w-6xl gap-px bg-line sm:px-0 md:grid-cols-2">
+            {[["When you host", hostPoints], ["When you join", listenerPoints]].map(([title, points]) => (
+              <div key={title} className="bg-surface px-4 py-12 sm:px-6 md:px-10">
+                <h2 className="font-display text-3xl">{title}</h2>
+                <ul className="mt-6 space-y-3.5">
+                  {points.map((p) => (
+                    <li key={p} className="flex gap-3 text-[15px] leading-snug text-gray-800">
+                      <span className="mt-2 h-px w-4 shrink-0 bg-ink" aria-hidden="true" />
+                      {p}
+                    </li>
+                  ))}
                 </ul>
               </div>
-              </motion.div>
-            </div>
-
-            {/* PDF Showcase */}
-            <div className="space-y-6">
-              <motion.div initial={{ x: -50, opacity: 0 }} whileInView={{ x: 0, opacity: 1 }}>
-                <div className="bg-white rounded-lg shadow-lg overflow-hidden border border-gray-200">
-                  <img 
-                    src={pdfFace} 
-                    alt="PDF Collaboration Interface"
-                    className="w-full h-auto object-cover"
-                  />
-                </div>
-              </motion.div>
-
-              <motion.div {...fadeInUp}>
-              <div>
-                <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3 sm:mb-4">
-                  PDF Annotation & Sharing
-                </h3>
-                <p className="text-sm sm:text-base text-gray-600 mb-6">
-                  Upload and annotate documents with your students. Highlight, mark up, and discuss documents together in real-time.
-                </p>
-                <ul className="space-y-3">
-                  <li className="flex items-center text-sm sm:text-base text-gray-700">
-                    <FaCheck className="w-4 h-4 sm:w-5 sm:h-5 text-gray-900 mr-3" />
-                    Multi-page document support
-                  </li>
-                  <li className="flex items-center text-sm sm:text-base text-gray-700">
-                    <FaCheck className="w-4 h-4 sm:w-5 sm:h-5 text-gray-900 mr-3" />
-                    Annotation tools
-                  </li>
-                  <li className="flex items-center text-sm sm:text-base text-gray-700">
-                    <FaCheck className="w-4 h-4 sm:w-5 sm:h-5 text-gray-900 mr-3" />
-                    Synchronized page navigation
-                  </li>
-                  <li className="flex items-center text-sm sm:text-base text-gray-700">
-                    <FaCheck className="w-4 h-4 sm:w-5 sm:h-5 text-gray-900 mr-3" />
-                    Cloud storage integration
-                  </li>
-                </ul>
-              </div>
-              </motion.div>
-            </div>
+            ))}
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Teaching & Learning Options Section */}
-      <section className="py-16 sm:py-24 bg-gray-900 text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12 sm:mb-16">
-            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-4 sm:mb-6">
-              Flexible Teaching & Learning Options
-            </h2>
-            <p className="text-base sm:text-lg lg:text-xl text-gray-300 max-w-3xl mx-auto">
-              Whether you want to share knowledge freely or build a teaching business, 
-              our platform supports both community learning and professional instruction.
-            </p>
+        <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:py-24">
+          <div className="grid gap-10 lg:grid-cols-[1fr_1.4fr]">
+            <h2 className="font-display text-4xl leading-tight sm:text-5xl">Free to run. Paid when you want it to be.</h2>
+            <dl className="divide-y divide-line border-y border-line">
+              {[
+                ["Community sessions", "Open to anyone with the link. Good for building an audience and a name."],
+                ["Paid sessions", "Set a price in naira. Listeners pay before they enter and your share goes to your bank account."],
+                ["Your rooms stay", "End a session and pick it up later. The board, pages and document are saved."],
+              ].map(([t, d]) => (
+                <div key={t} className="grid gap-1 py-5 sm:grid-cols-[13rem_1fr] sm:gap-6">
+                  <dt className="text-[15px] font-medium">{t}</dt>
+                  <dd className="text-[15px] text-gray-700">{d}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
+        </section>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 sm:gap-12">
-            {/* Free Sessions Section */}
-            <div className="bg-white/10 backdrop-blur-sm p-6 sm:p-8 rounded-lg border border-white/20">
-              <div className="flex items-center gap-4 mb-6">
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-lg flex items-center justify-center">
-                  <FaHeart className="w-5 h-5 sm:w-6 sm:h-6 text-gray-900" />
-                </div>
-                <h3 className="text-xl sm:text-2xl font-bold">Community Learning</h3>
-              </div>
-              
-              <div className="space-y-6">
-                <p className="text-sm sm:text-base text-gray-300">
-                  Share your knowledge with the community through free sessions. Help fellow learners, 
-                  build your teaching reputation, and contribute to the learning ecosystem.
-                </p>
-                
-                <div className="space-y-4">
-                  <div className="flex items-start gap-3">
-                    <FaUsers className="w-5 h-5 text-white mt-1 flex-shrink-0" />
-                    <div>
-                      <h4 className="text-base font-semibold mb-1">Free Access for All</h4>
-                      <p className="text-gray-300 text-xs sm:text-sm">Create sessions accessible to any student without payment barriers</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-start gap-3">
-                    <FaBookOpen className="w-5 h-5 text-white mt-1 flex-shrink-0" />
-                    <div>
-                      <h4 className="text-base font-semibold mb-1">Build Your Profile</h4>
-                      <p className="text-gray-300 text-xs sm:text-sm">Establish credibility and showcase your teaching skills to the community</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-start gap-3">
-                    <FaBrain className="w-5 h-5 text-white mt-1 flex-shrink-0" />
-                    <div>
-                      <h4 className="text-base font-semibold mb-1">Knowledge Sharing</h4>
-                      <p className="text-gray-300 text-xs sm:text-sm">Contribute to collaborative learning and help students discover new topics</p>
-                    </div>
-                  </div>
-                </div>
-
-                {!isAuthenticated && (
-                  <div className="pt-6 border-t border-white/20">
-                    <Link
-                      to="/register"
-                      className="inline-flex items-center gap-2 bg-white text-gray-900 px-5 sm:px-6 py-2.5 sm:py-3 rounded-md hover:bg-gray-100 transition-colors font-semibold text-sm sm:text-base"
-                    >
-                      <FaHeart className="w-4 h-4" />
-                      Start Teaching for Free
-                    </Link>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Paid Sessions Section */}
-            <div className="bg-white/10 backdrop-blur-sm p-6 sm:p-8 rounded-lg border border-white/20">
-              <div className="flex items-center gap-4 mb-6">
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-lg flex items-center justify-center">
-                  <FaLightbulb className="w-5 h-5 sm:w-6 sm:h-6 text-gray-900" />
-                </div>
-                <h3 className="text-xl sm:text-2xl font-bold">Professional Teaching</h3>
-              </div>
-              
-              <div className="space-y-6">
-                <p className="text-sm sm:text-base text-gray-300">
-                  Monetize your expertise by creating paid sessions. Set your own prices, 
-                  track your progress, and build a sustainable teaching practice.
-                </p>
-                
-                <div className="space-y-4">
-                  <div className="flex items-start gap-3">
-                    <FaMoneyBillWave className="w-5 h-5 text-white mt-1 flex-shrink-0" />
-                    <div>
-                      <h4 className="text-base font-semibold mb-1">Set Your Own Prices</h4>
-                      <p className="text-gray-300 text-xs sm:text-sm">Choose what your expertise is worth and earn from your teaching sessions</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-start gap-3">
-                    <FaChartLine className="w-5 h-5 text-white mt-1 flex-shrink-0" />
-                    <div>
-                      <h4 className="text-base font-semibold mb-1">Track Your Progress</h4>
-                      <p className="text-gray-300 text-xs sm:text-sm">Monitor your teaching activity and earnings through detailed analytics</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-start gap-3">
-                    <FaShieldAlt className="w-5 h-5 text-white mt-1 flex-shrink-0" />
-                    <div>
-                      <h4 className="text-base font-semibold mb-1">Secure Payments</h4>
-                      <p className="text-gray-300 text-xs sm:text-sm">Reliable payment processing with transparent fee structure</p>
-                    </div>
-                  </div>
-                </div>
-
-                {!isAuthenticated && (
-                  <div className="pt-6 border-t border-white/20">
-                    <Link
-                      to="/register"
-                      className="inline-flex items-center gap-2 bg-white text-gray-900 px-5 sm:px-6 py-2.5 sm:py-3 rounded-md hover:bg-gray-100 transition-colors font-semibold text-sm sm:text-base"
-                    >
-                      <FaLightbulb className="w-4 h-4" />
-                      Start Professional Teaching
-                    </Link>
-                  </div>
-                )}
-              </div>
-            </div>
+        <section className="bg-ink text-paper">
+          <div className="mx-auto flex max-w-6xl flex-col items-start gap-6 px-4 py-14 sm:px-6 md:flex-row md:items-center md:justify-between">
+            <h2 className="font-display max-w-lg text-4xl leading-tight">Open a room in under a minute.</h2>
+            <Link to="/register" className="inline-flex h-11 items-center gap-2 rounded-md bg-paper px-5 text-sm font-medium text-ink hover:bg-white">
+              Create an account <ArrowRight size={16} />
+            </Link>
           </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
-      <section className="py-10 bg-gray-100 mt-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-xs sm:text-sm font-bold text-gray-700 tracking-widest uppercase mb-8">Trusted by <span className="inline-flex items-center px-3 py-1 rounded-full text-xs sm:text-sm font-medium bg-indigo-50 text-indigo-600 mb-6 border border-indigo-100 mx-2">
-                <span className="relative flex h-2 w-2 mr-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
-                </span>
-                <span className='animate-pulse'>10,000+</span>
-                 </span>Teams
-          </p>
-          <div className="flex flex-wrap justify-center gap-6 sm:gap-12 opacity-40 grayscale group hover:grayscale-0 transition-all">
-             <span className="text-lg sm:text-2xl font-black">UNIVERSITY</span>
-             <span className="text-lg sm:text-2xl font-black">TECHCORP</span>
-             <span className="text-lg sm:text-2xl font-black">LEARNHUB</span>
-             <span className="text-lg sm:text-2xl font-black">GLOBALEDU</span>
-          </div>
-        </div>
-      </section>
-
-      {/* Features Section */}
-      <section className="py-16 sm:py-24 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-3xl mb-12 sm:mb-16">
-            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-4 sm:mb-6">
-              Built for Modern Learning
-            </h2>
-            <p className="text-base sm:text-lg lg:text-xl text-gray-600">
-              Comprehensive tools for both instructors and students to create 
-              and participate in professional online learning experiences.
-            </p>
-          </div>
-
-          <motion.div variants={staggerContainer} initial="initial" whileInView="whileInView" viewport={{ once: true }} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 sm:gap-10">
-            {/* Feature 1 */}
-            <motion.div 
-              variants={fadeInUp}
-              className="bg-white p-6 sm:p-8 rounded-2xl border border-gray-100 hover:shadow-xl hover:shadow-gray-200/50 transition-all duration-300"
-            >
-              <div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gray-900 rounded-lg flex items-center justify-center mb-6">
-                  <FaChalkboardTeacher className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-                </div>
-                <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3 sm:mb-4">
-                  Interactive Whiteboard
-                </h3>
-                <p className="text-sm sm:text-base text-gray-600 mb-6">
-                  Advanced drawing tools with real-time synchronization across all participants. 
-                  Perfect for mathematical equations, diagrams, and visual explanations.
-                </p>
-                <ul className="space-y-3">
-                  <li className="flex items-center text-sm text-gray-600">
-                    <FaCheck className="w-4 h-4 text-gray-400 mr-3" />
-                    Real-time collaboration
-                  </li>
-                  <li className="flex items-center text-sm text-gray-600">
-                    <FaCheck className="w-4 h-4 text-gray-400 mr-3" />
-                    Professional drawing tools
-                  </li>
-                  <li className="flex items-center text-sm text-gray-600">
-                    <FaCheck className="w-4 h-4 text-gray-400 mr-3" />
-                    Auto-save functionality
-                  </li>
-                </ul>
-              </div>
-            </motion.div>
-            {/* Feature 2 */}
-            <motion.div 
-              variants={fadeInUp}
-              className="bg-white p-6 sm:p-8 rounded-2xl border border-gray-100 hover:shadow-xl hover:shadow-gray-200/50 transition-all duration-300"
-            >
-              <div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gray-900 rounded-lg flex items-center justify-center mb-6">
-                  <FaFilePdf className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-                </div>
-                <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3 sm:mb-4">
-                  PDF Collaboration
-                </h3>
-                <p className="text-sm sm:text-base text-gray-600 mb-6">
-                  Upload and annotate documents together with comprehensive markup tools. 
-                  Ideal for reviewing materials and collaborative document analysis.
-                </p>
-                <ul className="space-y-3">
-                  <li className="flex items-center text-sm text-gray-600">
-                    <FaCheck className="w-4 h-4 text-gray-400 mr-3" />
-                    Multi-page document support
-                  </li>
-                  <li className="flex items-center text-sm text-gray-600">
-                    <FaCheck className="w-4 h-4 text-gray-400 mr-3" />
-                    Advanced annotation tools
-                  </li>
-                  <li className="flex items-center text-sm text-gray-600">
-                    <FaCheck className="w-4 h-4 text-gray-400 mr-3" />
-                    Synchronized navigation
-                  </li>
-                </ul>
-              </div>
-            </motion.div>
-            {/* Feature 3 (Voice) */}
-            <motion.div 
-              variants={fadeInUp}
-              className="bg-white p-6 sm:p-8 rounded-2xl border border-gray-100 hover:shadow-xl hover:shadow-gray-200/50 transition-all duration-300"
-            >
-              <div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gray-900 rounded-lg flex items-center justify-center mb-6">
-                  <FaMicrophone className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-                </div>
-                <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3 sm:mb-4">
-                  AI Live Voice Captioning
-                </h3>
-                <p className="text-sm sm:text-base text-gray-600 mb-6">
-                  Experience real-time voice captioning during your sessions, making it easier to follow along and participate.
-                </p>
-                <ul className="space-y-3">
-                  <li className="flex items-center text-sm text-gray-600">
-                    <FaCheck className="w-4 h-4 text-gray-400 mr-3" />
-                    AI voice transcription for all
-                  </li>
-                  <li className="flex items-center text-sm text-gray-600">
-                    <FaCheck className="w-4 h-4 text-gray-400 mr-3" />
-                    Supports multiple languages
-                  </li>
-                  <li className="flex items-center text-sm text-gray-600">
-                    <FaCheck className="w-4 h-4 text-gray-400 mr-3" />
-                    Real-time transcription
-                  </li>
-                </ul>
-              </div>
-            </motion.div> 
-            {/* Feature 4 (Mobile) */}
-            <motion.div 
-              variants={fadeInUp}
-              className="bg-white p-6 sm:p-8 rounded-2xl border border-gray-100 hover:shadow-xl hover:shadow-gray-200/50 transition-all duration-300"
-            >
-              <div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gray-900 rounded-lg flex items-center justify-center mb-6">
-                  <FaMobileAlt className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-                </div>
-                <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3 sm:mb-4">
-                  Mobile Friendly Collaboration
-                </h3>
-                <p className="text-sm sm:text-base text-gray-600 mb-6">
-                  Seamlessly collaborate on whiteboards and documents from any device. 
-                  Our platform is optimized for both desktop and mobile.
-                </p>
-                <ul className="space-y-3">
-                  <li className="flex items-center text-sm text-gray-600">
-                    <FaCheck className="w-4 h-4 text-gray-400 mr-3" />
-                    Cross-device compatibility
-                  </li>
-                  <li className="flex items-center text-sm text-gray-600">
-                    <FaCheck className="w-4 h-4 text-gray-400 mr-3" />
-                    Touch-friendly interface
-                  </li>
-                  <li className="flex items-center text-sm text-gray-600">
-                    <FaCheck className="w-4 h-4 text-gray-400 mr-3" />
-                    Full feature set on mobile
-                  </li>
-                </ul>
-              </div>
-            </motion.div>
-            {/* Feature 5 (Discovery) */}
-            <motion.div 
-              variants={fadeInUp}
-              className="bg-white p-6 sm:p-8 rounded-2xl border border-gray-100 hover:shadow-xl hover:shadow-gray-200/50 transition-all duration-300"
-            >
-              <div >
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gray-900 rounded-lg flex items-center justify-center mb-6">
-                  <FaSearch className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-                </div>
-                <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3 sm:mb-4">
-                  Session Discovery & Management
-                </h3>
-                <p className="text-sm sm:text-base text-gray-600 mb-6">
-                  Easily find learning opportunities or manage your teaching sessions. 
-                  Access both free community sessions and premium courses.
-                </p>
-                <ul className="space-y-3">
-                  <li className="flex items-center text-sm text-gray-600">
-                    <FaCheck className="w-4 h-4 text-gray-400 mr-3" />
-                    Browse free & paid sessions
-                  </li>
-                  <li className="flex items-center text-sm text-gray-600">
-                    <FaCheck className="w-4 h-4 text-gray-400 mr-3" />
-                    Simple payment tracking
-                  </li>
-                  <li className="flex items-center text-sm text-gray-600">
-                    <FaCheck className="w-4 h-4 text-gray-400 mr-3" />
-                    Instant session access
-                  </li>
-                </ul>
-              </div>
-            </motion.div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* Process Section */}
-      <section className="py-16 sm:py-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-3xl mb-12 sm:mb-16">
-            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-4 sm:mb-6">
-              Simple Setup Process
-            </h2>
-            <p className="text-base sm:text-lg lg:text-xl text-gray-600">
-              Get started in minutes with our streamlined onboarding process
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 sm:gap-12">
-            {/* Step 1 */}
-            <div className="text-left">
-              <div className="flex items-center mb-6">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gray-900 rounded-full flex items-center justify-center text-white font-bold text-base sm:text-lg mr-4">
-                  1
-                </div>
-                <h3 className="text-lg sm:text-xl font-semibold text-gray-900">Create Account</h3>
-              </div>
-              <p className="text-sm sm:text-base text-gray-600 pl-12 sm:pl-14">
-                Choose your role as an instructor or student. Set up your profile 
-                with your learning goals or teaching expertise in minutes.
-              </p>
-            </div>
-
-            {/* Step 2 */}
-            <div className="text-left">
-              <div className="flex items-center mb-6">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gray-900 rounded-full flex items-center justify-center text-white font-bold text-base sm:text-lg mr-4">
-                  2
-                </div>
-                <h3 className="text-lg sm:text-xl font-semibold text-gray-900">Start Teaching or Learning</h3>
-              </div>
-              <p className="text-sm sm:text-base text-gray-600 pl-12 sm:pl-14">
-                Instructors can create free or paid sessions while students discover and 
-                join learning opportunities that match their interests.
-              </p>
-            </div>
-
-            {/* Step 3 */}
-            <div className="text-left">
-              <div className="flex items-center mb-6">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gray-900 rounded-full flex items-center justify-center text-white font-bold text-base sm:text-lg mr-4">
-                  3
-                </div>
-                <h3 className="text-lg sm:text-xl font-semibold text-gray-900">Collaborate & Learn</h3>
-              </div>
-              <p className="text-sm sm:text-base text-gray-600 pl-12 sm:pl-14">
-                Engage in real-time collaboration with professional tools. 
-                Learn together and achieve your educational goals.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Stats Section */}
-      <section className="py-12 sm:py-16 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-            <div>
-              <div className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">50K+</div>
-              <div className="text-xs sm:text-sm text-gray-600">Active Users</div>
-            </div>
-            <div>
-              <div className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">99.9%</div>
-              <div className="text-xs sm:text-sm text-gray-600">Uptime</div>
-            </div>
-            <div>
-              <div className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">1M+</div>
-              <div className="text-xs sm:text-sm text-gray-600">Sessions Hosted</div>
-            </div>
-            <div>
-              <div className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">24/7</div>
-              <div className="text-xs sm:text-sm text-gray-600">Support</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="py-16 sm:py-24">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-4 sm:mb-6">
-            Ready to Start Learning or Teaching?
-          </h2>
-          <p className="text-base sm:text-lg lg:text-xl text-gray-600 mb-8 sm:mb-10">
-            Join thousands of instructors and students who use our platform for 
-            collaborative learning experiences. Choose your path: share knowledge freely or build your teaching business.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            {isAuthenticated ? (
-              userRole === 'tutor' && (
-                <>
-                  <Link
-                    to="/create"
-                    className="bg-gray-900 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-md hover:bg-gray-800 transition-colors font-semibold text-base sm:text-lg"
-                  >
-                    Create Your First Session
-                  </Link>
-                  <Link
-                    to="/dashboard"
-                    className="border-2 border-gray-300 text-gray-700 px-6 sm:px-8 py-3 sm:py-4 rounded-md hover:border-gray-400 hover:text-gray-900 transition-colors font-semibold text-base sm:text-lg"
-                  >
-                    View Dashboard
-                  </Link>
-                </>
-              )
-            ) : (
-              <>
-                <Link
-                  to="/register"
-                  className="bg-gray-900 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-md hover:bg-gray-800 transition-colors font-semibold text-base sm:text-lg"
-                >
-                  Start Free Trial
-                </Link>
-                <Link
-                  to="/login"
-                  className="border-2 border-gray-300 text-gray-700 px-6 sm:px-8 py-3 sm:py-4 rounded-md hover:border-gray-400 hover:text-gray-900 transition-colors font-semibold text-base sm:text-lg"
-                >
-                  Sign In
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
       <Footer />
     </div>
   );
-};
-
-export default Home;
+}

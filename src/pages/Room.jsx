@@ -1,8 +1,8 @@
 // Room.jsx - Updated for split payment system
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import axios from "axios";
-import WhiteboardLayout from "../components/WhiteboardLayout";
+import RoomShell from "../room/RoomShell.jsx";
+import { Loader2, Lock, SearchX, Wallet } from "lucide-react";
 import api from "../utils/api";
 import { isLoggedIn } from "../utils/auth";
 
@@ -135,10 +135,9 @@ const Room = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading room...</p>
+      <div className="flex min-h-screen items-center justify-center bg-paper">
+        <div role="status" className="flex items-center gap-3 text-sm text-muted">
+          <Loader2 size={18} className="animate-spin" /> Opening room…
         </div>
       </div>
     );
@@ -146,168 +145,48 @@ const Room = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
-          <div className="w-20 h-20 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
-            <svg
-              className="w-10 h-10 text-red-500"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
-              />
-            </svg>
-          </div>
-
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">
-            Room Not Found
-          </h1>
-          <p className="text-gray-600 mb-6">{error}</p>
-
-          <button
-            onClick={() => navigate("/lobby")}
-            className="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl hover:bg-blue-700 transition-colors"
-          >
-            Back to Lobby
-          </button>
-        </div>
-      </div>
+      <StatusCard icon={SearchX} title="Room not found" body={error}>
+        <button onClick={() => navigate("/")} className="h-10 w-full rounded-md bg-ink text-sm font-medium text-paper hover:bg-gray-800">Back to home</button>
+      </StatusCard>
     );
   }
 
-  // Show payment screen for students who need to pay
   if (paymentRequired) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md text-center">
-          <div className="w-16 h-16 bg-yellow-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
-            <svg
-              className="w-8 h-8 text-yellow-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"
-              />
-            </svg>
-          </div>
-
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">
-            Payment Required
-          </h1>
-          <p className="text-gray-600 mb-2">
-            This is a paid session which requires payment.
-          </p>
-          <p className="text-sm text-gray-500 mb-6">
-            Topic: <span className="font-medium">{room?.topic}</span>
-          </p>
-
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
-            <p className="text-2xl font-bold text-green-600">
-              ₦{room?.price?.toLocaleString()}
-            </p>
-            <p className="text-sm text-gray-600">One-time payment</p>
-          </div>
-
-          <button
-            onClick={handlePayment}
-            className="w-full bg-green-600 text-white font-semibold py-3 rounded-xl hover:bg-green-700 transition-colors mb-4"
-          >
-            Pay & Join Session
-          </button>
-
-          <button
-            onClick={() => navigate("/lobby")}
-            className="w-full bg-gray-200 text-gray-700 font-semibold py-3 rounded-xl hover:bg-gray-300 transition-colors"
-          >
-            Back to Lobby
-          </button>
+      <StatusCard icon={Lock} title="This session is paid" body={room?.topic}>
+        <div className="mb-4 rounded-md border border-line bg-sunken px-4 py-3 text-left">
+          <div className="text-xs uppercase tracking-wider text-muted">One-time payment</div>
+          <div className="mt-0.5 text-2xl font-semibold tabular-nums">₦{room?.price?.toLocaleString()}</div>
         </div>
-      </div>
+        <button onClick={handlePayment} className="h-10 w-full rounded-md bg-accent text-sm font-medium text-white hover:bg-accent-strong">Pay and join</button>
+        <button onClick={() => navigate("/dashboard")} className="mt-2 h-10 w-full rounded-md border border-line text-sm hover:bg-sunken">Not now</button>
+      </StatusCard>
     );
   }
 
-  // Show payment setup warning for tutors
   if (paymentSetupWarning) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md text-center">
-          <div className="w-16 h-16 bg-orange-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
-            <svg
-              className="w-8 h-8 text-orange-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
-              />
-            </svg>
-          </div>
-
-          <h1 className="text-2xl font-bold text-orange-600 mb-4">
-            Payment Setup Required
-          </h1>
-          <p className="text-gray-600 mb-6">
-            You need to setup your bank account to receive payments from this paid session. 
-            Students can't pay until your payment account is configured.
-          </p>
-
-          <button
-            onClick={() => navigate("/profile")}
-            className="w-full bg-orange-600 text-white font-semibold py-3 rounded-xl hover:bg-orange-700 transition-colors mb-4"
-          >
-            Setup Payment Account
-          </button>
-
-          <button
-            onClick={() => navigate("/lobby")}
-            className="w-full bg-gray-200 text-gray-700 font-semibold py-3 rounded-xl hover:bg-gray-300 transition-colors"
-          >
-            Back to Lobby
-          </button>
-        </div>
-      </div>
+      <StatusCard icon={Wallet} title="Set up payouts first" body="This is a paid session, but your bank account is not connected yet. Listeners cannot pay until it is.">
+        <button onClick={() => navigate("/profile")} className="h-10 w-full rounded-md bg-ink text-sm font-medium text-paper hover:bg-gray-800">Connect bank account</button>
+        <button onClick={() => navigate("/lobby")} className="mt-2 h-10 w-full rounded-md border border-line text-sm hover:bg-sunken">Back to my rooms</button>
+      </StatusCard>
     );
   }
 
-  // Render the whiteboard if access is granted
-  return room && accessGranted ? (
-    <div>
-      {/* {!getToken() && !room.isPaid && (
-        <div className="bg-blue-50 border-b border-blue-200 px-4 py-2">
-          <p className="text-sm text-blue-800">
-            <span className="font-medium">Guest Mode:</span> You're viewing this free session as a guest
-          </p>
-        </div>
-      )}
-      {isTutor && (
-        <div className="bg-green-50 border-b border-green-200 px-4 py-2">
-          <p className="text-sm text-green-800">
-            <span className="font-medium">Tutor Mode:</span> You have full access to this room
-            {room.isPaid && (
-              <span className="ml-2 text-xs bg-green-200 px-2 py-1 rounded">
-                Split Payment: 70% to you, 30% platform
-              </span>
-            )}
-          </p>
-        </div>
-      )} */}
-      <WhiteboardLayout room={room} isTutor={isTutor} />
-    </div>
-  ) : null;
+  return room && accessGranted ? <RoomShell room={room} isTutor={isTutor} /> : null;
 };
+
+function StatusCard({ icon: Icon, title, body, children }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-paper px-4">
+      <div className="w-full max-w-sm rounded-xl border border-line bg-surface p-7 text-center">
+        <Icon size={26} strokeWidth={1.5} className="mx-auto text-gray-500" />
+        <h1 className="mt-4 text-xl font-semibold">{title}</h1>
+        {body && <p className="mb-6 mt-1.5 text-sm text-muted">{body}</p>}
+        {children}
+      </div>
+    </div>
+  );
+}
 
 export default Room;

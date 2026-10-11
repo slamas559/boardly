@@ -1,288 +1,88 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaChalkboard, FaArrowLeft, FaPlus, FaLightbulb, FaCheck } from "react-icons/fa";
+import { Loader2 } from "lucide-react";
 import api from "../utils/api";
+import Header from "./Header";
+import { fieldClass } from "./Auth/AuthLayout";
 
-const CreateRoom = () => {
+const TYPES = [
+  { id: "Regular", title: "Free", body: "Anyone with the link can join, even without an account." },
+  { id: "Paid", title: "Paid", body: "Listeners pay before entering. You keep the largest share." },
+];
+
+export default function CreateRoom() {
+  const navigate = useNavigate();
   const [topic, setTopic] = useState("");
   const [price, setPrice] = useState("");
-  const [isCreating, setIsCreating] = useState(false);
-  const [isRoomType, setIsRoomType] = useState("Regular");
-  const navigate = useNavigate();
+  const [type, setType] = useState("Regular");
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleCreate = async () => {
-    if (!topic.trim()) {
-      alert("Please enter a topic for your room");
-      return;
-    }
+  const paid = type === "Paid";
+  const invalid = !topic.trim() || (paid && !(Number(price) > 0));
 
-    if (isRoomType === "Paid" && (!price || price <= 0)) {
-      alert("Please set a valid price for your paid room");
-      return;
-    }
-
-    setIsCreating(true);
+  const submit = async (e) => {
+    e.preventDefault();
+    if (invalid) return;
+    setCreating(true);
+    setError("");
     try {
-      const payload = {
-        topic: topic.trim(),
-        isPaid: isRoomType === "Paid",
-        price: isRoomType === "Paid" ? Number(price) : 0,
-        currency: "NGN",
-      };
-
-      await api.post("/rooms", payload);
-
+      await api.post("/rooms", { topic: topic.trim(), isPaid: paid, price: paid ? Number(price) : 0, currency: "NGN" });
       navigate("/lobby");
     } catch (err) {
-      console.error("Error creating room:", err);
-      alert("Failed to create room. Please try again.");
+      setError(err.response?.data?.message || "Could not create the room. Try again.");
     } finally {
-      setIsCreating(false);
+      setCreating(false);
     }
   };
 
-  const topicExamples = [
-    "Mathematics Fundamentals",
-    "Science Laboratory",
-    "English Literature",
-    "History Discussion",
-    "Programming Workshop",
-    "Art & Design Studio",
-    "Music Theory Class",
-    "Physics Concepts",
-  ];
-
   return (
-    <div className="min-h-screen bg-gray-50 px-4 py-8">
-      <div className="w-full max-w-2xl mx-auto">
-        {/* Back Button */}
-        <button
-          onClick={() => navigate("/lobby")}
-          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors mb-8 font-medium"
-        >
-          <FaArrowLeft className="w-4 h-4" />
-          Back
-        </button>
+    <div className="min-h-screen bg-paper">
+      <Header />
+      <main className="mx-auto max-w-xl px-4 py-12 sm:px-6">
+        <h1 className="font-display text-4xl">New room</h1>
+        <p className="mt-2 text-[15px] text-muted">You can end it and come back to it any time.</p>
 
-        {/* Header */}
-        <div className="mb-10">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            Create New Room
-          </h1>
-          <p className="text-xl text-gray-600">
-            Set up your professional teaching environment with advanced collaboration tools
-          </p>
-        </div>
+        <form onSubmit={submit} className="mt-8 space-y-6">
+          {error && <div role="alert" className="rounded-md border border-danger/20 bg-danger-soft px-3 py-2.5 text-sm text-danger">{error}</div>}
 
-        {/* Main Card */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          {/* Room Type Selector */}
-          <div className="mb-8">
-            <label className="block text-sm font-semibold text-gray-900 mb-4">
-              Room Type
-            </label>
-            <div className="flex rounded-lg border border-gray-300 p-1">
-              <button
-                className={`flex-1 px-4 py-3 text-xs md:text-sm font-medium rounded-md transition-colors ${
-                  isRoomType === "Regular"
-                    ? "bg-gray-900 text-white"
-                    : "text-gray-700 hover:text-gray-900"
-                }`}
-                onClick={() => {
-                  setIsRoomType("Regular");
-                  setPrice("");
-                }}
-              >
-                Free Session
-              </button>
-              <button
-                className={`flex-1 px-4 py-3 text-xs md:text-sm font-medium rounded-md transition-colors ${
-                  isRoomType === "Paid"
-                    ? "bg-gray-900 text-white"
-                    : "text-gray-700 hover:text-gray-900"
-                }`}
-                onClick={() => setIsRoomType("Paid")}
-              >
-                Premium Session
-              </button>
-            </div>
+          <div>
+            <label htmlFor="topic" className="mb-1.5 block text-sm font-medium">Topic</label>
+            <input id="topic" value={topic} onChange={(e) => setTopic(e.target.value)} maxLength={80} placeholder="e.g. Quadratic equations, week 3" className={fieldClass} autoFocus />
           </div>
 
-          {/* Form Fields */}
-          <div className="space-y-6">
-            {/* Topic Input */}
-            <div>
-              <label htmlFor="topic" className="block text-sm font-semibold text-gray-900 mb-3">
-                Session Topic <span className="text-red-500">*</span>
-              </label>
-              <input
-                id="topic"
-                type="text"
-                placeholder="Enter your session topic"
-                value={topic}
-                onChange={(e) => setTopic(e.target.value)}
-                onKeyPress={(e) => e.key === "Enter" && handleCreate()}
-                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-all placeholder-gray-500"
-                disabled={isCreating}
-              />
-              
-              {/* Topic Suggestions */}
-              <div className="mt-4">
-                <p className="text-sm text-gray-600 mb-3 flex items-center gap-2">
-                  <FaLightbulb className="w-4 h-4" />
-                  Suggested Topics
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {topicExamples.map((example, index) => (
-                    <button
-                      key={index}
-                      onClick={() => setTopic(example)}
-                      className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-md transition-colors border border-gray-200"
-                      disabled={isCreating}
-                    >
-                      {example}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Price Input (for Paid rooms only) */}
-            {isRoomType === "Paid" && (
-              <div>
-                <label htmlFor="price" className="block text-sm font-semibold text-gray-900 mb-3">
-                  Session Price (NGN) <span className="text-red-500">*</span>
+          <fieldset>
+            <legend className="mb-1.5 text-sm font-medium">Access</legend>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {TYPES.map((t) => (
+                <label key={t.id} className={`cursor-pointer rounded-md border bg-white p-4 ${type === t.id ? "border-ink outline outline-1 outline-ink" : "border-line-strong hover:border-gray-400"}`}>
+                  <input type="radio" name="type" value={t.id} checked={type === t.id} onChange={() => setType(t.id)} className="sr-only" />
+                  <div className="text-[15px] font-medium">{t.title}</div>
+                  <p className="mt-1 text-sm leading-snug text-muted">{t.body}</p>
                 </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">₦</span>
-                  <input
-                    id="price"
-                    type="number"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-all placeholder-gray-500"
-                    disabled={isCreating}
-                    min="0"
-                    step="0.01"
-                  />
-                </div>
-                <p className="text-sm text-gray-500 mt-2">
-                  Set your per-student session fee
-                </p>
+              ))}
+            </div>
+          </fieldset>
+
+          {paid && (
+            <div>
+              <label htmlFor="price" className="mb-1.5 block text-sm font-medium">Price per listener</label>
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">₦</span>
+                <input id="price" type="number" min="1" inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value)} className={`${fieldClass} pl-7`} placeholder="2000" />
               </div>
-            )}
-
-            {/* Create Button */}
-            <div className="pt-6">
-              <button
-                onClick={handleCreate}
-                disabled={!topic.trim() || (isRoomType === "Paid" && (!price || price <= 0)) || isCreating}
-                className="w-full bg-gray-900 text-white text-lg font-semibold py-4 rounded-md hover:bg-gray-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
-              >
-                {isCreating ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Creating Session...
-                  </>
-                ) : (
-                  <>
-                    <FaPlus className="w-5 h-5" />
-                    Create {isRoomType === "Paid" ? "Premium" : "Free"} Session
-                  </>
-                )}
-              </button>
+              <p className="mt-1.5 text-xs text-muted">Payouts need a connected bank account. You can add it from your profile.</p>
             </div>
+          )}
+
+          <div className="flex items-center gap-3 pt-2">
+            <button type="submit" disabled={invalid || creating} className="inline-flex h-11 items-center gap-2 rounded-md bg-ink px-5 text-sm font-medium text-paper hover:bg-gray-800 disabled:opacity-50">
+              {creating ? <><Loader2 size={16} className="animate-spin" /> Creating…</> : "Create room"}
+            </button>
+            <button type="button" onClick={() => navigate("/lobby")} className="h-11 rounded-md px-4 text-sm text-gray-700 hover:bg-sunken">Cancel</button>
           </div>
-        </div>
-
-        {/* Features Section */}
-        <div className="mt-10">
-          <h3 className="text-lg font-semibold text-gray-900 mb-6">
-            {isRoomType === "Paid" ? "Premium Session Features" : "Session Features"}
-          </h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Standard Features */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h4 className="font-semibold text-gray-900 mb-4">Core Tools</h4>
-              <ul className="space-y-3 text-gray-600">
-                <li className="flex items-center gap-3">
-                  <FaCheck className="w-4 h-4 text-gray-400" />
-                  Interactive whiteboard with real-time sync
-                </li>
-                <li className="flex items-center gap-3">
-                  <FaCheck className="w-4 h-4 text-gray-400" />
-                  PDF upload and annotation capabilities
-                </li>
-                <li className="flex items-center gap-3">
-                  <FaCheck className="w-4 h-4 text-gray-400" />
-                  Multi-participant collaboration
-                </li>
-                <li className="flex items-center gap-3">
-                  <FaCheck className="w-4 h-4 text-gray-400" />
-                  Auto-save and session persistence
-                </li>
-              </ul>
-            </div>
-
-            {/* Premium Features or Access Control */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h4 className="font-semibold text-gray-900 mb-4">
-                {isRoomType === "Paid" ? "Premium Benefits" : "Access Control"}
-              </h4>
-              <ul className="space-y-3 text-gray-600">
-                {isRoomType === "Paid" ? (
-                  <>
-                    <li className="flex items-center gap-3">
-                      <FaCheck className="w-4 h-4 text-gray-400" />
-                      Secure payment integration
-                    </li>
-                    <li className="flex items-center gap-3">
-                      <FaCheck className="w-4 h-4 text-gray-400" />
-                      Individual student access codes
-                    </li>
-                    <li className="flex items-center gap-3">
-                      <FaCheck className="w-4 h-4 text-gray-400" />
-                      Revenue tracking and analytics
-                    </li>
-                    <li className="flex items-center gap-3">
-                      <FaCheck className="w-4 h-4 text-gray-400" />
-                      Extended session duration
-                    </li>
-                  </>
-                ) : (
-                  <>
-                    <li className="flex items-center gap-3">
-                      <FaCheck className="w-4 h-4 text-gray-400" />
-                      Unique room access code
-                    </li>
-                    <li className="flex items-center gap-3">
-                      <FaCheck className="w-4 h-4 text-gray-400" />
-                      Unlimited student participants
-                    </li>
-                    <li className="flex items-center gap-3">
-                      <FaCheck className="w-4 h-4 text-gray-400" />
-                      Session management controls
-                    </li>
-                    <li className="flex items-center gap-3">
-                      <FaCheck className="w-4 h-4 text-gray-400" />
-                      Instant session activation
-                    </li>
-                  </>
-                )}
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer Note */}
-        <p className="text-center text-gray-500 mt-8">
-          You can modify session settings and manage participants from your dashboard after creation.
-        </p>
-      </div>
+        </form>
+      </main>
     </div>
   );
-};
-
-export default CreateRoom;
+}
