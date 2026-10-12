@@ -13,10 +13,12 @@ export const SocketProvider = ({ children }) => {
   useEffect(() => {
     const newSocket = io(apiUrl, {
       transports: ["websocket", "polling"],
+      withCredentials: true, // lets the server verify the host from the session cookie
       autoConnect: true,
       reconnection: true,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
     });
 
     newSocket.on("connect", () => {

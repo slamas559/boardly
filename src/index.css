@@ -1,132 +1,215 @@
 @import "tailwindcss";
 
+/*
+  Boardly design tokens
+  - Warm neutral paper + near-black ink, one saturated accent (ink blue)
+  - Hairline borders, small radii, almost no shadow: the UI stays out of the way of the board
+  - Remapping the default Tailwind colour/radius/shadow scales means pages that still use
+    utilities like bg-gray-50, text-blue-600 or rounded-xl inherit this look automatically.
+*/
 @theme {
-    --color-primary: #4F46E5;
-    --color-accent: #6366F1;
-    --color-bg: #F9FAFB;
+  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Instrument Serif", ui-serif, Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Semantic */
+  --color-paper: #f8f7f4;
+  --color-surface: #ffffff;
+  --color-sunken: #f1f0ec;
+  --color-line: #e4e2dc;
+  --color-line-strong: #cfcdc5;
+  --color-ink: #17181c;
+  --color-muted: #6b6a64;
+  --color-accent: #2540d9;
+  --color-accent-strong: #1c32b4;
+  --color-accent-soft: #eef1fd;
+  --color-danger: #b42318;
+  --color-danger-soft: #fdecea;
+  --color-ok: #1f7a4d;
+  --color-ok-soft: #e8f5ee;
+
+  /* Neutrals (warm) replace Tailwind gray */
+  --color-gray-50: #f8f7f4;
+  --color-gray-100: #f1f0ec;
+  --color-gray-200: #e4e2dc;
+  --color-gray-300: #cfcdc5;
+  --color-gray-400: #a09e96;
+  --color-gray-500: #77756f;
+  --color-gray-600: #57554f;
+  --color-gray-700: #403e3a;
+  --color-gray-800: #2a2926;
+  --color-gray-900: #17181c;
+  --color-gray-950: #0e0f12;
+
+  /* One accent family replaces blue / indigo / purple / violet / sky */
+  --color-blue-50: #eef1fd;
+  --color-blue-100: #dde3fb;
+  --color-blue-200: #bcc7f6;
+  --color-blue-300: #93a3ef;
+  --color-blue-400: #6479e4;
+  --color-blue-500: #3f58dc;
+  --color-blue-600: #2540d9;
+  --color-blue-700: #1c32b4;
+  --color-blue-800: #182a91;
+  --color-blue-900: #152370;
+  --color-indigo-50: #eef1fd;
+  --color-indigo-100: #dde3fb;
+  --color-indigo-200: #bcc7f6;
+  --color-indigo-300: #93a3ef;
+  --color-indigo-400: #6479e4;
+  --color-indigo-500: #3f58dc;
+  --color-indigo-600: #2540d9;
+  --color-indigo-700: #1c32b4;
+  --color-indigo-800: #182a91;
+  --color-indigo-900: #152370;
+  --color-purple-50: #eef1fd;
+  --color-purple-100: #dde3fb;
+  --color-purple-200: #bcc7f6;
+  --color-purple-300: #93a3ef;
+  --color-purple-400: #6479e4;
+  --color-purple-500: #3f58dc;
+  --color-purple-600: #2540d9;
+  --color-purple-700: #1c32b4;
+  --color-purple-800: #182a91;
+  --color-purple-900: #152370;
+
+  /* Small, consistent radii: no pill soup, no 24px blobs */
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+  --radius-2xl: 10px;
+  --radius-3xl: 12px;
+
+  /* Flat surfaces: elevation only for things that float above the board */
+  --shadow-xs: none;
+  --shadow-sm: 0 1px 0 rgb(23 24 28 / 0.04);
+  --shadow-md: 0 1px 2px rgb(23 24 28 / 0.06);
+  --shadow-lg: 0 8px 24px -12px rgb(23 24 28 / 0.28), 0 0 0 1px rgb(23 24 28 / 0.06);
+  --shadow-xl: 0 12px 32px -12px rgb(23 24 28 / 0.3), 0 0 0 1px rgb(23 24 28 / 0.06);
+  --shadow-2xl: 0 16px 40px -14px rgb(23 24 28 / 0.32), 0 0 0 1px rgb(23 24 28 / 0.06);
+
+  --breakpoint-xs: 475px;
 }
 
-/* Additional CSS for Responsive Whiteboard - Add to your global CSS */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
 
-/* Prevent unwanted touch behaviors on mobile */
-.whiteboard-container {
-  /* Prevent pull-to-refresh */
-  overscroll-behavior: none;
-  /* Prevent zoom on double tap */
-  touch-action: manipulation;
-  /* Prevent text selection */
+  body {
+    font-family: var(--font-sans);
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-feature-settings: "ss01", "cv11";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3 {
+    letter-spacing: -0.015em;
+  }
+
+  ::selection {
+    background: #cdd6fb;
+  }
+
+  /* PDF text is transparent; make native selection a soft tint so the words stay readable */
+  .textLayer ::selection,
+  .textLayer::selection {
+    background: rgb(37 64 217 / 0.28);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  button, [role="button"] {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  /* Prevent iOS zoom on input focus */
+  @media (max-width: 640px) {
+    input, select, textarea {
+      font-size: 16px;
+    }
+  }
+
+  input[type="range"] {
+    accent-color: var(--color-accent);
+  }
+}
+
+@layer components {
+  .font-display {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: -0.02em;
+  }
+
+  /* Surfaces that float above the board (toolbars, popovers, sheets) */
+  .float-panel {
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    box-shadow: var(--shadow-lg);
+    border-radius: 10px;
+  }
+
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+}
+
+/* Pages not yet rewritten may still use gradient utilities: flatten them to their start colour */
+[class*="bg-gradient-to-"] {
+  background-image: none;
+  background-color: var(--tw-gradient-from, transparent);
+}
+
+/* Room layout: use the dynamic viewport so mobile browser chrome never hides controls */
+.room-root {
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* The drawing surface must own all touch gestures inside it */
+.draw-surface {
+  touch-action: none;
   user-select: none;
   -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-}
-
-/* Enhanced canvas styling for better mobile experience */
-.whiteboard-canvas {
-  /* Prevent image dragging */
-  -webkit-user-drag: none;
-  -khtml-user-drag: none;
-  -moz-user-drag: none;
-  -o-user-drag: none;
-  user-drag: none;
-  
-  /* Prevent context menu on long press */
   -webkit-touch-callout: none;
-  
-  /* High-quality image rendering */
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: optimize-contrast;
-  image-rendering: auto;
-  
-  /* Smooth interactions */
-  transition: transform 0.1s ease-out;
+  overscroll-behavior: contain;
 }
 
-/* Prevent iOS Safari bounce scroll */
-/* body, html {
-  position: fixed;
-  overflow: hidden;
-  width: 100%;
-  height: 100%;
-} */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fade-up 0.35s ease-out both; }
 
-/* Alternative for apps that need scrolling - apply to main container */
-.app-container {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  overflow: hidden;
+@keyframes laser-fade {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
-/* Improve touch target sizes for mobile */
-@media (max-width: 768px) {
-  .toolbar-button {
-    min-height: 44px;
-    min-width: 44px;
-    touch-action: manipulation;
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
-  
-  .color-picker-button {
-    min-height: 40px;
-    min-width: 40px;
-  }
-}
-
-/* Smooth cursor transitions */
-.tutor-cursor {
-  transition: transform 0.1s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  will-change: transform;
-}
-
-/* Loading states */
-.canvas-loading {
-  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-  background-size: 200% 100%;
-  animation: loading 1.5s infinite;
-}
-
-@keyframes loading {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-
-/* Improve text input positioning on mobile keyboards */
-.text-input-container {
-  /* Ensure input stays visible when keyboard appears */
-  position: fixed;
-  z-index: 9999;
-}
-
-/* Enhanced focus styles for accessibility */
-.toolbar-button:focus,
-.canvas:focus {
-  outline: 2px solid #3b82f6;
-  outline-offset: 2px;
-}
-
-/* Responsive text sizing */
-@media (max-width: 480px) {
-  .text-input-container {
-    max-width: calc(100vw - 20px);
-    left: 10px !important;
-    right: 10px !important;
-    width: auto !important;
-  }
-}
-
-/* Improve performance with hardware acceleration */
-.whiteboard-canvas,
-.tutor-cursor,
-.floating-toolbar {
-  will-change: transform;
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
-}
-
-/* Prevent double-tap zoom on buttons */
-.no-zoom {
-  touch-action: manipulation;
-  -ms-touch-action: manipulation;
 }
