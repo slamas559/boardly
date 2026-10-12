@@ -1037,7 +1037,7 @@ const Surface = forwardRef(function Surface(
   const touchAction = mode === "board" ? "none" : (!readOnly && tool !== "select") ? "none" : "pan-x pan-y pinch-zoom";
 
   return (
-    <div ref={wrapRef} className={`absolute inset-0 overflow-hidden ${className}`} data-surface={mode}>
+    <div ref={wrapRef} className={`absolute inset-0 overflow-hidden ${className}`} data-surface={mode} style={{ zIndex: mode === "pdf" ? 10 : undefined, pointerEvents: "none" }}>
       <canvas
         ref={canvasRef}
         className="absolute inset-0 h-full w-full draw-surface"
@@ -1219,4 +1219,3 @@ function TextEditor({ editing, view, onCommit, onPreview }) {
     />
   );
 }
-
