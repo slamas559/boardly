@@ -4,7 +4,8 @@ import { ChevronLeft, ChevronRight, Maximize2, Minus, Plus, Radio, Trash2 } from
 import Surface from "./Surface.jsx";
 import ToolDock from "./ToolDock.jsx";
 import { ObjectStore } from "./store.js";
-import { BOARD_HOME } from "./constants.js";
+import { BOARD_HOME, uid } from "./constants.js";
+import { compileExpression, compileImplicitEquation, compileInequalitySystem } from "./graphMath.js";
 import { useAnnotationTools } from "./useAnnotationTools.js";
 
 const MIN_K = 0.1;
@@ -27,8 +28,10 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible 
   const [hostRect, setHostRect] = useState(null);
   const [hostPage, setHostPage] = useState(0);
   const [laser, setLaser] = useState(null);
+  const [remotePreviews, setRemotePreviews] = useState(() => new Map());
   const [confirmClear, setConfirmClear] = useState(false);
   const initialised = useRef(false);
+  const previewTimers = useRef(new Map());
 
   const store = useMemo(
     () => new ObjectStore({ onLocalOps: (ops) => socket?.emit("board-op", { room: roomId, ops }) }),
@@ -75,8 +78,55 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible 
   /* incoming events */
   useEffect(() => {
     if (!socket) return undefined;
-    const onOp = ({ ops }) => store.applyRemote(ops);
+    const onOp = ({ ops }) => {
+      store.applyRemote(ops);
+      setRemotePreviews((current) => {
+        if (!Array.isArray(ops) || !ops.length) return current;
+        const next = new Map(current);
+        for (const op of ops) {
+          if (op.op === "add") {
+            clearTimeout(previewTimers.current.get(op.obj.id));
+            previewTimers.current.delete(op.obj.id);
+            next.delete(op.obj.id);
+          } else if (op.op === "update" || op.op === "remove") {
+            clearTimeout(previewTimers.current.get(op.id));
+            previewTimers.current.delete(op.id);
+            next.delete(op.id);
+          }
+          else if (op.op === "clear") {
+            for (const [id, preview] of next) if (op.page === undefined || preview.page === op.page) {
+              clearTimeout(previewTimers.current.get(id));
+              previewTimers.current.delete(id);
+              next.delete(id);
+            }
+          }
+        }
+        return next;
+      });
+    };
     const onStroke = (chunk) => store.applyRemoteStroke(chunk);
+    const onPreview = ({ id, page: previewPage, obj, active }) => {
+      setRemotePreviews((current) => {
+        const next = new Map(current);
+        clearTimeout(previewTimers.current.get(id));
+        previewTimers.current.delete(id);
+        if (active === false) next.delete(id);
+        else if (obj && obj.id === id) {
+          next.set(id, { obj, page: previewPage });
+          const timer = setTimeout(() => {
+            setRemotePreviews((latest) => {
+              if (latest.get(id)?.obj !== obj) return latest;
+              const expired = new Map(latest);
+              expired.delete(id);
+              return expired;
+            });
+            previewTimers.current.delete(id);
+          }, 15000);
+          previewTimers.current.set(id, timer);
+        }
+        return next;
+      });
+    };
     const onPage = ({ page: p, pageCount: c }) => {
       if (c) setPageCount(c);
       setHostPage(p);
@@ -87,21 +137,30 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible 
     };
     const onPointer = (d) => {
       if (d.view !== "board") return;
-      setLaser(d.active === false ? null : { x: d.x, y: d.y, page: d.page, active: true, t: performance.now() });
+      setLaser(d.active === false ? null : {
+        x: d.x, y: d.y, page: d.page, active: true, tool: d.tool || "laser", angle: d.angle, t: performance.now(),
+      });
     };
     socket.on("board-op", onOp);
     socket.on("board-stroke", onStroke);
+    socket.on("board-preview", onPreview);
     socket.on("board-page", onPage);
     socket.on("board-view", onView);
     socket.on("pointer", onPointer);
     return () => {
       socket.off("board-op", onOp);
       socket.off("board-stroke", onStroke);
+      socket.off("board-preview", onPreview);
       socket.off("board-page", onPage);
       socket.off("board-view", onView);
       socket.off("pointer", onPointer);
     };
   }, [socket, store]);
+
+  useEffect(() => () => {
+    for (const timer of previewTimers.current.values()) clearTimeout(timer);
+    previewTimers.current.clear();
+  }, []);
 
   // Listeners mirror the presenter while following
   useEffect(() => {
@@ -152,8 +211,51 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible 
 
   const onStrokeChunk = useCallback((chunk) => socket?.emit("board-stroke", { room: roomId, ...chunk }), [socket, roomId]);
   const onLaser = useCallback((p) => socket?.emit("pointer", { room: roomId, view: "board", page, ...p }), [socket, roomId, page]);
+  const onPreview = useCallback((preview) => socket?.emit("board-preview", { room: roomId, ...preview }), [socket, roomId]);
 
   const readOnlyLaser = laser && laser.page === page ? laser : null;
+
+  const addGraph = ({ mode, expression, xExpression, yExpression, zExpression, tMin, tMax, uMin, uMax, vMin, vMax, xMin, xMax, yMin, yMax, zMin, zMax, azimuth, elevation }) => {
+    if (mode === "implicit") compileImplicitEquation(expression);
+    else if (mode === "inequality") compileInequalitySystem(expression);
+    else if (mode === "surface3d") compileExpression(expression, ["x", "y"]);
+    else if (mode === "parametric") {
+      compileExpression(xExpression, ["t"]);
+      compileExpression(yExpression, ["t"]);
+    } else if (mode === "curve3d") {
+      compileExpression(xExpression, ["t"]);
+      compileExpression(yExpression, ["t"]);
+      compileExpression(zExpression, ["t"]);
+    } else if (mode === "parametricSurface3d") {
+      compileExpression(xExpression, ["u", "v"]);
+      compileExpression(yExpression, ["u", "v"]);
+      compileExpression(zExpression, ["u", "v"]);
+    } else compileExpression(expression, mode === "polar" ? ["t"] : ["x"]);
+    const w = 520, h = 380;
+    const x = view.x + size.w / view.k / 2 - w / 2;
+    const y = view.y + size.h / view.k / 2 - h / 2;
+    const obj = {
+      id: uid(), type: "graph", page, mode, expression, xExpression, yExpression, zExpression, tMin, tMax,
+      uMin, uMax, vMin, vMax,
+      x, y, w, h, xMin, xMax, yMin, yMax,
+      zMin, zMax, azimuth, elevation,
+      color: "#2540D9", width: 2.5,
+    };
+    store.commit([{ op: "add", obj }]);
+    tools.setSelectedIds([obj.id]);
+    tools.setTool("select");
+  };
+
+  const addTable = (rows, cols) => {
+    const cellWidth = 110, cellHeight = 40;
+    const w = cols * cellWidth, h = rows * cellHeight;
+    const x = view.x + size.w / view.k / 2 - w / 2;
+    const y = view.y + size.h / view.k / 2 - h / 2;
+    const obj = { id: uid(), type: "table", page, x, y, rows, cols, cellWidth, cellHeight, cells: Array(rows * cols).fill("") };
+    store.commit([{ op: "add", obj }]);
+    tools.setSelectedIds([obj.id]);
+    tools.setTool("select");
+  };
 
   return (
     <div ref={frameRef} className="relative h-full w-full overflow-hidden bg-white">
@@ -173,13 +275,15 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible 
         onZoom={onZoom}
         onLaser={isHost ? onLaser : undefined}
         remoteLaser={isHost ? null : readOnlyLaser}
+        remotePreviews={isHost ? null : [...remotePreviews.values()].filter((preview) => preview.page === page).map((preview) => preview.obj)}
         onStrokeChunk={isHost ? onStrokeChunk : undefined}
+        onLivePreview={isHost ? onPreview : undefined}
         onEditingChange={tools.setEditingObj}
         onToolChange={tools.setTool}
         keepTool={tools.keepTool}
       />
 
-      {isHost && <ToolDock mode="board" tools={tools} store={store} surfaceRef={surfaceRef} />}
+      {isHost && <ToolDock mode="board" tools={tools} store={store} surfaceRef={surfaceRef} onCreateGraph={addGraph} onCreateTable={addTable} />}
 
       {/* Listener: follow status */}
       {!isHost && (

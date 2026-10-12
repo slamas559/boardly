@@ -1,6 +1,6 @@
 // Shared tool state + keyboard shortcuts for the board and PDF annotation toolbars.
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { STYLE_GROUP, defaultStyles } from "./constants.js";
+import { SHAPE_KINDS, STYLE_GROUP, defaultStyles } from "./constants.js";
 
 const SHORTCUTS = {
   board: { v: "select", h: "pan", p: "pen", m: "highlighter", e: "eraser", t: "text", r: "rect", o: "ellipse", d: "diamond", l: "line", a: "arrow", k: "laser" },
@@ -19,7 +19,7 @@ export function useAnnotationTools({ mode, store, surfaceRef, enabled }) {
 
   const chooseTool = useCallback((t) => {
     setTool(t);
-    if (["rect", "ellipse", "diamond", "line", "arrow"].includes(t)) setLastShape(t);
+    if (SHAPE_KINDS.includes(t)) setLastShape(t);
     if (t !== "select") setSelectedIds([]);
   }, []);
 
