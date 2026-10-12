@@ -1,7 +1,7 @@
 // Tool rail (desktop) / dock (mobile), plus the contextual style panel.
 import { useEffect, useRef, useState } from "react";
 import {
-  AlignCenter, AlignLeft, AlignRight, ArrowUpRight, Bold, Brush, Circle, Copy, Crosshair, Diamond, Eraser, Highlighter,
+  AlignCenter, AlignLeft, AlignRight, ArrowUpRight, Bold, Brush, Circle, Copy, Crosshair, Diamond, Eraser, Hand, Highlighter,
   Italic, Lock, Minus, MousePointer2, PenLine, Plus, Redo2, Shapes, SlidersHorizontal, Square, Strikethrough, Trash2,
   Type, Underline, Undo2, Unlock, X,
 } from "lucide-react";
@@ -35,7 +35,7 @@ function ToolButton({ icon: Icon, label, shortcut, active, onClick, disabled, ch
 const Divider = () => <div className="mx-0.5 h-6 w-px shrink-0 bg-line md:mx-0 md:my-0.5 md:h-px md:w-6" />;
 
 export function ToolRail({
-  mode, tool, onTool, lastShape, canUndo, canRedo, onUndo, onRedo, keepTool, onKeepTool, onStyleToggle, styleSwatch, hasStyle,
+  mode, tool, onTool, lastShape, canUndo, canRedo, onUndo, onRedo, keepTool, onKeepTool, onStyleToggle, styleSwatch, hasStyle, styleOpen,
 }) {
   const [shapesOpen, setShapesOpen] = useState(false);
   const wrapRef = useRef(null);
@@ -60,6 +60,9 @@ export function ToolRail({
       className="float-panel scroll-thin flex items-center gap-0.5 overflow-x-auto p-1 md:max-h-[calc(100%-1.5rem)] md:flex-col md:overflow-y-auto md:overflow-x-visible"
     >
       <ToolButton icon={MousePointer2} label="Select" shortcut="V" active={tool === "select"} onClick={() => onTool("select")} />
+      {mode === "board" && (
+        <ToolButton icon={Hand} label="Pan (drag the board)" shortcut="H" active={tool === "pan"} onClick={() => onTool("pan")} />
+      )}
       <Divider />
 
       {mode === "pdf" && (
@@ -115,19 +118,23 @@ export function ToolRail({
         onClick={onKeepTool}
       />
 
-      {/* Mobile: open the style sheet */}
+      {/* Show / hide the style panel (a bottom sheet on phones, a side panel on desktop) */}
       {hasStyle && (
         <>
           <Divider />
           <button
             type="button"
             onClick={onStyleToggle}
-            aria-label="Style"
-            className="flex h-10 shrink-0 items-center gap-1.5 rounded-md border border-line px-2.5 text-sm text-gray-700 md:hidden"
+            aria-label={styleOpen ? "Hide style panel" : "Show style panel"}
+            aria-pressed={styleOpen}
+            title={styleOpen ? "Hide style panel" : "Show style panel"}
+            className={`flex h-10 shrink-0 items-center gap-1.5 rounded-md border border-line px-2.5 text-sm md:h-9 md:w-9 md:justify-center md:border-0 md:px-0 ${
+              styleOpen ? "bg-sunken text-ink" : "text-gray-700 hover:bg-sunken"
+            }`}
           >
-            <span className="h-4 w-4 rounded-sm border border-line-strong" style={{ background: styleSwatch || "#17181C" }} />
-            <SlidersHorizontal size={15} />
-            Style
+            <span className="h-4 w-4 rounded-sm border border-line-strong md:hidden" style={{ background: styleSwatch || "#17181C" }} />
+            <SlidersHorizontal size={15} className="md:size-[18px]" />
+            <span className="md:hidden">Style</span>
           </button>
         </>
       )}
@@ -199,7 +206,7 @@ function SegButton({ active, onClick, label, children, className = "" }) {
   );
 }
 
-export function StylePanel({ group, style, onChange, selectionCount, onDelete, onDuplicate, open, onClose, mode }) {
+export function StylePanel({ group, style, onChange, selectionCount, onDelete, onDuplicate, open, collapsed, onClose, mode }) {
   if (!group || !style) return null;
   const isMarker = group === "highlighter" || group === "markup";
   const colors = isMarker ? HIGHLIGHT_PALETTE : PALETTE;
@@ -208,16 +215,15 @@ export function StylePanel({ group, style, onChange, selectionCount, onDelete, o
   return (
     <div
       className={`float-panel z-20 w-full p-3 md:absolute md:left-16 md:top-0 md:w-60 ${
-        open ? "absolute inset-x-0 bottom-full mb-2" : "hidden md:block"
+        open ? `absolute inset-x-0 bottom-full mb-2 ${collapsed ? "md:hidden" : ""}` : collapsed ? "hidden" : "hidden md:block"
       }`}
     >
-      <div className="mb-3 flex items-center justify-between md:hidden">
-        <span className="text-sm font-medium">{title}</span>
-        <button type="button" onClick={onClose} aria-label="Close style panel" className="rounded-md p-1 text-gray-600 hover:bg-sunken">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-sm font-medium">{title}{selectionCount > 1 ? ` · ${selectionCount} selected` : ""}</span>
+        <button type="button" onClick={onClose} aria-label="Close style panel" title="Hide panel" className="rounded-md p-1 text-gray-500 hover:bg-sunken hover:text-ink">
           <X size={16} />
         </button>
       </div>
-      <div className="hidden pb-2 text-sm font-medium md:block">{title}{selectionCount > 1 ? ` · ${selectionCount} selected` : ""}</div>
 
       <div className="space-y-3.5">
         <div>

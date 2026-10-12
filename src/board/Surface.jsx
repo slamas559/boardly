@@ -10,6 +10,7 @@ import {
   dist, hitObject, isMovable, measureText, movePatch, objectInRect, q, scalePatch,
 } from "./geometry.js";
 import { drawGrid, drawObject, drawSelection, handlePoints } from "./render.js";
+import { cursorFor } from "./cursors.js";
 
 let clipboard = [];
 const LASER_COLOR = "#E2492B";
@@ -59,6 +60,7 @@ const Surface = forwardRef(function Surface(
   const lastPenTime = useRef(0);
   const raf = useRef(0);
   const lastLaserSend = useRef(0);
+  const cursorRef = useRef("default");
 
   /* ------------------------------ sizing ------------------------------ */
   useLayoutEffect(() => {
@@ -143,8 +145,10 @@ const Surface = forwardRef(function Surface(
         const age = (now - p.t) / 900;
         ctx.globalAlpha = Math.max(0, 1 - age);
         ctx.fillStyle = LASER_COLOR;
+        ctx.shadowColor = LASER_COLOR;
+        ctx.shadowBlur = 6;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, (9 - 5 * age) / v.k, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, (2.6 - 1.4 * age) / v.k, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.restore();
@@ -350,9 +354,10 @@ const Surface = forwardRef(function Surface(
     const screen = [e.clientX - r.left, e.clientY - r.top];
     const p = toWorld(e);
 
-    // Panning: middle button, space held, or a read-only board
-    if (e.button === 1 || spaceDown.current || (ro && md === "board")) {
+    // Panning: middle button, space held, the Pan tool, or a read-only board
+    if (e.button === 1 || spaceDown.current || (!ro && tl === "pan") || (ro && md === "board")) {
       drag.current = { type: "pan", x: e.clientX, y: e.clientY };
+      canvas.style.cursor = "grabbing";
       return;
     }
     if (ro) return;
@@ -692,6 +697,7 @@ const Surface = forwardRef(function Surface(
         break;
     }
     if (d.type === "erase") erasing.current.clear();
+    if (d.type === "pan" && canvasRef.current) canvasRef.current.style.cursor = cursorRef.current;
     drag.current = null;
     schedule();
   };
@@ -699,6 +705,7 @@ const Surface = forwardRef(function Surface(
   const onPointerCancel = (e) => {
     pointers.current.delete(e.pointerId);
     if (drag.current?.type === "stroke" && drag.current.sent > 0) finishStroke();
+    if (drag.current?.type === "pan" && canvasRef.current) canvasRef.current.style.cursor = cursorRef.current;
     drag.current = null;
     transient.current.clear();
     erasing.current.clear();
@@ -789,11 +796,8 @@ const Surface = forwardRef(function Surface(
 
   const cursor = readOnly
     ? (mode === "board" ? "grab" : "default")
-    : tool === "text" ? "text"
-      : tool === "select" ? "default"
-        : tool === "eraser" ? "cell"
-          : tool === "laser" ? "crosshair"
-            : "crosshair";
+    : cursorFor(tool);
+  cursorRef.current = cursor;
 
   // On a PDF, the overlay only captures input when a tool needs it; otherwise the page scrolls natively
   const capturing = mode === "board" || (!readOnly && tool !== "select") || (!readOnly && (selectedIds?.length > 0 || tool === "select"));

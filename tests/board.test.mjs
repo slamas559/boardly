@@ -86,3 +86,14 @@ test('move and scale patches', () => {
   assert.equal(scalePatch(t, 2, 2, 0, 0).fontSize, 40);
   assert.ok(Math.abs(segDist([5, 5], [0, 0], [10, 0]) - 5) < 1e-9);
 });
+
+test('every drawing tool gets a deliberate cursor; shapes keep the crosshair', async () => {
+  const { cursorFor } = await import('../src/board/cursors.js');
+  assert.match(cursorFor('pen'), /^url\(/);
+  assert.match(cursorFor('highlighter'), /^url\(/);
+  assert.match(cursorFor('laser'), /^url\(/);
+  assert.notEqual(cursorFor('pen'), cursorFor('laser'));
+  assert.equal(cursorFor('pan'), 'grab');
+  assert.equal(cursorFor('rect'), 'crosshair');
+  assert.equal(cursorFor('text'), 'text');
+});
