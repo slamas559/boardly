@@ -67,6 +67,8 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
   const [uploading, setUploading] = useState(null); // percent | null
   const [uploadError, setUploadError] = useState("");
   const [laser, setLaser] = useState(null);
+  const [remotePreviews, setRemotePreviews] = useState(() => new Map());
+  const previewTimers = useRef(new Map());
   const [dragOver, setDragOver] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
 
@@ -89,24 +91,85 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
   /* incoming events */
   useEffect(() => {
     if (!socket) return undefined;
-    const onOp = ({ ops }) => store.applyRemote(ops);
+    const onOp = ({ ops }) => {
+      store.applyRemote(ops);
+      if (!Array.isArray(ops) || !ops.length) return;
+      setRemotePreviews((current) => {
+        const next = new Map(current);
+        for (const op of ops) {
+          if (op.op === "add") {
+            clearTimeout(previewTimers.current.get(op.obj.id));
+            previewTimers.current.delete(op.obj.id);
+            next.delete(op.obj.id);
+          } else if (op.op === "update" || op.op === "remove") {
+            clearTimeout(previewTimers.current.get(op.id));
+            previewTimers.current.delete(op.id);
+            next.delete(op.id);
+          } else if (op.op === "clear") {
+            for (const [id, preview] of next) if (op.page === undefined || preview.page === op.page) {
+              clearTimeout(previewTimers.current.get(id));
+              previewTimers.current.delete(id);
+              next.delete(id);
+            }
+          }
+        }
+        return next;
+      });
+    };
     const onPageChange = ({ page: p }) => setHostPage(p);
-    const onUpdated = ({ url: u }) => { setUrl(u); setPage(1); setHostPage(1); store.reset([]); };
+    const onUpdated = ({ url: u }) => {
+      setUrl(u);
+      setPage(1);
+      setHostPage(1);
+      store.reset([]);
+      for (const timer of previewTimers.current.values()) clearTimeout(timer);
+      previewTimers.current.clear();
+      setRemotePreviews(new Map());
+    };
+    const onPreview = ({ id, page: previewPage, obj, active }) => {
+      setRemotePreviews((current) => {
+        const next = new Map(current);
+        clearTimeout(previewTimers.current.get(id));
+        previewTimers.current.delete(id);
+        if (active === false) next.delete(id);
+        else if (obj && obj.id === id) {
+          next.set(id, { obj, page: previewPage });
+          const timer = setTimeout(() => {
+            setRemotePreviews((latest) => {
+              if (latest.get(id)?.obj !== obj) return latest;
+              const expired = new Map(latest);
+              expired.delete(id);
+              return expired;
+            });
+            previewTimers.current.delete(id);
+          }, 15000);
+          previewTimers.current.set(id, timer);
+        }
+        return next;
+      });
+    };
     const onPointer = (d) => {
       if (d.view !== "pdf") return;
       setLaser(d.active === false ? null : { x: d.x, y: d.y, page: d.page, active: true });
     };
     socket.on("pdf-op", onOp);
+    socket.on("pdf-preview", onPreview);
     socket.on("pdf-page-change", onPageChange);
     socket.on("pdf-updated", onUpdated);
     socket.on("pointer", onPointer);
     return () => {
       socket.off("pdf-op", onOp);
+      socket.off("pdf-preview", onPreview);
       socket.off("pdf-page-change", onPageChange);
       socket.off("pdf-updated", onUpdated);
       socket.off("pointer", onPointer);
     };
   }, [socket, store]);
+
+  useEffect(() => () => {
+    for (const timer of previewTimers.current.values()) clearTimeout(timer);
+    previewTimers.current.clear();
+  }, []);
 
   useEffect(() => {
     if (!isHost && following) setPage(hostPage);
@@ -187,6 +250,7 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
 
   const onStrokeNoop = undefined; // freehand strokes on PDFs are sent as complete objects
   const onLaser = useCallback((p) => socket?.emit("pointer", { room: roomId, view: "pdf", page, ...p }), [socket, roomId, page]);
+  const onPreview = useCallback((preview) => socket?.emit("pdf-preview", { room: roomId, ...preview }), [socket, roomId]);
   const annotatedPages = useMemo(() => new Set(store.list().map((o) => o.page)), [store, store.getVersion()]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ------------------------------- empty state ------------------------------- */
@@ -325,7 +389,9 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
                   onZoom={onZoom}
                   onLaser={isHost ? onLaser : undefined}
                   remoteLaser={isHost ? null : laser && laser.page === page ? laser : null}
+                  remotePreviews={isHost ? null : [...remotePreviews.values()].filter((preview) => preview.page === page).map((preview) => preview.obj)}
                   onStrokeChunk={onStrokeNoop}
+                  onLivePreview={isHost ? onPreview : undefined}
                   onEditingChange={tools.setEditingObj}
                   onToolChange={tools.setTool}
                   keepTool={tools.keepTool}

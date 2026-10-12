@@ -1165,6 +1165,11 @@ function TextEditor({ editing, view, onCommit, onPreview }) {
   const m = measureText({ ...o, text: value || " " });
 
   useEffect(() => {
+    const timer = setInterval(() => onPreview({ ...editing.obj, text: value }), 5000);
+    return () => clearInterval(timer);
+  }, [editing.obj, onPreview, value]);
+
+  useEffect(() => {
     const t = setTimeout(() => {
       taRef.current?.focus();
       taRef.current?.setSelectionRange(value.length, value.length);
@@ -1218,6 +1223,7 @@ function TextEditor({ editing, view, onCommit, onPreview }) {
         color: o.color,
         whiteSpace: "pre",
         zIndex: 5,
+        pointerEvents: "auto",
       }}
     />
   );
