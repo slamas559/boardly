@@ -10,6 +10,9 @@ import {
 } from "lucide-react";
 import Surface from "./Surface.jsx";
 import ToolDock from "./ToolDock.jsx";
+import { InspectorDock } from "./Inspector.jsx";
+import { useInspector } from "./useInspector.js";
+import QuickBar from "./QuickBar.jsx";
 import { ObjectStore } from "./store.js";
 import { PDF_WORLD_WIDTH } from "./constants.js";
 import { useAnnotationTools } from "./useAnnotationTools.js";
@@ -81,6 +84,7 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
     [socket, roomId]
   );
   const tools = useAnnotationTools({ mode: "pdf", store, surfaceRef, enabled: isHost && visible });
+  const inspector = useInspector(tools);
 
   /* initial / late-join state */
   useEffect(() => {
@@ -472,11 +476,16 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
                   onToolChange={tools.setTool}
                   keepTool={tools.keepTool}
                 />
+                {isHost && (
+                  <QuickBar tools={tools} store={store} surfaceRef={surfaceRef} inspector={inspector} view={view} size={{ w: width, h: height }} />
+                )}
               </div>
             </div>
           </div>
 
-          {isHost && <ToolDock mode="pdf" tools={tools} store={store} surfaceRef={surfaceRef} />}
+          {/* Style settings dock beside the page on desktop; a bottom sheet on phones */}
+          {isHost && <InspectorDock mode="pdf" tools={tools} store={store} surfaceRef={surfaceRef} inspector={inspector} />}
+          {isHost && <ToolDock mode="pdf" tools={tools} store={store} inspector={inspector} />}
         </div>
       </Document>
 

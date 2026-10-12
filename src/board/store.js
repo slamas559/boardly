@@ -3,6 +3,9 @@
 // - Remote edits are applied silently
 // Mirrors the server's op format: add / update / remove / clear.
 
+// Edits tagged with the same `coalesce` key within this window share one undo step
+const COALESCE_WINDOW_MS = 1500;
+
 export class ObjectStore {
   constructor({ onLocalOps } = {}) {
     this.objects = new Map();
@@ -118,12 +121,24 @@ export class ObjectStore {
    * Apply a local user action. It is recorded for undo and (unless emit is false)
    * sent to the network. Pass emit:false for things already streamed (live strokes).
    */
-  commit(ops, { emit = true } = {}) {
+  commit(ops, { emit = true, coalesce = null } = {}) {
     if (!ops.length) return;
     const inverse = this._inverse(ops);
     ops.forEach((op) => this._applyOp(op));
-    this.undoStack.push({ forward: ops, inverse });
-    if (this.undoStack.length > 200) this.undoStack.shift();
+    const now = Date.now();
+    const top = this.undoStack[this.undoStack.length - 1];
+    if (coalesce && top && top.coalesce === coalesce && now - top.at < COALESCE_WINDOW_MS
+      && top.forward.length === 1 && ops.length === 1 && ops[0].op === "update" && top.forward[0].op === "update"
+      && top.forward[0].id === ops[0].id) {
+      // Repeated edits of the same object (e.g. typing in the graph panel) become one undo step:
+      // keep the original "before" values and move the "after" values forward.
+      top.forward = [{ ...ops[0], patch: { ...top.forward[0].patch, ...ops[0].patch } }];
+      top.inverse = [{ ...top.inverse[0], patch: { ...inverse[0].patch, ...top.inverse[0].patch } }];
+      top.at = now;
+    } else {
+      this.undoStack.push({ forward: ops, inverse, coalesce, at: now });
+      if (this.undoStack.length > 200) this.undoStack.shift();
+    }
     this.redoStack = [];
     this._changed();
     if (emit) this.onLocalOps(ops);

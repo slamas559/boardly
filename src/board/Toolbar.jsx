@@ -5,7 +5,7 @@ import {
   Activity, AlignCenter, AlignLeft, AlignRight, ArrowUpRight, Bold, Brush, Circle, Copy, Crosshair, Diamond, Eraser, Hand, Highlighter,
   Hexagon, Italic, Lock, Minus, MousePointer2, PenLine, Plus, Redo2, Shapes, SlidersHorizontal, Square, Star, Strikethrough, Trash2,
   RectangleHorizontal, Table2, Triangle,
-  Type, Underline, Undo2, Unlock, X,
+  Type, Underline, Undo2, Unlock,
 } from "lucide-react";
 import { FONT_OPTIONS, FONT_STACKS, HIGHLIGHT_PALETTE, PALETTE, SHAPE_KINDS, TEXT_SIZES } from "./constants.js";
 
@@ -44,7 +44,7 @@ const Divider = () => <div className="mx-0.5 h-6 w-px shrink-0 bg-line md:mx-0 m
 
 export function ToolRail({
   mode, tool, onTool, lastShape, canUndo, canRedo, onUndo, onRedo, keepTool, onKeepTool, onCreateGraph, onCreateTable,
-  onStyleToggle, styleSwatch, hasStyle, styleOpen,
+  onStyleToggle, styleSwatch, hasStyle, styleOpen, styleLabel = "Style",
 }) {
   const [shapesOpen, setShapesOpen] = useState(false);
   const wrapRef = useRef(null);
@@ -173,23 +173,23 @@ export function ToolRail({
         onClick={onKeepTool}
       />
 
-      {/* Show / hide the style panel (a bottom sheet on phones, a side panel on desktop) */}
+      {/* Show / hide the properties panel (docked on desktop, a bottom sheet on phones) */}
       {hasStyle && (
         <>
           <Divider />
           <button
             type="button"
             onClick={onStyleToggle}
-            aria-label={styleOpen ? "Hide style panel" : "Show style panel"}
+            aria-label={styleOpen ? "Hide properties panel" : "Show properties panel"}
             aria-pressed={styleOpen}
-            title={styleOpen ? "Hide style panel" : "Show style panel"}
+            title={styleOpen ? "Hide properties panel" : "Show properties panel"}
             className={`flex h-10 shrink-0 items-center gap-1.5 rounded-md border border-line px-2.5 text-sm md:h-9 md:w-9 md:justify-center md:border-0 md:px-0 ${
               styleOpen ? "bg-sunken text-ink" : "text-gray-700 hover:bg-sunken"
             }`}
           >
-            <span className="h-4 w-4 rounded-sm border border-line-strong md:hidden" style={{ background: styleSwatch || "#17181C" }} />
+            {styleSwatch && <span className="h-4 w-4 rounded-sm border border-line-strong md:hidden" style={{ background: styleSwatch }} />}
             <SlidersHorizontal size={15} className="md:size-[18px]" />
-            <span className="md:hidden">Style</span>
+            <span className="md:hidden">{styleLabel}</span>
           </button>
         </>
       )}
@@ -199,7 +199,7 @@ export function ToolRail({
 
 /* ------------------------------ style panel ------------------------------ */
 
-function Swatches({ colors, value, onPick }) {
+export function Swatches({ colors, value, onPick }) {
   const isCustom = value && !colors.map((c) => c.toLowerCase()).includes(String(value).toLowerCase());
   return (
     <div className="flex flex-wrap items-center gap-1.5">
@@ -261,25 +261,14 @@ function SegButton({ active, onClick, label, children, className = "" }) {
   );
 }
 
-export function StylePanel({ group, style, onChange, selectionCount, onDelete, onDuplicate, open, collapsed, onClose, mode }) {
+// The panel body only: the properties dock supplies the frame, header and close button.
+export function StylePanel({ group, style, onChange, selectionCount, onDelete, onDuplicate, mode }) {
   if (!group || !style) return null;
   const isMarker = group === "highlighter" || group === "markup";
   const colors = isMarker ? HIGHLIGHT_PALETTE : PALETTE;
-  const title = { pen: "Pen", highlighter: "Marker", shape: "Shape", text: "Text", markup: "Highlight", markupLine: "Markup" }[group];
 
   return (
-    <div
-      className={`float-panel z-20 w-full p-3 md:absolute md:left-16 md:top-0 md:w-60 ${
-        open ? `absolute inset-x-0 bottom-full mb-2 ${collapsed ? "md:hidden" : ""}` : collapsed ? "hidden" : "hidden md:block"
-      }`}
-    >
-      <div className="mb-3 flex items-center justify-between">
-        <span className="text-sm font-medium">{title}{selectionCount > 1 ? ` · ${selectionCount} selected` : ""}</span>
-        <button type="button" onClick={onClose} aria-label="Close style panel" title="Hide panel" className="rounded-md p-1 text-gray-500 hover:bg-sunken hover:text-ink">
-          <X size={16} />
-        </button>
-      </div>
-
+    <div>
       <div className="space-y-3.5">
         <div>
           <Label>Colour</Label>

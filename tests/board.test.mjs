@@ -6,6 +6,7 @@ import { getBounds, hitGraphGeometry, hitObject, movePatch, scalePatch, segDist 
 import {
   compileExpression, compileImplicitEquation, compileInequality, compileInequalitySystem, fitGraphRanges, fitGraphYRange, graphGeometryPixels, graphSegments, sampleGraph, sampleImplicit, sampleInequalityRegion,
 } from '../src/board/graphMath.js';
+import { buildGraphPatch, graphToForm, normalizeEquation } from '../src/board/graphValidation.js';
 import { sampleParametricCurve3d, sampleParametricSurfaceMesh, sampleSurfaceMesh } from '../src/board/graph3d.js';
 
 const stroke = (id, pts, extra = {}) => ({ id, type: 'stroke', page: 0, color: '#000', width: 4, points: pts, ...extra });
@@ -294,4 +295,60 @@ test('every drawing tool gets a deliberate cursor; shapes keep the crosshair', a
   assert.equal(cursorFor('pan'), 'grab');
   assert.equal(cursorFor('rect'), 'crosshair');
   assert.equal(cursorFor('text'), 'text');
+});
+
+
+test('coalesced edits of one object share a single undo step', () => {
+  const sent = [];
+  const store = new ObjectStore({ onLocalOps: (ops) => sent.push(ops) });
+  store.commit([{ op: 'add', obj: { id: 'g', type: 'graph', page: 0, expression: 'x', xMin: -10, color: '#111111' } }]);
+  store.commit([{ op: 'update', id: 'g', patch: { expression: 'x^2' } }], { coalesce: 'graph:g' });
+  store.commit([{ op: 'update', id: 'g', patch: { expression: 'x^3', xMin: -5 } }], { coalesce: 'graph:g' });
+  assert.equal(store.undoStack.length, 2); // add + one merged update
+  assert.equal(sent.length, 3); // every edit is still broadcast live
+  assert.equal(store.get('g').expression, 'x^3');
+
+  assert.ok(store.undo()); // restores the values from before the first live edit
+  assert.equal(store.get('g').expression, 'x');
+  assert.equal(store.get('g').xMin, -10);
+  assert.ok(store.redo());
+  assert.equal(store.get('g').expression, 'x^3');
+  assert.equal(store.get('g').xMin, -5);
+});
+
+test('edits with different coalesce keys, or none, stay separate undo steps', () => {
+  const store = new ObjectStore();
+  store.commit([{ op: 'add', obj: { id: 'g', type: 'graph', page: 0, expression: 'x', color: '#111111' } }]);
+  store.commit([{ op: 'update', id: 'g', patch: { expression: 'x^2' } }], { coalesce: 'graph:g' });
+  store.commit([{ op: 'update', id: 'g', patch: { color: '#ff0000' } }], { coalesce: 'graph-color:g' });
+  store.commit([{ op: 'update', id: 'g', patch: { expression: 'x^3' } }]);
+  assert.equal(store.undoStack.length, 4);
+});
+
+test('graph form: builds a normalised patch and strips the "y =" prefix', () => {
+  const graph = { mode: 'explicit', expression: 'x^2', xMin: -10, xMax: 10, yMin: -10, yMax: 10 };
+  const form = { ...graphToForm(graph), expression: ' y = sin(x) ' };
+  const result = buildGraphPatch('explicit', form, []);
+  assert.ok(result.ok);
+  assert.equal(result.patch.expression, 'sin(x)');
+  assert.equal(result.patch.xMin, -10);
+  assert.equal(normalizeEquation('surface3d', 'z = x*y'), 'x*y');
+  assert.equal(normalizeEquation('implicit', ' x^2 + y^2 = 25 '), 'x^2 + y^2 = 25');
+});
+
+test('graph form: reports which section holds the problem', () => {
+  const base = graphToForm({ mode: 'explicit', expression: 'x', xMin: -10, xMax: 10, yMin: -10, yMax: 10 });
+  assert.equal(buildGraphPatch('explicit', { ...base, expression: 'x +' }, []).section, 'equation');
+  assert.equal(buildGraphPatch('explicit', { ...base, xMin: '5', xMax: '1' }, []).section, 'range');
+  assert.equal(buildGraphPatch('explicit', { ...base, xMax: '' }, []).section, 'range'); // empty is not 0
+  assert.equal(buildGraphPatch('surface3d', { ...base, expression: 'x*y', elevation: '95' }, []).section, 'view3d');
+  const badPoint = [{ id: 'p', kind: 'point', label: 'P1', x: 'abc', y: 0 }];
+  assert.equal(buildGraphPatch('explicit', base, badPoint).section, 'geometry');
+});
+
+test('graph form: an untouched graph round-trips to the same patch (no spurious live commit)', () => {
+  const graph = { mode: 'explicit', expression: 'sin(x)', xMin: -6.28, xMax: 6.28, yMin: -2, yMax: 2 };
+  const first = buildGraphPatch('explicit', graphToForm(graph), []);
+  const again = buildGraphPatch('explicit', graphToForm({ ...graph, ...first.patch }), []);
+  assert.equal(JSON.stringify(again.patch), JSON.stringify(first.patch));
 });
