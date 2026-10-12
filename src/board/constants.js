@@ -24,6 +24,8 @@ export const TEXT_SIZES = [14, 18, 24, 32, 48, 72, 96];
 
 export const LINE_HEIGHT = 1.28;
 
+export const SHAPE_KINDS = ["rect", "ellipse", "diamond", "triangle", "roundedRect", "hexagon", "star", "line", "arrow"];
+
 // Which tools share remembered settings
 export const STYLE_GROUP = {
   pen: "pen",
@@ -31,6 +33,10 @@ export const STYLE_GROUP = {
   rect: "shape",
   ellipse: "shape",
   diamond: "shape",
+  triangle: "shape",
+  roundedRect: "shape",
+  hexagon: "shape",
+  star: "shape",
   line: "shape",
   arrow: "shape",
   text: "text",
@@ -59,8 +65,8 @@ export function defaultStyles(mode) {
   };
 }
 
-export const BOARD_TOOLS = ["select", "pen", "highlighter", "eraser", "text", "rect", "ellipse", "diamond", "line", "arrow", "laser"];
-export const PDF_TOOLS = ["select", "highlight", "underline", "strike", "pen", "highlighter", "text", "rect", "ellipse", "arrow", "eraser", "laser"];
+export const BOARD_TOOLS = ["select", "pan", "pen", "highlighter", "eraser", "text", "graph", "table", ...SHAPE_KINDS, "laser"];
+export const PDF_TOOLS = ["select", "highlight", "underline", "strike", "pen", "highlighter", "text", ...SHAPE_KINDS, "eraser", "laser"];
 
 export const uid = () => {
   const a = new Uint32Array(2);
