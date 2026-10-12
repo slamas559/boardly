@@ -7,7 +7,7 @@ import {
   FONT_STACKS, LINE_HEIGHT, STYLE_GROUP, uid,
 } from "./constants.js";
 import {
-  dist, hitObject, isMovable, measureText, movePatch, objectInRect, q, scalePatch,
+  dist, hitGraphGeometry, hitObject, isMovable, measureText, movePatch, objectInRect, q, scalePatch,
 } from "./geometry.js";
 import { drawGrid, drawObject, drawSelection, handlePoints } from "./render.js";
 import { cursorFor } from "./cursors.js";
@@ -33,7 +33,9 @@ const Surface = forwardRef(function Surface(
     onZoom,
     onLaser,
     remoteLaser,
+    remotePreviews,
     onStrokeChunk,
+    onLivePreview,
     onEditingChange,
     onToolChange,
     keepTool = false,
@@ -45,11 +47,13 @@ const Surface = forwardRef(function Surface(
   const canvasRef = useRef(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [editing, setEditing] = useState(null); // {id, isNew, obj}
+  const [tableEditing, setTableEditing] = useState(null);
+  const tableEditRef = useRef(null);
   const version = useSyncExternalStore(store.subscribe, store.getVersion);
 
   // Latest props for event handlers without re-binding
   const live = useRef({});
-  live.current = { store, page, mode, tool, styles, readOnly, view, pageSize, pageEl, selectedIds, size, editing };
+  live.current = { store, page, mode, tool, styles, readOnly, view, pageSize, pageEl, selectedIds, size, editing, onLaser, onLivePreview, remotePreviews };
 
   const drag = useRef(null);
   const pointers = useRef(new Map());
@@ -60,6 +64,10 @@ const Surface = forwardRef(function Surface(
   const lastPenTime = useRef(0);
   const raf = useRef(0);
   const lastLaserSend = useRef(0);
+  const lastCursorSend = useRef(0);
+  const lastPreviewSend = useRef(new Map());
+  const lastCursorPoint = useRef(null);
+  const remoteCursor = useRef(null);
   const cursorRef = useRef("default");
 
   /* ------------------------------ sizing ------------------------------ */
@@ -78,7 +86,7 @@ const Surface = forwardRef(function Surface(
     raf.current = 0;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const { store: st, page: pg, view: v, size: sz, selectedIds: sel, editing: ed, pageSize: ps, mode: md } = live.current;
+    const { store: st, page: pg, view: v, size: sz, selectedIds: sel, editing: ed, pageSize: ps, mode: md, remotePreviews: previews } = live.current;
     if (!v || !sz.w || !sz.h) return;
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
@@ -103,12 +111,17 @@ const Surface = forwardRef(function Surface(
 
     const objs = st.onPage(pg);
     const selected = [];
+    const previewIds = new Set((previews || []).map((preview) => preview.id));
     for (const base of objs) {
       if (ed && ed.id === base.id) continue;
+      if (previewIds.has(base.id)) continue;
       const o = transient.current.get(base.id) || base;
       const fade = erasing.current.has(base.id) ? 0.2 : 1;
       drawObject(ctx, o, { k: v.k, pageSize: ps, alpha: fade });
       if (sel && sel.includes(base.id)) selected.push(o);
+    }
+    for (const preview of previews || []) if ((preview.page ?? 0) === pg) {
+      drawObject(ctx, preview, { k: v.k, pageSize: ps, alpha: preview.previewAlpha ?? 1 });
     }
 
     // In-progress drawing
@@ -154,6 +167,36 @@ const Surface = forwardRef(function Surface(
       ctx.restore();
       schedule();
     }
+    const cursor = remoteCursor.current;
+    if (cursor && cursor.page === pg && now - cursor.t < 5000) {
+      const x = cursor.x, y = cursor.y;
+      const angle = Number.isFinite(cursor.angle) ? cursor.angle : 0;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+      ctx.fillStyle = cursor.tool === "laser" ? LASER_COLOR : "#2540D9";
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1.5 / v.k;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(0, 18 / v.k);
+      ctx.lineTo(5 / v.k, 13 / v.k);
+      ctx.lineTo(10 / v.k, 22 / v.k);
+      ctx.lineTo(14 / v.k, 20 / v.k);
+      ctx.lineTo(9 / v.k, 11 / v.k);
+      ctx.lineTo(16 / v.k, 11 / v.k);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      if (cursor.tool && cursor.tool !== "laser") {
+        ctx.rotate(-angle);
+        ctx.font = `${11 / v.k}px system-ui, sans-serif`;
+        ctx.fillStyle = "#172554";
+        ctx.fillText(cursor.tool, 18 / v.k, 12 / v.k);
+      }
+      ctx.restore();
+      if (now - cursor.t < 5000) schedule();
+    }
   }, [background]);
 
   const schedule = useCallback(() => {
@@ -162,7 +205,14 @@ const Surface = forwardRef(function Surface(
 
   useEffect(() => {
     schedule();
-  }, [schedule, version, view, size, selectedIds, editing, page, pageSize, tool]);
+  }, [schedule, version, view, size, selectedIds, editing, page, pageSize, tool, remotePreviews]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const redraw = () => schedule();
+    window.addEventListener("boardly-3d-renderer-ready", redraw);
+    return () => window.removeEventListener("boardly-3d-renderer-ready", redraw);
+  }, [schedule]);
 
   // Reset the id too: React StrictMode unmounts and remounts once, and a stale id would make
   // schedule() think a frame is still pending, so the canvas would never repaint.
@@ -178,8 +228,14 @@ const Surface = forwardRef(function Surface(
 
   // Remote laser
   useEffect(() => {
-    if (!remoteLaser || remoteLaser.active === false) return;
-    lasers.current.push({ x: remoteLaser.x, y: remoteLaser.y, t: performance.now() });
+    if (!remoteLaser || remoteLaser.active === false) {
+      remoteCursor.current = null;
+      return;
+    }
+    remoteCursor.current = { ...remoteLaser, t: performance.now() };
+    if (remoteLaser.tool === "laser" || !remoteLaser.tool) {
+      lasers.current.push({ x: remoteLaser.x, y: remoteLaser.y, t: performance.now() });
+    }
     schedule();
   }, [remoteLaser, schedule]);
 
@@ -195,6 +251,7 @@ const Surface = forwardRef(function Surface(
   /* ----------------------------- text editing ----------------------------- */
   const startEdit = useCallback((obj, isNew) => {
     setEditing({ id: obj.id, isNew, obj });
+    live.current.onLivePreview?.({ id: obj.id, page: obj.page ?? live.current.page, obj, active: true });
     onEditingChange?.(obj);
     onSelectedChange?.(isNew ? [] : [obj.id]);
   }, [onEditingChange, onSelectedChange]);
@@ -204,6 +261,7 @@ const Surface = forwardRef(function Surface(
     if (!ed) return;
     const { store: st } = live.current;
     const obj = { ...ed.obj, text };
+    clearPreview(obj.id, obj.page ?? live.current.page);
     live.current.editing = null; // synchronous guard: blur can fire again while unmounting
     setEditing(null);
     onEditingChange?.(null);
@@ -225,6 +283,20 @@ const Surface = forwardRef(function Surface(
       onSelectedChange?.([ed.id]);
     }
   }, [onEditingChange, onSelectedChange]);
+
+  const finishTableEdit = useCallback((nextValue, cancel = false) => {
+    const ed = tableEditRef.current;
+    if (!ed) return;
+    tableEditRef.current = null;
+    setTableEditing(null);
+    clearPreview(ed.id);
+    if (cancel) return;
+    const table = live.current.store.get(ed.id);
+    if (!table) return;
+    const cells = table.cells.slice();
+    cells[ed.row * table.cols + ed.col] = nextValue;
+    live.current.store.commit([{ op: "update", id: ed.id, patch: { cells } }]);
+  }, []);
 
   /* ----------------------------- selection ops ----------------------------- */
   const selectedObjects = () => {
@@ -327,7 +399,38 @@ const Surface = forwardRef(function Surface(
     const now = performance.now();
     if (active && now - lastLaserSend.current < 28) return;
     lastLaserSend.current = now;
-    onLaser(active ? { x: q(p[0]), y: q(p[1]), active: true } : { active: false });
+    onLaser(active ? { x: q(p[0]), y: q(p[1]), active: true, tool: "laser", angle: 0 } : { active: false });
+  };
+
+  const shareCursor = (p, force = false) => {
+    const { onLaser: share, tool: activeTool } = live.current;
+    if (!share) return;
+    const now = performance.now();
+    if (!force && now - lastCursorSend.current < 32) return;
+    lastCursorSend.current = now;
+    let angle = 0;
+    if (lastCursorPoint.current && p) {
+      const dx = p[0] - lastCursorPoint.current[0];
+      const dy = p[1] - lastCursorPoint.current[1];
+      if (Math.hypot(dx, dy) > 0.5) angle = Math.atan2(dy, dx);
+    }
+    if (p) lastCursorPoint.current = p;
+    share(p ? { x: q(p[0]), y: q(p[1]), active: true, tool: activeTool || "select", angle } : { active: false });
+  };
+
+  const sharePreview = (obj, active = true, force = false) => {
+    const { onLivePreview: share } = live.current;
+    if (!share || !obj) return;
+    const now = performance.now();
+    const lastSent = lastPreviewSend.current.get(obj.id) || 0;
+    if (active && !force && now - lastSent < 32) return;
+    lastPreviewSend.current.set(obj.id, now);
+    share({ id: obj.id, page: obj.page ?? live.current.page, obj: active ? obj : undefined, active });
+  };
+
+  const clearPreview = (id, pg = live.current.page) => {
+    lastPreviewSend.current.delete(id);
+    live.current.onLivePreview?.({ id, page: pg, active: false });
   };
 
   const onPointerDown = (e) => {
@@ -365,6 +468,7 @@ const Surface = forwardRef(function Surface(
     const r = canvas.getBoundingClientRect();
     const screen = [e.clientX - r.left, e.clientY - r.top];
     const p = toWorld(e);
+    shareCursor(p, true);
 
     // Panning: middle button, space held, the Pan tool, or a read-only board
     if (e.button === 1 || spaceDown.current || (!ro && tl === "pan") || (ro && md === "board")) {
@@ -396,6 +500,10 @@ const Surface = forwardRef(function Surface(
       case "rect":
       case "ellipse":
       case "diamond":
+      case "triangle":
+      case "roundedRect":
+      case "hexagon":
+      case "star":
       case "line":
       case "arrow": {
         const g = st.shape;
@@ -405,6 +513,7 @@ const Surface = forwardRef(function Surface(
           start: p,
           obj: { id: uid(), type: "shape", kind: tl, page: pg, x1: p[0], y1: p[1], x2: p[0], y2: p[1], color: g.color, width: g.width, opacity: g.opacity ?? 1, fill: !!g.fill },
         };
+        sharePreview(drag.current.obj, true, true);
         break;
       }
       case "eraser": {
@@ -445,6 +554,26 @@ const Surface = forwardRef(function Surface(
       }
       default: {
         // select
+        const selected = selectedObjects();
+        if (selected.length === 1 && selected[0].type === "graph") {
+          const graph = selected[0];
+          const inPlot = p[0] >= graph.x + 42 && p[0] <= graph.x + graph.w - 12
+            && p[1] >= graph.y + 24 && p[1] <= graph.y + graph.h - 34;
+          if (["surface3d", "curve3d", "parametricSurface3d"].includes(graph.mode) && inPlot) {
+            e.preventDefault();
+            drag.current = {
+              type: "graphCamera", obj: graph, start: [e.clientX, e.clientY],
+              azimuth: graph.azimuth ?? 42, elevation: graph.elevation ?? 32, moved: false,
+            };
+            canvas.style.cursor = "grabbing";
+            break;
+          }
+          const geometryId = hitGraphGeometry(selected[0], p, 8 / v.k);
+          if (geometryId) {
+            drag.current = { type: "graphGeometry", obj: selected[0], geometryId, start: p };
+            break;
+          }
+        }
         const hi = hitHandle(screen);
         if (hi >= 0) {
           const objs = selectedObjects();
@@ -479,7 +608,10 @@ const Surface = forwardRef(function Surface(
     const { view: v, store: s, page: pg } = live.current;
     const tol = 10 / v.k;
     for (const o of s.onPage(pg)) {
-      if (!erasing.current.has(o.id) && o.type !== "highlight" && hitObject(o, p, tol)) erasing.current.add(o.id);
+      if (!erasing.current.has(o.id) && o.type !== "highlight" && hitObject(o, p, tol)) {
+        erasing.current.add(o.id);
+        sharePreview({ ...o, previewAlpha: 0.2 });
+      }
     }
   };
 
@@ -512,6 +644,7 @@ const Surface = forwardRef(function Surface(
     }
     const d = drag.current;
     const { tool: tl, view: v, readOnly: ro } = live.current;
+    if (!ro && live.current.mode === "board") shareCursor(toWorld(e));
 
     // Laser follows the cursor even when no button is pressed
     if (!d && tl === "laser" && !ro && e.pointerType === "mouse") {
@@ -577,6 +710,7 @@ const Surface = forwardRef(function Surface(
           }
         }
         d.obj = { ...d.obj, x2: q(x2), y2: q(y2), x1: q(x1), y1: q(y1) };
+        sharePreview(d.obj);
         break;
       }
       case "erase":
@@ -588,7 +722,10 @@ const Surface = forwardRef(function Surface(
         break;
       case "markup": {
         const rects = markupRects(d.start, { x: e.clientX, y: e.clientY });
-        if (rects) d.obj = { ...d.obj, rects };
+        if (rects) {
+          d.obj = { ...d.obj, rects };
+          sharePreview(d.obj);
+        }
         break;
       }
       case "marquee": {
@@ -602,7 +739,11 @@ const Surface = forwardRef(function Surface(
         if (!d.moved && Math.hypot(dx, dy) * v.k < 3) break;
         d.moved = true;
         transient.current.clear();
-        for (const o of d.objs) if (isMovable(o)) transient.current.set(o.id, { ...o, ...movePatch(o, dx, dy) });
+        for (const o of d.objs) if (isMovable(o)) {
+          const preview = { ...o, ...movePatch(o, dx, dy) };
+          transient.current.set(o.id, preview);
+          sharePreview(preview);
+        }
         break;
       }
       case "endpoint": {
@@ -615,7 +756,54 @@ const Surface = forwardRef(function Surface(
           x = fixed[0] + len * Math.cos(ang);
           y = fixed[1] + len * Math.sin(ang);
         }
-        transient.current.set(o.id, d.index === 0 ? { ...o, x1: q(x), y1: q(y) } : { ...o, x2: q(x), y2: q(y) });
+        const preview = d.index === 0 ? { ...o, x1: q(x), y1: q(y) } : { ...o, x2: q(x), y2: q(y) };
+        transient.current.set(o.id, preview);
+        sharePreview(preview);
+        break;
+      }
+      case "graphGeometry": {
+        const graph = d.obj;
+        const dx = (p[0] - d.start[0]) * (graph.xMax - graph.xMin) / Math.max(20, graph.w - 54);
+        const dy = -(p[1] - d.start[1]) * (graph.yMax - graph.yMin) / Math.max(20, graph.h - 58);
+        if (Math.hypot(dx, dy) > 0) d.moved = true;
+        const geometry = graph.geometry.map((element) => {
+          if (element.id !== d.geometryId) return element;
+          if (element.kind === "point" || element.kind === "vector") {
+            return { ...element, x: q(element.x + dx), y: q(element.y + dy) };
+          }
+          if (element.kind === "polygon") {
+            return { ...element, vertices: element.vertices.map(([x, y]) => [q(x + dx), q(y + dy)]) };
+          }
+          if (element.kind === "angle") {
+            return {
+              ...element,
+              ax: q(element.ax + dx), ay: q(element.ay + dy),
+              vx: q(element.vx + dx), vy: q(element.vy + dy),
+              cx: q(element.cx + dx), cy: q(element.cy + dy),
+            };
+          }
+          return {
+            ...element,
+            x1: q(element.x1 + dx), y1: q(element.y1 + dy),
+            x2: q(element.x2 + dx), y2: q(element.y2 + dy),
+          };
+        });
+        const preview = { ...graph, geometry };
+        transient.current.set(graph.id, preview);
+        sharePreview(preview);
+        break;
+      }
+      case "graphCamera": {
+        const deltaX = e.clientX - d.start[0];
+        const deltaY = e.clientY - d.start[1];
+        d.moved ||= Math.abs(deltaX) + Math.abs(deltaY) > 1;
+        const preview = {
+          ...d.obj,
+          azimuth: ((d.azimuth + deltaX * 0.7) % 360 + 360) % 360,
+          elevation: Math.max(12, Math.min(82, d.elevation - deltaY * 0.5)),
+        };
+        transient.current.set(d.obj.id, preview);
+        sharePreview(preview);
         break;
       }
       case "resize": {
@@ -631,7 +819,11 @@ const Surface = forwardRef(function Surface(
         sx = Math.max(0.05, sx);
         sy = Math.max(0.05, sy);
         transient.current.clear();
-        for (const o of d.objs) transient.current.set(o.id, { ...o, ...scalePatch(o, sx, sy, ax, ay) });
+        for (const o of d.objs) {
+          const preview = { ...o, ...scalePatch(o, sx, sy, ax, ay) };
+          transient.current.set(o.id, preview);
+          sharePreview(preview);
+        }
         break;
       }
       default:
@@ -665,18 +857,21 @@ const Surface = forwardRef(function Surface(
             onToolChange?.("select");
           }
         }
+        clearPreview(o.id, o.page);
         break;
       }
       case "erase": {
         const ids = [...erasing.current];
         erasing.current.clear();
         if (ids.length) s.commit(ids.map((id) => ({ op: "remove", id })));
+        ids.forEach((id) => clearPreview(id));
         break;
       }
       case "markup": {
         if (d.obj.rects.length) {
           s.commit([{ op: "add", obj: { ...d.obj, page: pg } }]);
         }
+        clearPreview(d.obj.id, pg);
         break;
       }
       case "laser":
@@ -695,6 +890,7 @@ const Surface = forwardRef(function Surface(
           });
           transient.current.clear();
           s.commit(ops);
+          for (const o of d.objs) clearPreview(o.id, o.page);
         }
         break;
       }
@@ -703,6 +899,22 @@ const Surface = forwardRef(function Surface(
         const ops = [...transient.current.entries()].map(([id, o]) => ({ op: "update", id, patch: diffPatch(s.get(id), o) }));
         transient.current.clear();
         s.commit(ops);
+        ops.forEach((op) => clearPreview(op.id));
+        break;
+      }
+      case "graphGeometry": {
+        const updated = transient.current.get(d.obj.id);
+        transient.current.clear();
+        if (updated && d.moved) s.commit([{ op: "update", id: d.obj.id, patch: { geometry: updated.geometry } }]);
+        clearPreview(d.obj.id, d.obj.page);
+        break;
+      }
+      case "graphCamera": {
+        const updated = transient.current.get(d.obj.id);
+        transient.current.clear();
+        if (updated && d.moved) s.commit([{ op: "update", id: d.obj.id, patch: { azimuth: updated.azimuth, elevation: updated.elevation } }]);
+        clearPreview(d.obj.id, d.obj.page);
+        if (canvasRef.current) canvasRef.current.style.cursor = cursorRef.current;
         break;
       }
       default:
@@ -711,6 +923,7 @@ const Surface = forwardRef(function Surface(
     if (d.type === "erase") erasing.current.clear();
     if (d.type === "pan" && canvasRef.current) canvasRef.current.style.cursor = cursorRef.current;
     drag.current = null;
+    shareCursor(toWorld(e), true);
     schedule();
   };
 
@@ -718,20 +931,37 @@ const Surface = forwardRef(function Surface(
     pointers.current.delete(e.pointerId);
     if (drag.current?.type === "stroke" && drag.current.sent > 0) finishStroke();
     if (drag.current?.type === "pan" && canvasRef.current) canvasRef.current.style.cursor = cursorRef.current;
+    if (drag.current?.type === "graphCamera" && canvasRef.current) canvasRef.current.style.cursor = cursorRef.current;
+    if (drag.current?.obj?.id) clearPreview(drag.current.obj.id, drag.current.obj.page);
+    if (drag.current?.type === "shape" || drag.current?.type === "markup") clearPreview(drag.current.obj.id, drag.current.obj.page);
+    for (const [id, obj] of transient.current) clearPreview(id, obj.page);
+    for (const id of erasing.current) clearPreview(id);
     drag.current = null;
     transient.current.clear();
     erasing.current.clear();
+    shareCursor(null, true);
     schedule();
   };
 
   const onPointerLeave = () => {
     if (live.current.tool === "laser" && !drag.current) emitLaser(null, false);
+    if (!live.current.readOnly && live.current.mode === "board") shareCursor(null, true);
   };
 
   const onDoubleClick = (e) => {
     const { readOnly: ro, tool: tl, view: v } = live.current;
     if (ro || tl !== "select") return;
     const p = toWorld(e);
+    const table = objectsTopFirst().find((o) => o.type === "table" && hitObject(o, p, 0));
+    if (table) {
+      const col = Math.max(0, Math.min(table.cols - 1, Math.floor((p[0] - table.x) / table.cellWidth)));
+      const row = Math.max(0, Math.min(table.rows - 1, Math.floor((p[1] - table.y) / table.cellHeight)));
+      const edit = { id: table.id, row, col, value: table.cells[row * table.cols + col] || "" };
+      tableEditRef.current = edit;
+      setTableEditing(edit);
+      onSelectedChange?.([table.id]);
+      return;
+    }
     const hit = objectsTopFirst().find((o) => o.type === "text" && hitObject(o, p, 4 / v.k));
     if (hit) startEdit(hit, false);
   };
@@ -830,7 +1060,10 @@ const Surface = forwardRef(function Surface(
   }, [onPan, onZoom]);
 
   /* ------------------------------- text editor ------------------------------- */
-  const editor = editing && view ? <TextEditor key={editing.id} editing={editing} view={view} onCommit={finishEdit} /> : null;
+  const editor = editing && view ? <TextEditor key={editing.id} editing={editing} view={view} onCommit={finishEdit} onPreview={sharePreview} /> : null;
+  const tableEditor = tableEditing && view
+    ? <TableCellEditor key={`${tableEditing.id}-${tableEditing.row}-${tableEditing.col}`} editing={tableEditing} store={store} view={view} onCommit={finishTableEdit} onPreview={sharePreview} />
+    : null;
 
   const cursor = readOnly
     ? (mode === "board" ? "grab" : "default")
@@ -856,12 +1089,58 @@ const Surface = forwardRef(function Surface(
         onContextMenu={(e) => e.preventDefault()}
         aria-label={mode === "board" ? "Whiteboard" : "Document annotations"}
       />
+      {tableEditor}
       {editor}
     </div>
   );
 });
 
 export default Surface;
+
+function TableCellEditor({ editing, store, view, onCommit, onPreview }) {
+  const [value, setValue] = useState(editing.value);
+  const ref = useRef(null);
+  const table = store.get(editing.id);
+
+  useEffect(() => {
+    ref.current?.focus();
+    ref.current?.select();
+  }, []);
+
+  if (!table) return null;
+  const left = (table.x + editing.col * table.cellWidth - view.x) * view.k;
+  const top = (table.y + editing.row * table.cellHeight - view.y) * view.k;
+
+  return (
+    <input
+      ref={ref}
+      aria-label={`Table cell row ${editing.row + 1}, column ${editing.col + 1}`}
+      value={value}
+      onChange={(e) => {
+        const nextValue = e.target.value;
+        setValue(nextValue);
+        const cells = table.cells.slice();
+        cells[editing.row * table.cols + editing.col] = nextValue;
+        const preview = { ...table, cells };
+        onPreview(preview);
+      }}
+      onBlur={() => onCommit(value)}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === "Enter") {
+          e.preventDefault();
+          onCommit(value);
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          onCommit(value, true);
+        }
+      }}
+      onPointerDown={(e) => e.stopPropagation()}
+      className="absolute z-10 border-2 border-accent bg-white px-2 text-sm outline-none"
+      style={{ left, top, width: table.cellWidth * view.k, height: table.cellHeight * view.k, pointerEvents: "auto" }}
+    />
+  );
+}
 
 /* ------------------------------------------------------------------ */
 
@@ -914,7 +1193,7 @@ function mergeLineRects(rects) {
 }
 
 /* Inline text editor positioned over the canvas */
-function TextEditor({ editing, view, onCommit }) {
+function TextEditor({ editing, view, onCommit, onPreview }) {
   const [value, setValue] = useState(editing.obj.text || "");
   const taRef = useRef(null);
   const o = { ...editing.obj, text: value };
@@ -943,7 +1222,11 @@ function TextEditor({ editing, view, onCommit }) {
     <textarea
       ref={taRef}
       value={value}
-      onChange={(e) => setValue(e.target.value)}
+      onChange={(e) => {
+        const nextValue = e.target.value;
+        setValue(nextValue);
+        onPreview({ ...editing.obj, text: nextValue });
+      }}
       onBlur={() => onCommit(value)}
       onKeyDown={(e) => {
         e.stopPropagation();

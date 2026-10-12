@@ -1,14 +1,22 @@
 // Tool rail (desktop) / dock (mobile), plus the contextual style panel.
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
-  AlignCenter, AlignLeft, AlignRight, ArrowUpRight, Bold, Brush, Circle, Copy, Crosshair, Diamond, Eraser, Hand, Highlighter,
-  Italic, Lock, Minus, MousePointer2, PenLine, Plus, Redo2, Shapes, SlidersHorizontal, Square, Strikethrough, Trash2,
+  Activity, AlignCenter, AlignLeft, AlignRight, ArrowUpRight, Bold, Brush, Circle, Copy, Crosshair, Diamond, Eraser, Hand, Highlighter,
+  Hexagon, Italic, Lock, Minus, MousePointer2, PenLine, Plus, Redo2, Shapes, SlidersHorizontal, Square, Star, Strikethrough, Trash2,
+  RectangleHorizontal, Table2, Triangle,
   Type, Underline, Undo2, Unlock, X,
 } from "lucide-react";
-import { FONT_OPTIONS, FONT_STACKS, HIGHLIGHT_PALETTE, PALETTE, TEXT_SIZES } from "./constants.js";
+import { FONT_OPTIONS, FONT_STACKS, HIGHLIGHT_PALETTE, PALETTE, SHAPE_KINDS, TEXT_SIZES } from "./constants.js";
 
-const SHAPE_ICONS = { rect: Square, ellipse: Circle, diamond: Diamond, line: Minus, arrow: ArrowUpRight };
-const SHAPE_LABELS = { rect: "Rectangle", ellipse: "Ellipse", diamond: "Diamond", line: "Line", arrow: "Arrow" };
+const SHAPE_ICONS = {
+  rect: Square, ellipse: Circle, diamond: Diamond, triangle: Triangle, roundedRect: RectangleHorizontal,
+  hexagon: Hexagon, star: Star, line: Minus, arrow: ArrowUpRight,
+};
+const SHAPE_LABELS = {
+  rect: "Rectangle", ellipse: "Ellipse", diamond: "Diamond", triangle: "Triangle",
+  roundedRect: "Rounded rectangle", hexagon: "Hexagon", star: "Star", line: "Line", arrow: "Arrow",
+};
 
 const keepFocus = (e) => e.preventDefault(); // keep a text box focused while clicking toolbar buttons
 
@@ -36,23 +44,55 @@ function ToolButton({ icon: Icon, label, shortcut, active, onClick, disabled, ch
 const Divider = () => <div className="mx-0.5 h-6 w-px shrink-0 bg-line md:mx-0 md:my-0.5 md:h-px md:w-6" />;
 
 export function ToolRail({
-  mode, tool, onTool, lastShape, canUndo, canRedo, onUndo, onRedo, keepTool, onKeepTool, onStyleToggle, styleSwatch, hasStyle, styleOpen,
+  mode, tool, onTool, lastShape, canUndo, canRedo, onUndo, onRedo, keepTool, onKeepTool, onCreateGraph, onCreateTable,
+  onStyleToggle, styleSwatch, hasStyle, styleOpen,
 }) {
   const [shapesOpen, setShapesOpen] = useState(false);
   const wrapRef = useRef(null);
+  const shapeMenuRef = useRef(null);
+  const [shapeMenuPosition, setShapeMenuPosition] = useState(null);
 
   useEffect(() => {
     if (!shapesOpen) return undefined;
     const close = (e) => {
-      if (!wrapRef.current?.contains(e.target)) setShapesOpen(false);
+      if (!wrapRef.current?.contains(e.target) && !shapeMenuRef.current?.contains(e.target)) setShapesOpen(false);
     };
     document.addEventListener("pointerdown", close);
-    return () => document.removeEventListener("pointerdown", close);
+    const closeOnViewportChange = () => setShapesOpen(false);
+    window.addEventListener("resize", closeOnViewportChange);
+    window.addEventListener("scroll", closeOnViewportChange, true);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      window.removeEventListener("resize", closeOnViewportChange);
+      window.removeEventListener("scroll", closeOnViewportChange, true);
+    };
   }, [shapesOpen]);
 
-  const isShape = ["rect", "ellipse", "diamond", "line", "arrow"].includes(tool);
+  const isShape = SHAPE_KINDS.includes(tool);
   const ShapeIcon = isShape ? SHAPE_ICONS[tool] : SHAPE_ICONS[lastShape] || Shapes;
-  const shapeKinds = mode === "pdf" ? ["rect", "ellipse", "arrow", "line"] : ["rect", "ellipse", "diamond", "line", "arrow"];
+  const openShapeMenu = () => {
+    const rect = wrapRef.current?.getBoundingClientRect();
+    if (rect) {
+      const menuSize = 140;
+      if (window.matchMedia("(min-width: 768px)").matches) {
+        setShapeMenuPosition({
+          left: Math.min(rect.right + 8, window.innerWidth - menuSize - 8),
+          top: Math.max(8, Math.min(rect.top, window.innerHeight - menuSize - 8)),
+        });
+      } else {
+        const top = rect.top >= menuSize + 8 ? rect.top - menuSize - 8 : rect.bottom + 8;
+        setShapeMenuPosition({
+          left: Math.max(8, Math.min(rect.left, window.innerWidth - menuSize - 8)),
+          top: Math.max(8, Math.min(top, window.innerHeight - menuSize - 8)),
+        });
+      }
+    }
+    setShapesOpen(true);
+  };
+  const toggleShapeMenu = () => {
+    if (shapesOpen) setShapesOpen(false);
+    else openShapeMenu();
+  };
 
   return (
     <div
@@ -87,13 +127,19 @@ export function ToolRail({
           icon={ShapeIcon}
           label={isShape ? SHAPE_LABELS[tool] : "Shapes"}
           active={isShape}
-          onClick={() => (isShape ? setShapesOpen((v) => !v) : (onTool(lastShape), setShapesOpen(true)))}
+          onClick={() => (isShape ? toggleShapeMenu() : (onTool(lastShape), openShapeMenu()))}
         >
           <span className="absolute bottom-0.5 right-0.5 h-0 w-0 border-b-[4px] border-l-[4px] border-b-current border-l-transparent opacity-60" />
         </ToolButton>
-        {shapesOpen && (
-          <div className="float-panel absolute bottom-full left-0 z-30 mb-2 flex gap-0.5 p-1 md:bottom-auto md:left-full md:top-0 md:mb-0 md:ml-2 md:flex-col">
-            {shapeKinds.map((k) => (
+        {shapesOpen && shapeMenuPosition && createPortal(
+          <div
+            ref={shapeMenuRef}
+            className="float-panel fixed z-[100] grid grid-cols-3 gap-0.5 p-1"
+            style={{ left: shapeMenuPosition.left, top: shapeMenuPosition.top }}
+            role="menu"
+            aria-label="Shape tools"
+          >
+            {SHAPE_KINDS.map((k) => (
               <ToolButton
                 key={k}
                 icon={SHAPE_ICONS[k]}
@@ -103,9 +149,18 @@ export function ToolRail({
                 onClick={() => { onTool(k); setShapesOpen(false); }}
               />
             ))}
-          </div>
+          </div>,
+          document.body
         )}
       </div>
+
+      {mode === "board" && (
+        <>
+          <Divider />
+          <ToolButton icon={Activity} label="Add graph" onClick={onCreateGraph} />
+          <ToolButton icon={Table2} label="Add table" onClick={onCreateTable} />
+        </>
+      )}
 
       <ToolButton icon={Crosshair} label="Laser pointer" shortcut="K" active={tool === "laser"} onClick={() => onTool("laser")} />
       <Divider />

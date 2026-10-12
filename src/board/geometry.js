@@ -1,5 +1,6 @@
 // Pure geometry helpers: bounds, hit-testing, move/resize patches.
 import { FONT_STACKS, LINE_HEIGHT } from "./constants.js";
+import { graphGeometryPixels } from "./graphMath.js";
 
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
@@ -11,6 +12,38 @@ export function segDist(p, a, b) {
   if (len2 === 0) return dist(p, a);
   const t = clamp(((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2, 0, 1);
   return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+}
+
+export function shapeOutline(kind, x, y, w, h) {
+  if (kind === "rect") return [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+  if (kind === "diamond") return [[x + w / 2, y], [x + w, y + h / 2], [x + w / 2, y + h], [x, y + h / 2]];
+  if (kind === "triangle") return [[x + w / 2, y], [x + w, y + h], [x, y + h]];
+  if (kind === "hexagon") return [[x + w * 0.25, y], [x + w * 0.75, y], [x + w, y + h / 2], [x + w * 0.75, y + h], [x + w * 0.25, y + h], [x, y + h / 2]];
+  if (kind === "star") {
+    const points = [];
+    for (let i = 0; i < 10; i++) {
+      const angle = -Math.PI / 2 + i * Math.PI / 5;
+      const radius = i % 2 === 0 ? 1 : 0.45;
+      points.push([x + w / 2 + Math.cos(angle) * w / 2 * radius, y + h / 2 + Math.sin(angle) * h / 2 * radius]);
+    }
+    return points;
+  }
+  if (kind === "roundedRect") {
+    const radius = Math.min(12, w / 4, h / 4);
+    const corners = [
+      [x + w - radius, y + radius, -Math.PI / 2],
+      [x + w - radius, y + h - radius, 0],
+      [x + radius, y + h - radius, Math.PI / 2],
+      [x + radius, y + radius, Math.PI],
+    ];
+    return corners.flatMap(([cx, cy, start]) =>
+      Array.from({ length: 9 }, (_, i) => {
+        const angle = start + (Math.PI / 2) * (i / 8);
+        return [cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius];
+      })
+    );
+  }
+  return [];
 }
 
 /* ---------- text measuring ---------- */
@@ -68,6 +101,10 @@ export function getBounds(o) {
       const y = Math.min(o.y1, o.y2);
       return { x: x - r, y: y - r, w: Math.abs(o.x2 - o.x1) + r * 2, h: Math.abs(o.y2 - o.y1) + r * 2 };
     }
+    case "graph":
+      return { x: o.x, y: o.y, w: o.w, h: o.h };
+    case "table":
+      return { x: o.x, y: o.y, w: o.cols * o.cellWidth, h: o.rows * o.cellHeight };
     case "text": {
       const m = measureText(o);
       const x = o.align === "center" ? o.x - m.w / 2 : o.align === "right" ? o.x - m.w : o.x;
@@ -137,18 +174,22 @@ export function hitObject(o, p, tol) {
         if (o.fill) return d <= 1 + reach / Math.min(rx, ry);
         return Math.abs(d - 1) <= reach / Math.min(rx, ry);
       }
-      if (o.kind === "diamond") {
-        const pts = [[x + w / 2, y], [x + w, y + h / 2], [x + w / 2, y + h], [x, y + h / 2]];
-        if (o.fill && pointInPolygon(p, pts)) return true;
-        for (let i = 0; i < 4; i++) if (segDist(p, pts[i], pts[(i + 1) % 4]) <= reach) return true;
+      const outline = shapeOutline(o.kind, x, y, w, h);
+      if (outline.length) {
+        if (o.fill && pointInPolygon(p, outline)) return true;
+        for (let i = 0; i < outline.length; i++) {
+          if (segDist(p, outline[i], outline[(i + 1) % outline.length]) <= reach) return true;
+        }
         return false;
       }
-      // rect
       if (o.fill && pointInRect(p, { x, y, w, h })) return true;
       const corners = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
       for (let i = 0; i < 4; i++) if (segDist(p, corners[i], corners[(i + 1) % 4]) <= reach) return true;
       return false;
     }
+    case "graph":
+    case "table":
+      return pointInRect(p, getBounds(o), tol);
     case "text":
       return pointInRect(p, getBounds(o), tol);
     case "markup":
@@ -156,6 +197,36 @@ export function hitObject(o, p, tol) {
     default:
       return false;
   }
+}
+
+export function hitGraphGeometry(graph, p, tolerance) {
+  if (!Array.isArray(graph.geometry) || graph.geometry.length === 0) return null;
+  const width = Math.max(20, graph.w - 54);
+  const height = Math.max(20, graph.h - 58);
+  const local = [p[0] - graph.x - 42, p[1] - graph.y - 24];
+  if (!pointInRect(local, { x: 0, y: 0, w: width, h: height }, tolerance)) return null;
+  const elements = graphGeometryPixels(graph.geometry, {
+    xMin: graph.xMin, xMax: graph.xMax, yMin: graph.yMin, yMax: graph.yMax, width, height,
+  });
+  for (let index = elements.length - 1; index >= 0; index--) {
+    const element = elements[index];
+    if (element.kind === "point") {
+      if (dist(local, [element.point.x, element.point.y]) <= tolerance + 4) return element.id;
+    } else if (element.kind === "polygon") {
+      if (element.filled && pointInPolygon(local, element.points.map((point) => [point.x, point.y]))) return element.id;
+      for (let edge = 0; edge < element.points.length; edge++) {
+        const a = element.points[edge], b = element.points[(edge + 1) % element.points.length];
+        if (segDist(local, [a.x, a.y], [b.x, b.y]) <= tolerance + 4) return element.id;
+      }
+    } else if (element.kind === "angle") {
+      if (segDist(local, [element.a.x, element.a.y], [element.vertex.x, element.vertex.y]) <= tolerance + 4
+        || segDist(local, [element.vertex.x, element.vertex.y], [element.c.x, element.c.y]) <= tolerance + 4
+        || dist(local, [element.vertex.x, element.vertex.y]) <= tolerance + 22) return element.id;
+    } else if (segDist(local, [element.start.x, element.start.y], [element.end.x, element.end.y]) <= tolerance + 4) {
+      return element.id;
+    }
+  }
+  return null;
 }
 
 function pointInPolygon(p, poly) {
@@ -180,6 +251,9 @@ export function movePatch(o, dx, dy) {
       return { points: o.points.map((p) => [p[0] + dx, p[1] + dy, ...p.slice(2)]) };
     case "shape":
       return { x1: o.x1 + dx, y1: o.y1 + dy, x2: o.x2 + dx, y2: o.y2 + dy };
+    case "graph":
+    case "table":
+      return { x: o.x + dx, y: o.y + dy };
     case "text":
       return { x: o.x + dx, y: o.y + dy };
     default:
@@ -199,6 +273,15 @@ export function scalePatch(o, sx, sy, ox, oy) {
       };
     case "shape":
       return { x1: fx(o.x1), y1: fy(o.y1), x2: fx(o.x2), y2: fy(o.y2) };
+    case "graph":
+      return { x: fx(o.x), y: fy(o.y), w: Math.max(80, o.w * Math.abs(sx)), h: Math.max(80, o.h * Math.abs(sy)) };
+    case "table":
+      return {
+        x: fx(o.x),
+        y: fy(o.y),
+        cellWidth: Math.max(40, o.cellWidth * Math.abs(sx)),
+        cellHeight: Math.max(24, o.cellHeight * Math.abs(sy)),
+      };
     case "text": {
       const s = Math.max(Math.abs(sx), Math.abs(sy));
       return { x: fx(o.x), y: fy(o.y), fontSize: Math.max(6, Math.round((o.fontSize || 24) * s * 10) / 10) };
