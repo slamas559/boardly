@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { STYLE_GROUP, defaultStyles } from "./constants.js";
 
 const SHORTCUTS = {
-  board: { v: "select", p: "pen", m: "highlighter", e: "eraser", t: "text", r: "rect", o: "ellipse", d: "diamond", l: "line", a: "arrow", k: "laser" },
+  board: { v: "select", h: "pan", p: "pen", m: "highlighter", e: "eraser", t: "text", r: "rect", o: "ellipse", d: "diamond", l: "line", a: "arrow", k: "laser" },
   pdf: { v: "select", h: "highlight", u: "underline", s: "strike", p: "pen", m: "highlighter", e: "eraser", t: "text", r: "rect", o: "ellipse", a: "arrow", k: "laser" },
 };
 

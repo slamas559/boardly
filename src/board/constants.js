@@ -59,7 +59,7 @@ export function defaultStyles(mode) {
   };
 }
 
-export const BOARD_TOOLS = ["select", "pen", "highlighter", "eraser", "text", "rect", "ellipse", "diamond", "line", "arrow", "laser"];
+export const BOARD_TOOLS = ["select", "pan", "pen", "highlighter", "eraser", "text", "rect", "ellipse", "diamond", "line", "arrow", "laser"];
 export const PDF_TOOLS = ["select", "highlight", "underline", "strike", "pen", "highlighter", "text", "rect", "ellipse", "arrow", "eraser", "laser"];
 
 export const uid = () => {
