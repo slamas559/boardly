@@ -214,7 +214,10 @@ const Surface = forwardRef(function Surface(
     return () => window.removeEventListener("boardly-3d-renderer-ready", redraw);
   }, [schedule]);
 
-  useEffect(() => () => cancelAnimationFrame(raf.current), []);
+  useEffect(() => () => {
+    cancelAnimationFrame(raf.current);
+    raf.current = 0;
+  }, []);
 
   // Web fonts load after first paint: redraw so text uses the right metrics
   useEffect(() => {
