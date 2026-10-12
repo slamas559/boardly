@@ -435,6 +435,12 @@ const Surface = forwardRef(function Surface(
     const { tool: tl, readOnly: ro, mode: md, styles: st, store: s, page: pg, view: v } = live.current;
     const canvas = canvasRef.current;
 
+    if (live.current.editing) {
+      e.preventDefault();
+      api.finishEditing();
+      return;
+    }
+
     if (e.pointerType === "pen") lastPenTime.current = performance.now();
     // Palm rejection: while a stylus is active, ignore finger touches for drawing
     if (e.pointerType === "touch" && performance.now() - lastPenTime.current < 1500) return;
@@ -1165,6 +1171,11 @@ function TextEditor({ editing, view, onCommit, onPreview }) {
   const m = measureText({ ...o, text: value || " " });
 
   useEffect(() => {
+    const timer = setInterval(() => onPreview({ ...editing.obj, text: value }), 5000);
+    return () => clearInterval(timer);
+  }, [editing.obj, onPreview, value]);
+
+  useEffect(() => {
     const t = setTimeout(() => {
       taRef.current?.focus();
       taRef.current?.setSelectionRange(value.length, value.length);
@@ -1178,17 +1189,13 @@ function TextEditor({ editing, view, onCommit, onPreview }) {
   const left = (o.x - view.x) * k - (o.align === "center" ? width / 2 : o.align === "right" ? width - 4 : 4);
   const top = (o.y - view.y) * k - 2;
 
-  // Keep the latest object style in sync when the style panel patches it while editing
-  useEffect(() => {
-    editing.obj.text = value;
-  }, [value, editing.obj]);
-
   return (
     <textarea
       ref={taRef}
       value={value}
       onChange={(e) => {
         const nextValue = e.target.value;
+        editing.obj.text = nextValue;
         setValue(nextValue);
         onPreview({ ...editing.obj, text: nextValue });
       }}
@@ -1218,6 +1225,7 @@ function TextEditor({ editing, view, onCommit, onPreview }) {
         color: o.color,
         whiteSpace: "pre",
         zIndex: 5,
+        pointerEvents: "auto",
       }}
     />
   );
