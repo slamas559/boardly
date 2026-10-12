@@ -58,6 +58,7 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
   const [url, setUrl] = useState(room.pdf?.url || null);
   const [page, setPage] = useState(room.pdf?.currentPage || 1);
   const [hostPage, setHostPage] = useState(room.pdf?.currentPage || 1);
+  const [hostViewport, setHostViewport] = useState(null);
   const [numPages, setNumPages] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [avail, setAvail] = useState(0);
@@ -69,6 +70,9 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
   const [laser, setLaser] = useState(null);
   const [remotePreviews, setRemotePreviews] = useState(() => new Map());
   const previewTimers = useRef(new Map());
+  const viewSendTimer = useRef(null);
+  const lastViewSent = useRef(0);
+  const remoteScrollUntil = useRef(0);
   const [dragOver, setDragOver] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
 
@@ -116,11 +120,15 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
         return next;
       });
     };
-    const onPageChange = ({ page: p }) => setHostPage(p);
+    const onPageChange = ({ page: p }) => {
+      setHostPage(p);
+      setHostViewport(null);
+    };
     const onUpdated = ({ url: u }) => {
       setUrl(u);
       setPage(1);
       setHostPage(1);
+      setHostViewport(null);
       store.reset([]);
       for (const timer of previewTimers.current.values()) clearTimeout(timer);
       previewTimers.current.clear();
@@ -148,6 +156,7 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
         return next;
       });
     };
+    const onView = (data) => setHostViewport(data);
     const onPointer = (d) => {
       if (d.view !== "pdf") return;
       setLaser(d.active === false ? null : { x: d.x, y: d.y, page: d.page, active: true });
@@ -155,12 +164,14 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
     socket.on("pdf-op", onOp);
     socket.on("pdf-preview", onPreview);
     socket.on("pdf-page-change", onPageChange);
+    socket.on("pdf-view", onView);
     socket.on("pdf-updated", onUpdated);
     socket.on("pointer", onPointer);
     return () => {
       socket.off("pdf-op", onOp);
       socket.off("pdf-preview", onPreview);
       socket.off("pdf-page-change", onPageChange);
+      socket.off("pdf-view", onView);
       socket.off("pdf-updated", onUpdated);
       socket.off("pointer", onPointer);
     };
@@ -169,11 +180,18 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
   useEffect(() => () => {
     for (const timer of previewTimers.current.values()) clearTimeout(timer);
     previewTimers.current.clear();
+    if (viewSendTimer.current) clearTimeout(viewSendTimer.current);
   }, []);
 
   useEffect(() => {
-    if (!isHost && following) setPage(hostPage);
-  }, [isHost, following, hostPage]);
+    if (!isHost && following) {
+      if (page !== hostPage) {
+        remoteScrollUntil.current = Date.now() + 200;
+        scrollRef.current?.scrollTo({ top: 0, left: 0 });
+      }
+      setPage(hostPage);
+    }
+  }, [isHost, following, hostPage, page]);
 
   /* sizing: fit the page to the available width, then apply zoom */
   useEffect(() => {
@@ -192,6 +210,64 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
   const height = Math.round(width * aspect);
   const view = useMemo(() => ({ x: 0, y: 0, k: width / PDF_WORLD_WIDTH }), [width]);
   const pageSize = useMemo(() => ({ w: PDF_WORLD_WIDTH, h: PDF_WORLD_WIDTH * aspect }), [aspect]);
+
+  const getVisiblePage = useCallback(() => {
+    const scroller = scrollRef.current;
+    if (!scroller || !pageEl) return null;
+    const viewport = scroller.getBoundingClientRect();
+    const pageRect = pageEl.getBoundingClientRect();
+    if (!pageRect.width || !pageRect.height) return null;
+    const x0 = Math.max(0, Math.min(1, (Math.max(viewport.left, pageRect.left) - pageRect.left) / pageRect.width));
+    const x1 = Math.max(0, Math.min(1, (Math.min(viewport.right, pageRect.right) - pageRect.left) / pageRect.width));
+    const y0 = Math.max(0, Math.min(1, (Math.max(viewport.top, pageRect.top) - pageRect.top) / pageRect.height));
+    const y1 = Math.max(0, Math.min(1, (Math.min(viewport.bottom, pageRect.bottom) - pageRect.top) / pageRect.height));
+    if (x1 <= x0 || y1 <= y0) return null;
+    return { x0, x1, y0, y1 };
+  }, [pageEl]);
+
+  const sendPdfView = useCallback(() => {
+    const viewport = getVisiblePage();
+    if (!isHost || !socket || !viewport) return;
+    lastViewSent.current = Date.now();
+    socket.emit("pdf-view", { room: roomId, page, viewport });
+  }, [getVisiblePage, isHost, page, roomId, socket]);
+
+  const onViewerScroll = useCallback(() => {
+    if (!isHost) {
+      if (Date.now() < remoteScrollUntil.current) return;
+      if (following) setFollowing(false);
+      return;
+    }
+    if (viewSendTimer.current) return;
+    const delay = Math.max(0, 80 - (Date.now() - lastViewSent.current));
+    viewSendTimer.current = setTimeout(() => {
+      viewSendTimer.current = null;
+      sendPdfView();
+    }, delay);
+  }, [following, isHost, sendPdfView]);
+
+  useEffect(() => {
+    if (isHost || !following || !hostViewport || hostViewport.page !== page) return;
+    const scroller = scrollRef.current;
+    if (!scroller || !pageEl) return;
+    const current = getVisiblePage();
+    if (!current) return;
+
+    const targetX = (hostViewport.viewport.x0 + hostViewport.viewport.x1) / 2;
+    const targetY = (hostViewport.viewport.y0 + hostViewport.viewport.y1) / 2;
+    const targetAlreadyVisible = targetX >= current.x0 && targetX <= current.x1
+      && targetY >= current.y0 && targetY <= current.y1;
+    if (targetAlreadyVisible) return;
+
+    const viewportRect = scroller.getBoundingClientRect();
+    const pageRect = pageEl.getBoundingClientRect();
+    const pageLeft = scroller.scrollLeft + pageRect.left - viewportRect.left;
+    const pageTop = scroller.scrollTop + pageRect.top - viewportRect.top;
+    const left = pageLeft + targetX * pageRect.width - scroller.clientWidth / 2;
+    const top = pageTop + targetY * pageRect.height - scroller.clientHeight / 2;
+    remoteScrollUntil.current = Date.now() + 250;
+    scroller.scrollTo({ left, top, behavior: "auto" });
+  }, [following, getVisiblePage, hostViewport, isHost, page, pageEl]);
 
   const clampZoom = (z) => Math.min(4, Math.max(0.5, z));
   const onZoom = useCallback((f) => setZoom((z) => clampZoom(z * f)), []);
@@ -356,7 +432,7 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
           )}
 
           {/* page */}
-          <div ref={scrollRef} className="scroll-thin relative min-w-0 flex-1 overflow-auto">
+          <div ref={scrollRef} onScroll={onViewerScroll} className="scroll-thin relative min-w-0 flex-1 overflow-auto">
             <div className="mx-auto flex min-h-full w-max min-w-full justify-center px-2 py-4 pb-24 md:px-6 md:pb-6">
               <div
                 ref={setPageEl}
