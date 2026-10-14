@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { compileExpression } from "./graphMath.js";
+import { compileExpression, paramConstants, paramKey } from "./graphMath.js";
 
 const sceneCache = new Map();
 let renderer;
@@ -25,7 +25,7 @@ export function sampleSurfaceMesh(graph, divisions = 48) {
     throw new Error("Mesh resolution must be between 2 and 128.");
   }
   validRanges(graph);
-  const evaluate = compileExpression(graph.expression, ["x", "y"]);
+  const evaluate = compileExpression(graph.expression, ["x", "y"], paramConstants(graph));
   const sample = (x, y) => [x, y, evaluate(x, y)];
   return sampleParametricGrid(graph, divisions, sample);
 }
@@ -37,9 +37,10 @@ export function sampleParametricSurfaceMesh(graph, divisions = 32) {
     throw new Error("Use valid u and v ranges and a mesh resolution between 2 and 128.");
   }
   validRanges(graph);
-  const x = compileExpression(graph.xExpression, ["u", "v"]);
-  const y = compileExpression(graph.yExpression, ["u", "v"]);
-  const z = compileExpression(graph.zExpression, ["u", "v"]);
+  const constants = paramConstants(graph);
+  const x = compileExpression(graph.xExpression, ["u", "v"], constants);
+  const y = compileExpression(graph.yExpression, ["u", "v"], constants);
+  const z = compileExpression(graph.zExpression, ["u", "v"], constants);
   return sampleParametricGrid(graph, divisions, (u, v) => [x(u, v), y(u, v), z(u, v)], graph.uMin, graph.uMax, graph.vMin, graph.vMax);
 }
 
@@ -83,9 +84,10 @@ export function sampleParametricCurve3d(graph, divisions = 512) {
     throw new Error("Use a valid parameter range and a curve resolution between 2 and 2048.");
   }
   validRanges(graph);
-  const x = compileExpression(graph.xExpression, ["t"]);
-  const y = compileExpression(graph.yExpression, ["t"]);
-  const z = compileExpression(graph.zExpression, ["t"]);
+  const constants = paramConstants(graph);
+  const x = compileExpression(graph.xExpression, ["t"], constants);
+  const y = compileExpression(graph.yExpression, ["t"], constants);
+  const z = compileExpression(graph.zExpression, ["t"], constants);
   const vertices = [];
   const indices = [];
   let previous = -1;
@@ -111,7 +113,7 @@ function graphScene(graph, color) {
   const key = JSON.stringify([
     graph.mode, graph.expression, graph.xExpression, graph.yExpression, graph.zExpression,
     graph.xMin, graph.xMax, graph.yMin, graph.yMax, graph.zMin, graph.zMax,
-    graph.tMin, graph.tMax, graph.uMin, graph.uMax, graph.vMin, graph.vMax, color,
+    graph.tMin, graph.tMax, graph.uMin, graph.uMax, graph.vMin, graph.vMax, color, paramKey(graph),
   ]);
   if (sceneCache.has(key)) return sceneCache.get(key);
   const sampled = graph.mode === "surface3d"

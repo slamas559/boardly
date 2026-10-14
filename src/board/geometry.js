@@ -1,6 +1,7 @@
 // Pure geometry helpers: bounds, hit-testing, move/resize patches.
 import { FONT_STACKS, LINE_HEIGHT } from "./constants.js";
 import { graphGeometryPixels } from "./graphMath.js";
+import { tracePoint } from "./graphAnalysis.js";
 
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
@@ -102,6 +103,7 @@ export function getBounds(o) {
       return { x: x - r, y: y - r, w: Math.abs(o.x2 - o.x1) + r * 2, h: Math.abs(o.y2 - o.y1) + r * 2 };
     }
     case "graph":
+    case "equation":
       return { x: o.x, y: o.y, w: o.w, h: o.h };
     case "table":
       return { x: o.x, y: o.y, w: o.cols * o.cellWidth, h: o.rows * o.cellHeight };
@@ -190,6 +192,7 @@ export function hitObject(o, p, tol) {
       return false;
     }
     case "graph":
+    case "equation":
     case "table":
     case "media":
       return pointInRect(p, getBounds(o), tol);
@@ -200,6 +203,16 @@ export function hitObject(o, p, tol) {
     default:
       return false;
   }
+}
+
+/** True when p (world coordinates) is on the graph's trace dot. */
+export function hitGraphTrace(graph, p, tolerance) {
+  if (!graph.trace) return false;
+  const width = Math.max(20, graph.w - 54);
+  const height = Math.max(20, graph.h - 58);
+  const trace = tracePoint(graph, width, height);
+  if (!trace) return false;
+  return dist([p[0] - graph.x - 42, p[1] - graph.y - 24], [trace.px, trace.py]) <= tolerance;
 }
 
 export function hitGraphGeometry(graph, p, tolerance) {
@@ -255,6 +268,7 @@ export function movePatch(o, dx, dy) {
     case "shape":
       return { x1: o.x1 + dx, y1: o.y1 + dy, x2: o.x2 + dx, y2: o.y2 + dy };
     case "graph":
+    case "equation":
     case "table":
     case "media":
       return { x: o.x + dx, y: o.y + dy };
@@ -281,6 +295,11 @@ export function scalePatch(o, sx, sy, ox, oy) {
       return { x: fx(o.x), y: fy(o.y), w: Math.max(80, o.w * Math.abs(sx)), h: Math.max(80, o.h * Math.abs(sy)) };
     case "media":
       return { x: fx(o.x), y: fy(o.y), w: Math.max(40, o.w * Math.abs(sx)), h: Math.max(40, o.h * Math.abs(sy)) };
+    case "equation": {
+      // Formulas keep their proportions, like text: the font size scales with the box
+      const s = Math.max(Math.abs(sx), Math.abs(sy));
+      return { x: fx(o.x), y: fy(o.y), w: Math.max(8, o.w * s), h: Math.max(8, o.h * s), fontSize: Math.max(6, Math.round((o.fontSize || 36) * s * 10) / 10) };
+    }
     case "table":
       return {
         x: fx(o.x),

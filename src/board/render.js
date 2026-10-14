@@ -1,7 +1,11 @@
 // Canvas rendering for board / PDF-annotation objects.
 import { fontString, getBounds, shapeOutline } from "./geometry.js";
 import { LINE_HEIGHT } from "./constants.js";
-import { compileInequalitySystem, graphGeometryPixels, graphSegments, sampleInequalityRegion, sampleImplicit } from "./graphMath.js";
+import { compileInequalitySystem, graphGeometryPixels, graphSegments, paramConstants, paramKey, sampleInequalityRegion, sampleImplicit } from "./graphMath.js";
+import { findKeyPoints, formatNumber, isExplicitGraph, tracePoint } from "./graphAnalysis.js";
+import { equationImage } from "./mathRender.js";
+
+const keyPointCache = new Map();
 
 const graphFunctionCache = new Map();
 const graphRegionCache = new Map();
@@ -207,8 +211,8 @@ function drawGraph(ctx, o) {
   let inequalityConstraints = null;
   if (o.mode === "inequality") {
     try {
-      inequalityConstraints = compileInequalitySystem(o.expression);
-      const cacheKey = JSON.stringify([o.expression, o.xMin, o.xMax, o.yMin, o.yMax, width, height]);
+      inequalityConstraints = compileInequalitySystem(o.expression, paramConstants(o));
+      const cacheKey = JSON.stringify([o.expression, o.xMin, o.xMax, o.yMin, o.yMax, width, height, paramKey(o)]);
       let region = graphRegionCache.get(cacheKey);
       if (!region) {
         const sampled = sampleInequalityRegion(inequalityConstraints, {
@@ -274,7 +278,7 @@ function drawGraph(ctx, o) {
   }
 
   try {
-    const cacheKey = JSON.stringify([o.mode || "explicit", o.expression, o.xExpression, o.yExpression, o.tMin, o.tMax, o.xMin, o.xMax, o.yMin, o.yMax, width, height]);
+    const cacheKey = JSON.stringify([o.mode || "explicit", o.expression, o.xExpression, o.yExpression, o.tMin, o.tMax, o.xMin, o.xMax, o.yMin, o.yMax, width, height, paramKey(o)]);
     ctx.strokeStyle = o.color || "#2540D9";
     ctx.lineWidth = o.width || 2.5;
     ctx.lineJoin = "round";
@@ -384,10 +388,162 @@ function drawGraph(ctx, o) {
       }
       ctx.restore();
     }
+    if (isExplicitGraph(o) && (o.keyPoints || o.trace)) drawGraphAnalysis(ctx, o, { left, top, width, height });
   } catch {
     ctx.fillStyle = "#b42318";
     ctx.fillText(o.mode === "inequality" ? "Unable to plot these inequalities" : "Unable to plot this equation", o.x + 8, o.y + o.h - 16);
   }
+  ctx.restore();
+}
+
+/* A label with a white halo so it stays readable on top of the curve and grid */
+function haloText(ctx, text, x, y) {
+  ctx.save();
+  ctx.lineJoin = "round";
+  ctx.lineWidth = 3.5;
+  ctx.strokeStyle = "#fff";
+  ctx.strokeText(text, x, y);
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+
+/* Place a label beside a point, flipping it to the other side near the plot edge */
+function pointLabel(ctx, text, px, py, plot) {
+  const w = ctx.measureText(text).width;
+  const flipX = px + 8 + w > plot.width;
+  const flipY = py - 18 < 0;
+  ctx.textAlign = flipX ? "right" : "left";
+  ctx.textBaseline = flipY ? "top" : "bottom";
+  haloText(ctx, text, px + (flipX ? -8 : 8), py + (flipY ? 8 : -8));
+}
+
+/* Key points (roots, y-intercept, highs and lows), then the trace point with its tangent line */
+function drawGraphAnalysis(ctx, o, plot) {
+  const color = o.color || "#2540D9";
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(plot.left, plot.top, plot.width, plot.height);
+  ctx.clip();
+  ctx.translate(plot.left, plot.top);
+  ctx.font = "11px system-ui, sans-serif";
+  const toPx = (x, y) => [((x - o.xMin) / (o.xMax - o.xMin)) * plot.width, ((o.yMax - y) / (o.yMax - o.yMin)) * plot.height];
+  const markPixels = []; // where key points sit, so the trace readout can avoid covering them
+
+  if (o.keyPoints) {
+    const cacheKey = JSON.stringify([o.expression, o.xMin, o.xMax, o.yMin, o.yMax, paramKey(o)]);
+    let found = keyPointCache.get(cacheKey);
+    if (!found) {
+      found = findKeyPoints(o);
+      keyPointCache.set(cacheKey, found);
+      if (keyPointCache.size > 40) keyPointCache.delete(keyPointCache.keys().next().value);
+    }
+    const marks = [
+      ...found.roots.map((p) => ({ ...p, kind: "root" })),
+      ...(found.yIntercept ? [{ ...found.yIntercept, kind: "intercept" }] : []),
+      ...found.extrema,
+    ];
+    const labelled = marks.length <= 8; // with many points, labels would cover the curve
+    for (const mark of marks) {
+      const [px, py] = toPx(mark.x, mark.y);
+      markPixels.push([px, py]);
+      ctx.beginPath();
+      ctx.arc(px, py, 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = mark.kind === "max" || mark.kind === "min" ? color : "#fff";
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = color;
+      ctx.stroke();
+      if (labelled) {
+        ctx.fillStyle = "#33363d";
+        const prefix = mark.kind === "max" || mark.kind === "min" ? `${mark.kind} ` : "";
+        pointLabel(ctx, `${prefix}(${formatNumber(mark.x)}, ${formatNumber(mark.y)})`, px, py, plot);
+      }
+    }
+  }
+
+  const trace = o.trace ? tracePoint(o, plot.width, plot.height) : null;
+  if (trace) {
+    // Guide lines to the axes
+    ctx.save();
+    ctx.setLineDash([4, 4]);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "#8d909a";
+    const [zx, zy] = toPx(0, 0);
+    ctx.beginPath();
+    ctx.moveTo(trace.px, trace.py);
+    ctx.lineTo(trace.px, Math.max(0, Math.min(plot.height, zy)));
+    ctx.moveTo(trace.px, trace.py);
+    ctx.lineTo(Math.max(0, Math.min(plot.width, zx)), trace.py);
+    ctx.stroke();
+    ctx.restore();
+
+    if (o.trace.tangent && Number.isFinite(trace.slope)) {
+      const yAt = (x) => trace.y + trace.slope * (x - trace.x);
+      const [x1, y1] = toPx(o.xMin, yAt(o.xMin));
+      const [x2, y2] = toPx(o.xMax, yAt(o.xMax));
+      const big = 1e5;
+      ctx.save();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#d9480f";
+      ctx.beginPath();
+      ctx.moveTo(x1, Math.max(-big, Math.min(big, y1)));
+      ctx.lineTo(x2, Math.max(-big, Math.min(big, y2)));
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.beginPath();
+    ctx.arc(trace.px, trace.py, 7, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = "#fff";
+    ctx.stroke();
+
+    const lines = [`(${formatNumber(trace.x)}, ${formatNumber(trace.y)})`];
+    if (o.trace.tangent && Number.isFinite(trace.slope)) lines.push(`slope = ${formatNumber(trace.slope)}`);
+    ctx.font = "600 12px system-ui, sans-serif";
+    const widest = Math.max(...lines.map((line) => ctx.measureText(line).width));
+    const boxW = widest + 14;
+    const boxH = lines.length * 16 + 8;
+    // Try the four corners around the dot; take the first that stays inside the plot and covers no key point
+    const corners = [[12, -boxH - 10], [12, 12], [-12 - boxW, -boxH - 10], [-12 - boxW, 12]];
+    const fits = ([dx, dy]) => {
+      const x = trace.px + dx, y = trace.py + dy;
+      return x >= 2 && y >= 2 && x + boxW <= plot.width - 2 && y + boxH <= plot.height - 2;
+    };
+    const clear = ([dx, dy]) => !markPixels.some(([mx, my]) => mx > trace.px + dx - 8 && mx < trace.px + dx + boxW + 8 && my > trace.py + dy - 8 && my < trace.py + dy + boxH + 8);
+    const [dx, dy] = corners.find((c) => fits(c) && clear(c)) || corners.find(fits) || corners[0];
+    const bx = Math.max(2, Math.min(plot.width - boxW - 2, trace.px + dx));
+    const by = Math.max(2, Math.min(plot.height - boxH - 2, trace.py + dy));
+    ctx.fillStyle = "rgba(255,255,255,0.94)";
+    ctx.strokeStyle = "#b8b7b1";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(bx, by, boxW, boxH, 6);
+    else ctx.rect(bx, by, boxW, boxH);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#17181c";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    lines.forEach((line, i) => ctx.fillText(line, bx + 7, by + 4 + 8 + i * 16));
+  }
+  ctx.restore();
+}
+
+/* Formulas are drawn as vector images; until the engine has typeset one, show its source quietly */
+function drawEquation(ctx, o) {
+  const image = equationImage(o);
+  if (image) {
+    ctx.drawImage(image, o.x, o.y, o.w, o.h);
+    return;
+  }
+  ctx.save();
+  ctx.font = `${Math.max(11, Math.min(18, (o.fontSize || 36) * 0.45))}px ui-monospace, Menlo, monospace`;
+  ctx.fillStyle = "#a09e96";
+  ctx.textBaseline = "middle";
+  ctx.fillText(o.latex || "", o.x, o.y + o.h / 2, Math.max(20, o.w));
   ctx.restore();
 }
 
@@ -606,6 +762,7 @@ export function drawObject(ctx, o, { k = 1, pageSize, alpha = 1 } = {}) {
     case "shape": drawShape(ctx, o); break;
     case "graph": drawGraph(ctx, o); break;
     case "table": drawTable(ctx, o); break;
+    case "equation": drawEquation(ctx, o); break;
     case "media": drawMedia(ctx, o); break;
     case "text": drawText(ctx, o); break;
     case "markup": drawMarkup(ctx, o, k); break;

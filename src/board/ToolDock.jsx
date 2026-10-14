@@ -5,7 +5,7 @@ import { Loader2 } from "lucide-react";
 import { ToolRail } from "./Toolbar.jsx";
 import { validateGraphExpressions } from "./graphValidation.js";
 
-export default function ToolDock({ mode, tools, inspector, onCreateGraph, onCreateTable, onUploadMedia, onAddVideoLink, mediaUploading = false, mediaError = "", store }) {
+export default function ToolDock({ mode, tools, inspector, onCreateGraph, onCreateEquation, onCreateTable, onUploadMedia, onAddVideoLink, mediaUploading = false, mediaError = "", store }) {
   const [insertDialog, setInsertDialog] = useState(null);
   const [videoLinkDialog, setVideoLinkDialog] = useState(false);
   const mediaInputRef = useRef(null);
@@ -37,13 +37,14 @@ export default function ToolDock({ mode, tools, inspector, onCreateGraph, onCrea
           keepTool={keepTool}
           onKeepTool={() => setKeepTool((v) => !v)}
           onCreateGraph={() => setInsertDialog("graph")}
+          onCreateEquation={onCreateEquation}
           onCreateTable={() => setInsertDialog("table")}
           onUploadMedia={() => mediaInputRef.current?.click()}
           onAddVideoLink={() => setVideoLinkDialog(true)}
           mediaUploading={mediaUploading}
           hasStyle={inspector.kind !== null}
           styleSwatch={inspector.kind === "style" ? activeStyle?.color : null}
-          styleLabel={inspector.kind === "graph" ? "Graph" : "Style"}
+          styleLabel={inspector.kind === "graph" ? "Graph" : inspector.kind === "equation" ? "Equation" : "Style"}
           styleOpen={inspector.visible}
           onStyleToggle={inspector.toggle}
         />
@@ -247,7 +248,7 @@ function InsertDialog({ kind, onClose, onCreate }) {
                     ? "The radius uses t as the angle in radians. Use t, + - * / ^ and supported functions."
                       : ["surface3d", "curve3d", "parametricSurface3d"].includes(graphMode)
                         ? "Use the supported safe math functions. Drag the graph to rotate; use graph settings for precise camera control."
-                      : "Use x, + - * / ^, parentheses, pi, e, and supported functions."}
+                      : "Use x, + - * / ^, parentheses, pi, e, and supported functions. Letters like a, b, c become sliders."}
             </p>
             {(graphMode === "parametric" || graphMode === "polar" || graphMode === "curve3d") && (
               <div className="grid grid-cols-2 gap-3">

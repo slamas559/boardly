@@ -33,18 +33,101 @@ const FUNCTIONS = {
   tanh: Math.tanh,
 };
 
-export function compileExpression(source, variables = ["x"]) {
+/* ------------------------------ slider parameters ------------------------------
+ * Single letters from PARAM_LETTERS (a, b, c, k, m ...) are constants the presenter can change with a
+ * slider. They never collide with the variables (x, y, z, t, u, v) or with e and pi. */
+export const PARAM_LETTERS = "abcdhkmnpqrsw";
+export const PARAM_DEFAULT = { value: 1, min: -10, max: 10 };
+const FUNCTION_NAMES = Object.keys(FUNCTIONS).sort((a, b) => b.length - a.length);
+
+/** "ax" -> ["a", "x"], "asin" -> ["asin"], "2pix" is handled by the number tokenizer first. */
+function splitLetters(word) {
+  const parts = [];
+  let i = 0;
+  while (i < word.length) {
+    const name = FUNCTION_NAMES.find((candidate) => word.startsWith(candidate, i));
+    if (name) {
+      parts.push(name);
+      i += name.length;
+    } else if (word.startsWith("pi", i)) {
+      parts.push("pi");
+      i += 2;
+    } else {
+      parts.push(word[i]);
+      i += 1;
+    }
+  }
+  return parts;
+}
+
+/** Slider letters used by the given equation texts, e.g. ["a", "b"] for "a*x^2 + b". */
+export function scanParamNames(...sources) {
+  const found = new Set();
+  for (const source of sources) {
+    const words = String(source ?? "").toLowerCase().match(/log2|[a-z]+/g) || [];
+    for (const word of words) {
+      for (const part of splitLetters(word)) if (part.length === 1 && PARAM_LETTERS.includes(part)) found.add(part);
+    }
+  }
+  return [...found].sort();
+}
+
+/** The equation texts of a graph that may contain slider letters, by graph mode. */
+export function graphEquationTexts(graph) {
+  if (graph.mode === "parametric") return [graph.xExpression, graph.yExpression];
+  if (graph.mode === "curve3d" || graph.mode === "parametricSurface3d") return [graph.xExpression, graph.yExpression, graph.zExpression];
+  return [graph.expression];
+}
+
+export const graphParamNames = (graph) => scanParamNames(...graphEquationTexts(graph));
+
+/** Slider settings for one letter, filling in defaults for anything not stored yet. */
+export function paramSpec(graph, name) {
+  const stored = graph.params?.[name];
+  const finite = (value, fallback) => (Number.isFinite(value) ? value : fallback);
+  return {
+    value: finite(stored?.value, PARAM_DEFAULT.value),
+    min: finite(stored?.min, PARAM_DEFAULT.min),
+    max: finite(stored?.max, PARAM_DEFAULT.max),
+  };
+}
+
+/** { a: 2, b: -1 } - the numbers the parser substitutes for slider letters. */
+export function paramConstants(graph) {
+  const constants = {};
+  for (const [name, spec] of Object.entries(graph?.params || {})) {
+    if (PARAM_LETTERS.includes(name) && Number.isFinite(spec?.value)) constants[name] = spec.value;
+  }
+  return constants;
+}
+
+/** Stable string of the slider values, for render caches. */
+export const paramKey = (graph) => JSON.stringify(paramConstants(graph));
+
+export function compileExpression(source, variables = ["x"], constants = {}) {
   const expression = source.trim().replace(/^y\s*=\s*/i, "").replace(/\*\*/g, "^");
-  const tokens = expression.match(/\d*\.?\d+(?:e[+-]?\d+)?|log2|[a-z]+|[()+\-*/^]/gi) || [];
+  const rawTokens = expression.match(/\d*\.?\d+(?:e[+-]?\d+)?|log2|[a-z]+|[()+\-*/^]/gi) || [];
   const compact = expression.replace(/\s+/g, "");
-  if (!compact || tokens.join("").toLowerCase() !== compact.toLowerCase()) {
+  if (!compact || rawTokens.join("").toLowerCase() !== compact.toLowerCase()) {
     throw new Error("Enter a valid equation using x, numbers, and supported operators.");
   }
+  const isParam = (token) => typeof token === "string" && token.length === 1 && PARAM_LETTERS.includes(token) && !variables.includes(token);
+  // Letters stuck together are separate factors: "ax" is a*x and "2sin(x)" is 2*sin(x)
+  const tokens = rawTokens.flatMap((token) => {
+    if (!/^[a-z]/i.test(token)) return [token];
+    const word = token.toLowerCase();
+    const parts = splitLetters(word);
+    if (!parts.every((part) => Object.hasOwn(FUNCTIONS, part) || part === "pi" || part === "e" || variables.includes(part) || isParam(part))) {
+      throw new Error(`"${word}" is not recognised. Use ${variables.join(", ")}, slider letters like a, b, c, numbers or supported functions.`);
+    }
+    return parts;
+  });
 
   let index = 0;
   const peek = () => tokens[index]?.toLowerCase();
   const take = () => tokens[index++]?.toLowerCase();
-  const startsValue = (token) => token === "(" || variables.includes(token) || token === "pi" || token === "e" || /^\d/.test(token || "");
+  const startsValue = (token) => token === "(" || variables.includes(token) || isParam(token) || token === "pi" || token === "e"
+    || /^\d/.test(token || "") || Boolean(token && Object.hasOwn(FUNCTIONS, token));
 
   const parsePrimary = () => {
     const token = take();
@@ -54,6 +137,10 @@ export function compileExpression(source, variables = ["x"]) {
       return value;
     }
     if (variables.includes(token)) return (...values) => values[variables.indexOf(token)];
+    if (isParam(token)) {
+      const value = Number.isFinite(constants[token]) ? constants[token] : PARAM_DEFAULT.value;
+      return () => value;
+    }
     if (token === "pi") return () => Math.PI;
     if (token === "e") return () => Math.E;
     if (/^\d/.test(token || "")) {
@@ -66,7 +153,8 @@ export function compileExpression(source, variables = ["x"]) {
       if (take() !== ")") throw new Error("Check the parentheses in your equation.");
       return (...values) => FUNCTIONS[token](arg(...values));
     }
-    throw new Error("Expected a number, x, or a supported function.");
+    if (!token) throw new Error("The equation looks unfinished.");
+    throw new Error(`"${token}" is not recognised. Use ${variables.join(", ")}, slider letters like a, b, c, numbers or supported functions.`);
   };
 
   const parsePower = () => {
@@ -184,8 +272,8 @@ export function sampleGraph(fn, { xMin, xMax, yMin, yMax, width, height }) {
   return segments;
 }
 
-export function fitGraphYRange(expression, xMin, xMax) {
-  const fn = compileExpression(expression);
+export function fitGraphYRange(expression, xMin, xMax, constants = {}) {
+  const fn = compileExpression(expression, ["x"], constants);
   const values = [];
   for (let i = 0; i <= 400; i++) {
     const y = fn(xMin + (xMax - xMin) * i / 400);
@@ -200,17 +288,17 @@ export function fitGraphYRange(expression, xMin, xMax) {
   return { yMin: low - padding, yMax: high + padding };
 }
 
-export function compileImplicitEquation(source) {
+export function compileImplicitEquation(source, constants = {}) {
   const parts = source.split("=");
   if (parts.length !== 2 || !parts[0].trim() || !parts[1].trim()) {
     throw new Error("Enter an equation with one equals sign, such as x^2 + y^2 = 25.");
   }
-  const left = compileExpression(parts[0], ["x", "y"]);
-  const right = compileExpression(parts[1], ["x", "y"]);
+  const left = compileExpression(parts[0], ["x", "y"], constants);
+  const right = compileExpression(parts[1], ["x", "y"], constants);
   return (x, y) => left(x, y) - right(x, y);
 }
 
-export function compileInequality(source) {
+export function compileInequality(source, constants = {}) {
   const match = source.match(/(<=|>=|<|>)/);
   if (!match || source.slice(match.index + match[0].length).match(/(<=|>=|<|>)/)) {
     throw new Error("Enter one inequality per line, such as y > 2x + 1.");
@@ -218,8 +306,8 @@ export function compileInequality(source) {
   const leftSource = source.slice(0, match.index).trim();
   const rightSource = source.slice(match.index + match[0].length).trim();
   if (!leftSource || !rightSource) throw new Error("Both sides of the inequality need an expression.");
-  const left = compileExpression(leftSource, ["x", "y"]);
-  const right = compileExpression(rightSource, ["x", "y"]);
+  const left = compileExpression(leftSource, ["x", "y"], constants);
+  const right = compileExpression(rightSource, ["x", "y"], constants);
   return {
     strict: match[0] === "<" || match[0] === ">",
     test: (x, y) => {
@@ -232,11 +320,11 @@ export function compileInequality(source) {
   };
 }
 
-export function compileInequalitySystem(source) {
+export function compileInequalitySystem(source, constants = {}) {
   const lines = source.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (!lines.length || lines.length > 8) throw new Error("Enter between one and eight inequalities, one per line.");
   if (lines.some((line) => line.length > 120)) throw new Error("Keep each inequality under 120 characters.");
-  return lines.map(compileInequality);
+  return lines.map((line) => compileInequality(line, constants));
 }
 
 export function sampleInequalityRegion(constraints, { xMin, xMax, yMin, yMax, width, height }) {
@@ -412,28 +500,29 @@ export function graphSegments(graph, width, height) {
   const options = {
     xMin: graph.xMin, xMax: graph.xMax, yMin: graph.yMin, yMax: graph.yMax, width, height,
   };
+  const constants = paramConstants(graph);
   if (graph.mode === "implicit") {
-    return sampleImplicit(compileImplicitEquation(graph.expression), options);
+    return sampleImplicit(compileImplicitEquation(graph.expression, constants), options);
   }
   if (graph.mode === "inequality") {
-    return compileInequalitySystem(graph.expression).flatMap((constraint) => sampleImplicit(constraint.residual, options));
+    return compileInequalitySystem(graph.expression, constants).flatMap((constraint) => sampleImplicit(constraint.residual, options));
   }
   if (graph.mode === "parametric") {
     return sampleParametric(
-      compileExpression(graph.xExpression, ["t"]),
-      compileExpression(graph.yExpression, ["t"]),
+      compileExpression(graph.xExpression, ["t"], constants),
+      compileExpression(graph.yExpression, ["t"], constants),
       { ...options, tMin: graph.tMin, tMax: graph.tMax }
     );
   }
   if (graph.mode === "polar") {
-    const radius = compileExpression(graph.expression, ["t"]);
+    const radius = compileExpression(graph.expression, ["t"], constants);
     return sampleParametric(
       (t) => radius(t) * Math.cos(t),
       (t) => radius(t) * Math.sin(t),
       { ...options, tMin: graph.tMin, tMax: graph.tMax }
     );
   }
-  return sampleGraph(compileExpression(graph.expression), options);
+  return sampleGraph(compileExpression(graph.expression, ["x"], constants), options);
 }
 
 export function fitGraphRanges(graph) {
@@ -441,7 +530,7 @@ export function fitGraphRanges(graph) {
     return { xMin: graph.xMin, xMax: graph.xMax, yMin: graph.yMin, yMax: graph.yMax };
   }
   if (!graph.mode || graph.mode === "explicit") {
-    return { ...fitGraphYRange(graph.expression, graph.xMin, graph.xMax), xMin: graph.xMin, xMax: graph.xMax };
+    return { ...fitGraphYRange(graph.expression, graph.xMin, graph.xMax, paramConstants(graph)), xMin: graph.xMin, xMax: graph.xMax };
   }
   const segments = graphSegments(graph, 360, 240);
   const points = segments.flat();

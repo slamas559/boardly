@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import {
   Activity, AlignCenter, AlignLeft, AlignRight, ArrowUpRight, Bold, Brush, Circle, Copy, Crosshair, Diamond, Eraser, Hand, Highlighter, ImagePlus, Link2,
   Hexagon, Italic, Lock, Minus, MousePointer2, PenLine, Plus, Redo2, Shapes, SlidersHorizontal, Square, Star, Strikethrough, Trash2,
-  RectangleHorizontal, Table2, Triangle,
+  RectangleHorizontal, Sigma, Table2, Triangle,
   Type, Underline, Undo2, Unlock,
 } from "lucide-react";
 import { FONT_OPTIONS, FONT_STACKS, HIGHLIGHT_PALETTE, PALETTE, SHAPE_KINDS, TEXT_SIZES } from "./constants.js";
@@ -43,7 +43,7 @@ function ToolButton({ icon: Icon, label, shortcut, active, onClick, disabled, ch
 const Divider = () => <div className="mx-0.5 h-6 w-px shrink-0 bg-line md:mx-0 md:my-0.5 md:h-px md:w-6" />;
 
 export function ToolRail({
-  mode, tool, onTool, lastShape, canUndo, canRedo, onUndo, onRedo, keepTool, onKeepTool, onCreateGraph, onCreateTable, onAddVideoLink,
+  mode, tool, onTool, lastShape, canUndo, canRedo, onUndo, onRedo, keepTool, onKeepTool, onCreateGraph, onCreateEquation, onCreateTable, onAddVideoLink,
   onStyleToggle, styleSwatch, hasStyle, styleOpen, styleLabel = "Style", onUploadMedia, mediaUploading = false,
 }) {
   const [shapesOpen, setShapesOpen] = useState(false);
@@ -157,6 +157,7 @@ export function ToolRail({
         <>
           <Divider />
           <ToolButton icon={Activity} label="Add graph" onClick={onCreateGraph} />
+          <ToolButton icon={Sigma} label="Add equation" onClick={onCreateEquation} />
           <ToolButton icon={Table2} label="Add table" onClick={onCreateTable} />
           <ToolButton icon={ImagePlus} label={mediaUploading ? "Uploading media" : "Add image or video"} disabled={mediaUploading} onClick={onUploadMedia} />
           <ToolButton icon={Link2} label="Add video link" onClick={onAddVideoLink} />

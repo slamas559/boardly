@@ -7,7 +7,7 @@ import {
   FONT_STACKS, LINE_HEIGHT, STYLE_GROUP, uid,
 } from "./constants.js";
 import {
-  dist, hitGraphGeometry, hitObject, isMovable, measureText, movePatch, objectInRect, q, scalePatch,
+  dist, hitGraphGeometry, hitGraphTrace, hitObject, isMovable, measureText, movePatch, objectInRect, q, scalePatch,
 } from "./geometry.js";
 import { cleanupUnusedMedia, drawGrid, drawObject, drawSelection, getVideoPlaybackState, handlePoints, isVideoPlaying, seekVideo, setVideoPlayback, videoPlaybackPatch } from "./render.js";
 import { cursorFor } from "./cursors.js";
@@ -38,6 +38,7 @@ const Surface = forwardRef(function Surface(
     onStrokeChunk,
     onLivePreview,
     onEditingChange,
+    onEquationEdit,
     onToolChange,
     keepTool = false,
     className = "",
@@ -226,7 +227,9 @@ const Surface = forwardRef(function Surface(
     const redraw = () => schedule();
     window.addEventListener("boardly-3d-renderer-ready", redraw);
     window.addEventListener("boardly-media-ready", redraw);
+    window.addEventListener("boardly-math-ready", redraw);
     return () => {
+      window.removeEventListener("boardly-math-ready", redraw);
       window.removeEventListener("boardly-3d-renderer-ready", redraw);
       window.removeEventListener("boardly-media-ready", redraw);
     };
@@ -593,6 +596,13 @@ const Surface = forwardRef(function Surface(
             canvas.style.cursor = "grabbing";
             break;
           }
+          // Dragging the trace dot slides it along the curve
+          if (hitGraphTrace(graph, p, 16 / v.k)) {
+            e.preventDefault();
+            drag.current = { type: "graphTrace", obj: graph, moved: false };
+            canvas.style.cursor = "grabbing";
+            break;
+          }
           const geometryId = hitGraphGeometry(selected[0], p, 8 / v.k);
           if (geometryId) {
             drag.current = { type: "graphGeometry", obj: selected[0], geometryId, start: p };
@@ -609,7 +619,7 @@ const Surface = forwardRef(function Surface(
             : {
               type: "resize", index: hi, objs: objs.map((o) => ({ ...o })),
               anchor: handles[(hi + 2) % 4], corner: handles[hi],
-              uniform: objs.some((o) => o.type === "text") || e.shiftKey,
+              uniform: objs.some((o) => o.type === "text" || o.type === "equation") || e.shiftKey,
             };
           break;
         }
@@ -825,6 +835,17 @@ const Surface = forwardRef(function Surface(
         sharePreview(preview);
         break;
       }
+      case "graphTrace": {
+        const graph = d.obj;
+        const width = Math.max(20, graph.w - 54);
+        const x = graph.xMin + ((p[0] - graph.x - 42) / width) * (graph.xMax - graph.xMin);
+        const clamped = Math.max(graph.xMin, Math.min(graph.xMax, x));
+        d.moved = true;
+        const preview = { ...graph, trace: { ...graph.trace, x: Number(clamped.toFixed(4)) } };
+        transient.current.set(graph.id, preview);
+        sharePreview(preview);
+        break;
+      }
       case "graphCamera": {
         const deltaX = e.clientX - d.start[0];
         const deltaY = e.clientY - d.start[1];
@@ -952,6 +973,14 @@ const Surface = forwardRef(function Surface(
         clearPreview(d.obj.id, d.obj.page);
         break;
       }
+      case "graphTrace": {
+        const updated = transient.current.get(d.obj.id);
+        transient.current.clear();
+        if (updated && d.moved) s.commit([{ op: "update", id: d.obj.id, patch: { trace: updated.trace } }]);
+        clearPreview(d.obj.id, d.obj.page);
+        if (canvasRef.current) canvasRef.current.style.cursor = cursorRef.current;
+        break;
+      }
       case "graphCamera": {
         const updated = transient.current.get(d.obj.id);
         transient.current.clear();
@@ -974,7 +1003,7 @@ const Surface = forwardRef(function Surface(
     pointers.current.delete(e.pointerId);
     if (drag.current?.type === "stroke" && drag.current.sent > 0) finishStroke();
     if (drag.current?.type === "pan" && canvasRef.current) canvasRef.current.style.cursor = cursorRef.current;
-    if (drag.current?.type === "graphCamera" && canvasRef.current) canvasRef.current.style.cursor = cursorRef.current;
+    if ((drag.current?.type === "graphCamera" || drag.current?.type === "graphTrace") && canvasRef.current) canvasRef.current.style.cursor = cursorRef.current;
     if (drag.current?.obj?.id) clearPreview(drag.current.obj.id, drag.current.obj.page);
     if (drag.current?.type === "shape" || drag.current?.type === "markup") clearPreview(drag.current.obj.id, drag.current.obj.page);
     for (const [id, obj] of transient.current) clearPreview(id, obj.page);
@@ -1003,6 +1032,12 @@ const Surface = forwardRef(function Surface(
       tableEditRef.current = edit;
       setTableEditing(edit);
       onSelectedChange?.([table.id]);
+      return;
+    }
+    const formula = objectsTopFirst().find((o) => o.type === "equation" && hitObject(o, p, 4 / v.k));
+    if (formula) {
+      onSelectedChange?.([formula.id]);
+      onEquationEdit?.(formula.id);
       return;
     }
     const hit = objectsTopFirst().find((o) => o.type === "text" && hitObject(o, p, 4 / v.k));

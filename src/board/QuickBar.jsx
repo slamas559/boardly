@@ -60,10 +60,12 @@ export default function QuickBar({ tools, store, surfaceRef, inspector, view, si
   if (left > size.w || top > size.h || left + width < 0 || top + height < 0) return null;
 
   const graph = objects.length === 1 && objects[0].type === "graph" ? objects[0] : null;
-  const colour = graph ? graph.color || "#2540D9" : group && activeStyle ? activeStyle.color : null;
-  const palette = graph ? PALETTE.filter((c) => c !== "#FFFFFF") : group === "highlighter" || group === "markup" ? HIGHLIGHT_PALETTE : PALETTE;
+  const formula = objects.length === 1 && objects[0].type === "equation" ? objects[0] : null;
+  const own = graph || formula; // graphs and formulas keep their colour on the object itself
+  const colour = graph ? graph.color || "#2540D9" : formula ? formula.color || "#17181C" : group && activeStyle ? activeStyle.color : null;
+  const palette = own ? PALETTE.filter((c) => c !== "#FFFFFF") : group === "highlighter" || group === "markup" ? HIGHLIGHT_PALETTE : PALETTE;
   const pickColour = (c) => {
-    if (graph) store.commit([{ op: "update", id: graph.id, patch: { color: c } }], { coalesce: `graph-color:${graph.id}` });
+    if (own) store.commit([{ op: "update", id: own.id, patch: { color: c } }], { coalesce: `${graph ? "graph" : "equation"}-color:${own.id}` });
     else tools.setStyle({ color: c });
     setPaletteOpen(false);
   };
@@ -99,8 +101,8 @@ export default function QuickBar({ tools, store, surfaceRef, inspector, view, si
             <span className="h-5 w-5 rounded-[5px] border border-black/15" style={{ background: colour }} />
           </button>
         )}
-        {!inspector.visible && inspector.kind === "graph" && (
-          <button type="button" onClick={() => inspector.open()} title="Edit graph" className="flex h-8 items-center gap-1.5 rounded-md px-2 text-sm text-gray-700 hover:bg-sunken">
+        {!inspector.visible && (inspector.kind === "graph" || inspector.kind === "equation") && (
+          <button type="button" onClick={() => inspector.open()} title={inspector.kind === "graph" ? "Edit graph" : "Edit equation"} className="flex h-8 items-center gap-1.5 rounded-md px-2 text-sm text-gray-700 hover:bg-sunken">
             <Pencil size={15} /> Edit
           </button>
         )}

@@ -32,7 +32,8 @@ export function useInspector(tools) {
   const { selectedObjects, selectedIds, group, activeStyle, tool, editingObj } = tools;
   const selectedGraph = selectedObjects.length === 1 && selectedObjects[0].type === "graph" ? selectedObjects[0] : null;
   const showsStyle = Boolean(group && activeStyle && ![ "eraser", "laser", "select", "pan" ].includes(tool)) || selectedIds.length > 0 || Boolean(editingObj);
-  const kind = selectedGraph ? "graph" : group && activeStyle && showsStyle ? "style" : null;
+  const selectedEquation = selectedObjects.length === 1 && selectedObjects[0].type === "equation" ? selectedObjects[0] : null;
+  const kind = selectedGraph ? "graph" : selectedEquation ? "equation" : group && activeStyle && showsStyle ? "style" : null;
   const visible = kind !== null && (desktop ? desktopOpen : sheet.open);
 
   const rememberDesktop = useCallback((value) => {
@@ -40,16 +41,18 @@ export function useInspector(tools) {
     try { window.localStorage.setItem(STORAGE_KEY, value ? "1" : "0"); } catch { /* storage unavailable */ }
   }, []);
 
-  // Phones: selecting a graph slides the sheet up to its "peek" height so the equation can be edited at once
-  const graphId = selectedGraph?.id ?? null;
-  const lastGraphId = useRef(null);
+  // Phones: selecting a graph slides the sheet up to its "peek" height so the equation can be edited at once;
+  // selecting a formula opens it at half height, where the math keyboard is
+  const panelId = selectedGraph?.id ?? selectedEquation?.id ?? null;
+  const panelSnap = selectedEquation ? "half" : "peek";
+  const lastPanelId = useRef(null);
   useEffect(() => {
     if (!desktop) {
-      if (graphId && graphId !== lastGraphId.current) setSheet({ open: true, snap: "peek" });
-      else if (!graphId && lastGraphId.current) setSheet((s) => ({ ...s, open: false }));
+      if (panelId && panelId !== lastPanelId.current) setSheet({ open: true, snap: panelSnap });
+      else if (!panelId && lastPanelId.current) setSheet((s) => ({ ...s, open: false }));
     }
-    lastGraphId.current = graphId;
-  }, [graphId, desktop]);
+    lastPanelId.current = panelId;
+  }, [panelId, panelSnap, desktop]);
 
   const open = useCallback((snap = "half") => {
     if (desktop) rememberDesktop(true);
@@ -68,7 +71,7 @@ export function useInspector(tools) {
   }, [desktop]);
 
   return {
-    kind, selectedGraph, desktop, visible, open, close, toggle, onToolPicked, sheet, setSheet, setSheetHeight,
+    kind, selectedGraph, selectedEquation, desktop, visible, open, close, toggle, onToolPicked, sheet, setSheet, setSheetHeight,
     dockWidth: desktop && visible ? DOCK_WIDTH : 0, // how much canvas width the dock takes
     insetBottom: !desktop && visible ? sheetHeight + PHONE_RAIL_CLEARANCE : 0, // how much canvas height a phone sheet covers
   };

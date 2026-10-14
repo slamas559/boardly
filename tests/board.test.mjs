@@ -2,9 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ObjectStore } from '../src/board/store.js';
 import { BOARD_TOOLS, PDF_TOOLS, SHAPE_KINDS, STYLE_GROUP } from '../src/board/constants.js';
-import { getBounds, hitGraphGeometry, hitObject, movePatch, scalePatch, segDist } from '../src/board/geometry.js';
+import { getBounds, hitGraphGeometry, hitGraphTrace, hitObject, isMovable, movePatch, scalePatch, segDist } from '../src/board/geometry.js';
+import { findKeyPoints, formatNumber, tracePoint } from '../src/board/graphAnalysis.js';
+import { KEYS, backspace, insertSnippet, nextSlot, stepCaret } from '../src/board/mathKeys.js';
+import { MAX_LATEX_LENGTH, ensureMath, equationSvgUrl, estimateEquationSize, measureEquation, renderLatex } from '../src/board/mathRender.js';
 import {
-  compileExpression, compileImplicitEquation, compileInequality, compileInequalitySystem, fitGraphRanges, fitGraphYRange, graphGeometryPixels, graphSegments, sampleGraph, sampleImplicit, sampleInequalityRegion,
+  compileExpression, compileImplicitEquation, compileInequality, compileInequalitySystem, fitGraphRanges, fitGraphYRange, graphGeometryPixels, graphParamNames, graphSegments, paramConstants, paramSpec, sampleGraph, sampleImplicit, sampleInequalityRegion, scanParamNames,
 } from '../src/board/graphMath.js';
 import { buildGraphPatch, graphToForm, normalizeEquation } from '../src/board/graphValidation.js';
 import { sampleParametricCurve3d, sampleParametricSurfaceMesh, sampleSurfaceMesh } from '../src/board/graph3d.js';
@@ -392,4 +395,201 @@ test('graph form: an untouched graph round-trips to the same patch (no spurious 
   const first = buildGraphPatch('explicit', graphToForm(graph), []);
   const again = buildGraphPatch('explicit', graphToForm({ ...graph, ...first.patch }), []);
   assert.equal(JSON.stringify(again.patch), JSON.stringify(first.patch));
+});
+
+/* ------------------------------ sliders, trace point and key points ------------------------------ */
+
+test('slider letters use their value, default to 1, and may be written next to other factors', () => {
+  assert.equal(compileExpression('a*x^2 + b', ['x'], { a: 2, b: 1 })(3), 19);
+  assert.equal(compileExpression('ax', ['x'], { a: 3 })(2), 6);
+  assert.equal(compileExpression('a', ['x'])(0), 1); // no slider value stored yet
+  assert.equal(compileExpression('a(x-h)^2+k', ['x'], { a: 2, h: 1, k: -3 })(3), 5);
+  assert.ok(Math.abs(compileExpression('2sin(x)', ['x'])(Math.PI / 2) - 2) < 1e-12);
+  assert.ok(Math.abs(compileExpression('x sin(x)', ['x'])(Math.PI / 2) - Math.PI / 2) < 1e-12);
+  assert.equal(compileExpression('asin(1) * 2 / pi', ['x'])(0), 1); // a function name still wins over a*s*i*n
+  assert.equal(compileImplicitEquation('x^2 + y^2 = r^2', { r: 5 })(3, 4), 0);
+  assert.equal(compileInequality('y > a*x', { a: 2 }).test(1, 3), true);
+  assert.equal(compileInequality('y > a*x', { a: 2 }).test(1, 1), false);
+});
+
+test('unknown words are reported by name and cannot reach anything outside the maths', () => {
+  assert.throws(() => compileExpression('foo(x)'), /"foo" is not recognised/);
+  assert.throws(() => compileExpression('y = z'), /"z" is not recognised/);
+  assert.throws(() => compileExpression('globalThis.alert(1)'));
+  assert.throws(() => compileExpression('constructor'));
+  assert.throws(() => compileExpression('__proto__'));
+  assert.throws(() => compileExpression('x +'), /unfinished/);
+  // x is the variable here, so it is never mistaken for a slider letter
+  assert.deepEqual(scanParamNames('a*x^2 + b*x + c'), ['a', 'b', 'c']);
+  assert.deepEqual(scanParamNames('2sin(x) + abs(x)'), []);
+  assert.deepEqual(scanParamNames('x^2 + y^2 = r^2'), ['r']);
+  assert.deepEqual(graphParamNames({ mode: 'parametric', xExpression: 'a*cos(t)', yExpression: 'b*sin(t)' }), ['a', 'b']);
+});
+
+test('graphs follow their slider values', () => {
+  const graph = { mode: 'explicit', expression: 'a*x', xMin: -10, xMax: 10, yMin: -10, yMax: 10 };
+  const topOfLine = (params) => graphSegments({ ...graph, params }, 200, 200)[0].at(-1).y;
+  const flat = topOfLine({ a: { value: 0, min: -10, max: 10 } });
+  const steep = topOfLine({ a: { value: 1, min: -10, max: 10 } });
+  assert.ok(Math.abs(flat - 100) < 0.5); // y = 0 sits on the middle row
+  assert.ok(Math.abs(steep - 0) < 0.5); // y = 10 sits on the top row
+  assert.deepEqual(paramConstants({ params: { a: { value: 2, min: 0, max: 5 }, '__proto__': { value: 9 } } }), { a: 2 });
+  assert.deepEqual(paramSpec({ params: {} }, 'a'), { value: 1, min: -10, max: 10 });
+  assert.deepEqual(paramSpec({ params: { a: { value: 4, min: 0, max: 5 } } }, 'a'), { value: 4, min: 0, max: 5 });
+});
+
+test('the equation form patch leaves sliders alone, so dragging one never rewrites the equation', () => {
+  const graph = { mode: 'explicit', expression: 'a*x^2', xMin: -10, xMax: 10, yMin: -10, yMax: 10, params: { a: { value: 3, min: -10, max: 10 } } };
+  const result = buildGraphPatch('explicit', graphToForm(graph), []);
+  assert.ok(result.ok);
+  assert.equal('params' in result.patch, false);
+  assert.equal('trace' in result.patch, false);
+  assert.equal('keyPoints' in result.patch, false);
+});
+
+test('repeated slider updates coalesce into one undo step', () => {
+  const store = new ObjectStore();
+  store.commit([{ op: 'add', obj: { id: 'g', type: 'graph', page: 0, expression: 'a*x', params: { a: { value: 1, min: -10, max: 10 } } } }]);
+  for (const value of [1.5, 2, 2.5, 3]) {
+    store.commit([{ op: 'update', id: 'g', patch: { params: { a: { value, min: -10, max: 10 } } } }], { coalesce: 'graph-params:g' });
+  }
+  assert.equal(store.get('g').params.a.value, 3);
+  store.undo();
+  assert.equal(store.get('g').params.a.value, 1);
+});
+
+test('key points: roots, intercept and turning points of a parabola', () => {
+  const graph = { mode: 'explicit', expression: 'x^2 - 4', xMin: -10, xMax: 10, yMin: -10, yMax: 10 };
+  const found = findKeyPoints(graph);
+  assert.equal(found.roots.length, 2);
+  assert.ok(Math.abs(found.roots[0].x + 2) < 1e-6 && Math.abs(found.roots[1].x - 2) < 1e-6);
+  assert.deepEqual(found.yIntercept, { x: 0, y: -4 });
+  assert.equal(found.extrema.length, 1);
+  assert.equal(found.extrema[0].kind, 'min');
+  assert.ok(Math.abs(found.extrema[0].x) < 1e-4 && Math.abs(found.extrema[0].y + 4) < 1e-6);
+});
+
+test('key points follow sliders and ignore what is off screen', () => {
+  const graph = { mode: 'explicit', expression: 'a(x-h)^2+k', xMin: -10, xMax: 10, yMin: -10, yMax: 10,
+    params: { a: { value: 2, min: -5, max: 5 }, h: { value: 1, min: -5, max: 5 }, k: { value: -3, min: -5, max: 5 } } };
+  const found = findKeyPoints(graph);
+  assert.ok(Math.abs(found.extrema[0].x - 1) < 1e-4 && Math.abs(found.extrema[0].y + 3) < 1e-6);
+  assert.equal(found.roots.length, 2);
+  assert.equal(findKeyPoints({ ...graph, expression: 'x^2 + 3' }).roots.length, 0); // no roots exist
+  assert.equal(findKeyPoints({ ...graph, params: undefined, expression: 'x^2', yMin: 2, yMax: 8 }).roots.length, 0); // y = 0 is not in view
+});
+
+test('key points do not report breaks in the curve as roots or turning points', () => {
+  const view = { mode: 'explicit', xMin: -10, xMax: 10, yMin: -10, yMax: 10 };
+  const reciprocal = findKeyPoints({ ...view, expression: '1/x' });
+  assert.deepEqual([reciprocal.roots.length, reciprocal.extrema.length], [0, 0]);
+  const tangent = findKeyPoints({ ...view, expression: 'tan(x)' });
+  assert.equal(tangent.extrema.length, 0);
+  assert.ok(tangent.roots.every((root) => Math.abs(root.x / Math.PI - Math.round(root.x / Math.PI)) < 1e-6));
+  assert.deepEqual(findKeyPoints({ ...view, mode: 'polar', expression: '2' }), { roots: [], extrema: [], yIntercept: null });
+});
+
+test('trace point reads out y and slope, and can be grabbed on the board', () => {
+  const graph = { id: 'g', type: 'graph', mode: 'explicit', expression: 'x^2', x: 100, y: 100, w: 554, h: 358,
+    xMin: -10, xMax: 10, yMin: -10, yMax: 100, trace: { x: 3, tangent: true } };
+  const width = graph.w - 54;
+  const height = graph.h - 58;
+  const point = tracePoint(graph, width, height);
+  assert.ok(Math.abs(point.y - 9) < 1e-9);
+  assert.ok(Math.abs(point.slope - 6) < 1e-4);
+  const world = [graph.x + 42 + point.px, graph.y + 24 + point.py];
+  assert.equal(hitGraphTrace(graph, world, 16), true);
+  assert.equal(hitGraphTrace(graph, [world[0] + 60, world[1]], 16), false);
+  assert.equal(hitGraphTrace({ ...graph, trace: null }, world, 16), false);
+  assert.equal(tracePoint({ ...graph, expression: 'sqrt(x)', trace: { x: -4 } }, width, height), null); // no value there
+  assert.equal(tracePoint({ ...graph, trace: { x: 99 } }, width, height).x, 10); // clamped to the visible range
+  assert.equal(formatNumber(3.14159265), '3.142');
+  assert.equal(formatNumber(1e-12), '0');
+});
+
+/* ------------------------------ equation blocks and the math keyboard ------------------------------ */
+
+test('keyboard snippets drop the caret in the right place and wrap a selection', () => {
+  assert.deepEqual(insertSnippet('2+', 2, 2, '\\frac{‸}{}'), { text: '2+\\frac{}{}', caret: 8 });
+  assert.deepEqual(insertSnippet('x+1', 0, 3, '\\sqrt{‸}'), { text: '\\sqrt{x+1}', caret: 9 }); // selection moves into the root
+  assert.deepEqual(insertSnippet('ab', 1, 1, '\\pi '), { text: 'a\\pi b', caret: 5 });
+  assert.deepEqual(insertSnippet('abc', 0, 3, '7'), { text: '7', caret: 1 }); // typing over a selection replaces it
+});
+
+test('backspace and arrows treat a LaTeX command as one step', () => {
+  assert.deepEqual(backspace('a\\alpha ', 8, 8), { text: 'a', caret: 1 });
+  assert.deepEqual(backspace('abc', 3, 3), { text: 'ab', caret: 2 });
+  assert.deepEqual(backspace('abc', 1, 3), { text: 'a', caret: 1 });
+  assert.deepEqual(backspace('abc', 0, 0), { text: 'abc', caret: 0 });
+  assert.equal(stepCaret('\\alpha x', 0, 1), 7);
+  assert.equal(stepCaret('\\alpha x', 7, -1), 0);
+  assert.equal(stepCaret('ab', 2, 1), 2);
+});
+
+test('the next-box key walks through fraction boxes and matrix cells', () => {
+  const fraction = insertSnippet('', 0, 0, '\\frac{‸}{}');
+  assert.equal(nextSlot(fraction.text, fraction.caret), 8); // the empty denominator
+  const matrix = insertSnippet('', 0, 0, '\\begin{pmatrix} ‸ &  \\\\  &  \\end{pmatrix}');
+  const second = nextSlot(matrix.text, matrix.caret);
+  assert.ok(matrix.text.slice(0, second).endsWith('& '));
+  assert.ok(nextSlot(matrix.text, second) > second);
+  assert.equal(nextSlot('abc', 1), 3); // nothing left to jump to: the end
+});
+
+test('every ready-made key and formula typesets without errors', async () => {
+  await ensureMath();
+  const needsContext = (key) => key.insert.trim() === '&';
+  for (const [tab, keys] of Object.entries(KEYS)) {
+    for (const key of keys.filter((item) => item.insert && !needsContext(item))) {
+      const result = renderLatex(key.insert.replace('‸', ''));
+      assert.equal(result.error, '', `${tab} key "${key.label}" gave: ${result.error}`);
+    }
+  }
+});
+
+test('formulas are measured from their typeset size and bad ones are reported', async () => {
+  await ensureMath();
+  const small = measureEquation('x^2', 36);
+  const big = measureEquation('x^2', 72);
+  assert.ok(small.w > 10 && small.h > 10);
+  assert.ok(Math.abs(big.w / small.w - 2) < 0.02 && Math.abs(big.h / small.h - 2) < 0.02); // scales with the font size
+  const fraction = measureEquation('\\frac{a}{b}', 36);
+  assert.ok(fraction.h > measureEquation('a', 36).h); // a fraction is taller than a letter
+  assert.match(measureEquation('\\frac{1}{', 36).error, /brace/i);
+  assert.ok(measureEquation('\\notacommand{x}', 36).error);
+  assert.ok(measureEquation('   ', 36).error);
+  assert.match(measureEquation('x'.repeat(MAX_LATEX_LENGTH + 1), 36).error, /under/);
+  const guess = estimateEquationSize('y = x^{2}', 44);
+  assert.ok(guess.w > 0 && guess.h > 0);
+});
+
+test('formula images are plain SVG with the chosen colour and nothing that can run', async () => {
+  await ensureMath();
+  const url = equationSvgUrl('E = mc^2', '#2540D9');
+  assert.ok(url.startsWith('data:image/svg+xml'));
+  const svg = Buffer.from(url.slice(url.indexOf(',') + 1), 'base64').toString('utf8');
+  assert.ok(svg.includes('#2540D9') && !svg.includes('currentColor'));
+  assert.ok(!/<script|onload=|javascript:|<foreignObject|href=/i.test(svg));
+  // A hostile colour string is replaced instead of being written into the image
+  const hostile = Buffer.from(equationSvgUrl('x', 'red" onload="alert(1)').split(',')[1], 'base64').toString('utf8');
+  assert.ok(!hostile.includes('onload'));
+  assert.equal(equationSvgUrl('\\frac{1}{', '#000'), null);
+  // MathJax cannot be talked into loading files or running code
+  for (const hostileTex of ['\\href{javascript:alert(1)}{x}', '\\unicode{x41}', '\\require{html}', '\\input{/etc/passwd}', '\\newcommand{\\x}{\\x}\\x']) {
+    const result = renderLatex(hostileTex);
+    assert.ok(result.error || !/<script|javascript:|<a /i.test(result.svg), hostileTex);
+  }
+});
+
+test('equation blocks move, resize with their text and are hit like other objects', () => {
+  const eq = { id: 'e', type: 'equation', page: 0, x: 100, y: 50, w: 200, h: 60, latex: 'x', fontSize: 40, color: '#17181C' };
+  assert.deepEqual(getBounds(eq), { x: 100, y: 50, w: 200, h: 60 });
+  assert.equal(hitObject(eq, [150, 70], 0), true);
+  assert.equal(hitObject(eq, [400, 70], 0), false);
+  assert.deepEqual(movePatch(eq, 10, -5), { x: 110, y: 45 });
+  const grown = scalePatch(eq, 2, 1.5, 100, 50);
+  assert.equal(grown.w, 400);
+  assert.equal(grown.h, 120);
+  assert.equal(grown.fontSize, 80); // proportions are kept: the font grows with the box
+  assert.ok(isMovable(eq));
 });

@@ -5,8 +5,10 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronRight, X } from "lucide-react";
 import GraphInspector from "./GraphInspector.jsx";
+import EquationInspector from "./EquationInspector.jsx";
 import { STYLE_TITLES } from "./constants.js";
 import { StylePanel } from "./Toolbar.jsx";
+import { graphParamNames } from "./graphMath.js";
 import { MODE_LABELS } from "./graphValidation.js";
 
 function PanelBody({ mode, tools, store, surfaceRef, inspector, peek = false }) {
@@ -16,6 +18,17 @@ function PanelBody({ mode, tools, store, surfaceRef, inspector, peek = false }) 
       <GraphInspector
         key={graph.id}
         graph={graph}
+        store={store}
+        peek={peek}
+        onExpand={() => inspector.setSheet({ open: true, snap: "half" })}
+      />
+    );
+  }
+  if (inspector.kind === "equation" && inspector.selectedEquation) {
+    return (
+      <EquationInspector
+        key={inspector.selectedEquation.id}
+        equation={inspector.selectedEquation}
         store={store}
         peek={peek}
         onExpand={() => inspector.setSheet({ open: true, snap: "half" })}
@@ -37,6 +50,7 @@ function PanelBody({ mode, tools, store, surfaceRef, inspector, peek = false }) 
 
 function titleOf(inspector, tools) {
   if (inspector.kind === "graph") return { title: "Graph", subtitle: MODE_LABELS[inspector.selectedGraph?.mode || "explicit"] };
+  if (inspector.kind === "equation") return { title: "Equation", subtitle: "" };
   const count = tools.selectedIds.length;
   return { title: STYLE_TITLES[tools.group] || "Style", subtitle: count > 1 ? `${count} selected` : "" };
 }
@@ -75,10 +89,17 @@ function SheetDock(props) {
   const [dragHeight, setDragHeight] = useState(null);
   const { title, subtitle } = titleOf(inspector, tools);
 
-  const snaps = inspector.kind === "graph" ? ["peek", "half", "full"] : ["half", "full"];
+  const hasPeek = inspector.kind === "graph" || inspector.kind === "equation";
+  const snaps = hasPeek ? ["peek", "half", "full"] : ["half", "full"];
   const snap = snaps.includes(inspector.sheet.snap) ? inspector.sheet.snap : "half";
   const vh = typeof window !== "undefined" ? window.innerHeight : 800;
-  const heights = { peek: 132, half: Math.round(vh * 0.46), full: Math.round(vh * 0.8) };
+  // The peek height makes room for up to two slider rows so a presenter can scrub without expanding the sheet
+  const sliderRows = inspector.kind === "graph" && inspector.selectedGraph ? Math.min(2, graphParamNames(inspector.selectedGraph).length) : 0;
+  // A formula sheet is taller: its half height has to hold the preview, the field and the whole keyboard
+  const formula = inspector.kind === "equation";
+  const heights = formula
+    ? { peek: 268, half: Math.round(vh * 0.62), full: Math.round(vh * 0.86) }
+    : { peek: 132 + sliderRows * 46 + (sliderRows ? 40 : 0), half: Math.round(vh * 0.46), full: Math.round(vh * 0.8) };
   const setSnap = (next) => inspector.setSheet({ open: true, snap: next });
 
   // Report the sheet's real height so the board can keep the selected graph visible above it
@@ -145,7 +166,7 @@ function SheetDock(props) {
         </button>
       </div>
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-        <PanelBody {...props} peek={inspector.kind === "graph" && snap === "peek"} />
+        <PanelBody {...props} peek={hasPeek && snap === "peek"} />
       </div>
     </div>
   );

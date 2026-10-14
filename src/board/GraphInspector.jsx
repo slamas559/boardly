@@ -2,7 +2,9 @@
 // graph change while typing instead of pressing "Apply". Rendered inside the properties dock.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PALETTE, uid } from "./constants.js";
-import { fitGraphRanges } from "./graphMath.js";
+import { fitGraphRanges, scanParamNames } from "./graphMath.js";
+import GraphParams from "./GraphParams.jsx";
+import GraphExplore from "./GraphExplore.jsx";
 import {
   GRAPH_ELEMENT_FIELDS, MODE_LABELS, buildGraphPatch, graphToForm, is3dMode, isMultiInputMode, normalizeEquation, validateGraphExpressions,
 } from "./graphValidation.js";
@@ -19,7 +21,10 @@ const PLACEHOLDERS = {
   inequality: "y > 2x + 1\nx^2 + y^2 <= 16",
 };
 
-const TAB_LABELS = { equation: "Equation", range: "Range", geometry: "Geometry", view3d: "3D view" };
+const TAB_LABELS = { equation: "Equation", range: "Range", explore: "Explore", geometry: "Geometry", view3d: "3D view" };
+
+// One-tap starting points that show off sliders
+const SLIDER_EXAMPLES = ["a*x^2 + b*x + c", "a*sin(b*x)", "a*(x-h)^2 + k"];
 
 function signatureOf(graph) {
   const result = buildGraphPatch(graph.mode || "explicit", graphToForm(graph), graph.geometry || []);
@@ -150,6 +155,10 @@ export default function GraphInspector({ graph, store, peek = false, onExpand })
   const parametric = ["parametric", "curve3d", "parametricSurface3d"].includes(mode);
   const var1 = mode === "parametricSurface3d" ? "u, v" : "t";
 
+  // Letters like a, b, c in the equation become sliders (read from the text being typed, so they appear at once)
+  const paramNames = scanParamNames(...(parametric ? [form.xExpression, form.yExpression, ...(is3d ? [form.zExpression] : [])] : [form.expression]));
+  const sliders = <GraphParams graph={graph} names={paramNames} store={store} />;
+
   const textInput = (name, label, aria) => (
     <label className="block text-xs font-medium">{label}
       <input value={form[name]} onChange={(e) => setField(name, e.target.value)} className={inputCls} aria-label={aria} spellCheck={false} autoComplete="off" />
@@ -189,20 +198,26 @@ export default function GraphInspector({ graph, store, peek = false, onExpand })
   if (peek) {
     if (isMultiInputMode(mode)) {
       return (
-        <button type="button" onClick={onExpand} className="flex h-10 w-full items-center justify-between rounded-md border border-line px-3 text-sm hover:bg-sunken">
-          <span>Edit {MODE_LABELS[mode].toLowerCase()}</span><span className="text-xs text-muted">Expand</span>
-        </button>
+        <div className="space-y-2">
+          <button type="button" onClick={onExpand} className="flex h-10 w-full items-center justify-between rounded-md border border-line px-3 text-sm hover:bg-sunken">
+            <span>Edit {MODE_LABELS[mode].toLowerCase()}</span><span className="text-xs text-muted">Expand</span>
+          </button>
+          {sliders}
+        </div>
       );
     }
     return (
-      <form onSubmit={(e) => { e.preventDefault(); apply(); }} noValidate>
-        {equationFields}
-        {problem && <p role="alert" className="mt-1.5 text-xs text-danger">{problem.message}</p>}
-      </form>
+      <div className="space-y-2">
+        <form onSubmit={(e) => { e.preventDefault(); apply(); }} noValidate>
+          {equationFields}
+          {problem && <p role="alert" className="mt-1.5 text-xs text-danger">{problem.message}</p>}
+        </form>
+        {sliders}
+      </div>
     );
   }
 
-  const tabs = is3d ? ["equation", "range", "view3d"] : ["equation", "range", "geometry"];
+  const tabs = is3d ? ["equation", "range", "view3d"] : mode === "explicit" ? ["equation", "range", "explore", "geometry"] : ["equation", "range", "geometry"];
   const activeTab = tabs.includes(tab) ? tab : "equation";
 
   return (
@@ -222,13 +237,26 @@ export default function GraphInspector({ graph, store, peek = false, onExpand })
       {activeTab === "equation" && (
         <div className="space-y-3">
           {equationFields}
-          <p className="text-[11px] text-muted">Use x, + - * / ^, parentheses, pi, e and supported functions. Changes appear on the board as you type.</p>
+          <p className="text-[11px] text-muted">Use x, + - * / ^, parentheses, pi, e and supported functions. Letters like a, b, c become sliders. Changes appear on the board as you type.</p>
+          {sliders}
+          {mode === "explicit" && paramNames.length === 0 && (
+            <div>
+              <FieldLabel>Try a slider equation</FieldLabel>
+              <div className="flex flex-wrap gap-1.5">
+                {SLIDER_EXAMPLES.map((example) => (
+                  <button key={example} type="button" className={`${chipCls} font-mono`} onClick={() => setField("expression", example)}>{example}</button>
+                ))}
+              </div>
+            </div>
+          )}
           <div>
             <FieldLabel>Colour</FieldLabel>
             <Swatches colors={PALETTE.filter((c) => c !== "#FFFFFF")} value={graph.color || "#2540D9"} onPick={setColour} />
           </div>
         </div>
       )}
+
+      {activeTab === "explore" && mode === "explicit" && <GraphExplore graph={graph} store={store} />}
 
       {activeTab === "range" && (
         <div className="space-y-3">

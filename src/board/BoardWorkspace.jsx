@@ -9,6 +9,7 @@ import QuickBar from "./QuickBar.jsx";
 import { ObjectStore } from "./store.js";
 import { BOARD_HOME, uid } from "./constants.js";
 import { compileExpression, compileImplicitEquation, compileInequalitySystem } from "./graphMath.js";
+import { ensureMath, estimateEquationSize, measureEquation } from "./mathRender.js";
 import { useAnnotationTools } from "./useAnnotationTools.js";
 import { parseVideoLink } from "./mediaLinks.js";
 import api from "../utils/api";
@@ -66,7 +67,7 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible 
 
   /* Keep a selected graph clear of the properties panel: the docked panel narrows the canvas on desktop,
      and the bottom sheet covers its lower part on phones. Runs on selection / panel changes, never while panning. */
-  const selectedGraphId = inspector.selectedGraph?.id;
+  const selectedGraphId = inspector.selectedGraph?.id ?? inspector.selectedEquation?.id;
   const sheetInset = inspector.insetBottom;
   const desktopLayout = inspector.desktop;
   useEffect(() => {
@@ -285,6 +286,24 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible 
     tools.setTool("select");
   };
 
+  // A new formula appears in the middle of the view with a starter equation and opens its editor
+  const addEquation = () => {
+    const latex = "y = x^{2}";
+    const fontSize = 44;
+    ensureMath(); // start loading the typesetting engine; the editor corrects the size once it is ready
+    const measured = measureEquation(latex, fontSize);
+    const { w, h } = measured && !measured.error ? measured : estimateEquationSize(latex, fontSize);
+    const obj = {
+      id: uid(), type: "equation", page, latex, fontSize, color: "#17181C", w, h,
+      x: view.x + size.w / view.k / 2 - w / 2,
+      y: view.y + size.h / view.k / 2 - h / 2,
+    };
+    store.commit([{ op: "add", obj }]);
+    tools.setSelectedIds([obj.id]);
+    tools.setTool("select");
+    inspector.open("half");
+  };
+
   const addTable = (rows, cols) => {
     const tableStyle = tools.styles.table;
     const cellWidth = tableStyle.cellWidth, cellHeight = tableStyle.cellHeight;
@@ -382,11 +401,12 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible 
           onStrokeChunk={isHost ? onStrokeChunk : undefined}
           onLivePreview={isHost ? onPreview : undefined}
           onEditingChange={tools.setEditingObj}
+          onEquationEdit={() => inspector.open("half")}
           onToolChange={tools.setTool}
           keepTool={tools.keepTool}
         />
 
-        {isHost && <ToolDock mode="board" tools={tools} store={store} inspector={inspector} onCreateGraph={addGraph} onCreateTable={addTable} onUploadMedia={uploadMedia} onAddVideoLink={addVideoLink} mediaUploading={mediaUploading} mediaError={mediaError} />}
+        {isHost && <ToolDock mode="board" tools={tools} store={store} inspector={inspector} onCreateGraph={addGraph} onCreateEquation={addEquation} onCreateTable={addTable} onUploadMedia={uploadMedia} onAddVideoLink={addVideoLink} mediaUploading={mediaUploading} mediaError={mediaError} />}
         {isHost && (
           <QuickBar
             tools={tools}
