@@ -13,6 +13,7 @@ import BoardWorkspace from "../board/BoardWorkspace.jsx";
 import PDFWorkspace from "../board/PDFWorkspace.jsx";
 import { QaPanel, useQaManager } from "../components/layout/QaManager";
 import VoiceBroadcast from "../components/layout/VoiceBroadcast";
+import SessionRecorder from "../components/layout/SessionRecorder.jsx";
 import InactiveRoom from "../components/layout/InactiveRoom";
 import Logo from "../ui/Logo.jsx";
 
@@ -59,6 +60,7 @@ export default function RoomShell({ room, isTutor }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [connected, setConnected] = useState(true);
+  const [isRecording, setIsRecording] = useState(false);
 
   const qa = useQaManager(room, socket, isTutor);
   const unanswered = qa.studentQuestions.filter((q) => !q.answered).length;
@@ -77,17 +79,19 @@ export default function RoomShell({ room, isTutor }) {
     const join = () => {
       socket.emit("join-room", { roomId: room._id, user: { id: profile._id || "", name: profile.name || "Guest", isTutor } });
     };
-    const onState = (s) => { setRoomState(s); setIsHost(Boolean(s.isHost)); };
+    const onState = (s) => { setRoomState(s); setIsHost(Boolean(s.isHost)); setIsRecording(Boolean(s.isRecording)); };
     const onConnect = () => { setConnected(true); join(); };
     const onDisconnect = () => setConnected(false);
     const onView = (v) => setView(v);
     const onStats = (s) => setStats(s);
+    const onRecording = ({ active }) => setIsRecording(Boolean(active));
 
     socket.on("room-state", onState);
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
     socket.on("change-view", onView);
     socket.on("room-stats-update", onStats);
+    socket.on("recording-state", onRecording);
     if (socket.connected) join();
     return () => {
       socket.off("room-state", onState);
@@ -95,6 +99,7 @@ export default function RoomShell({ room, isTutor }) {
       socket.off("disconnect", onDisconnect);
       socket.off("change-view", onView);
       socket.off("room-stats-update", onStats);
+      socket.off("recording-state", onRecording);
     };
   }, [socket, room._id, isRoomActive, profile, isTutor]);
 
@@ -169,6 +174,7 @@ export default function RoomShell({ room, isTutor }) {
           {!connected && <span role="status" className="mr-1 rounded-sm bg-danger-soft px-2 py-1 text-xs text-danger">Reconnecting…</span>}
 
           <VoiceBroadcast socket={socket} room={room} isTutor={isHost} />
+          {isHost && <SessionRecorder room={room} socket={socket} />}
 
           <div ref={peopleRef} className="relative">
             <button
@@ -235,6 +241,13 @@ export default function RoomShell({ room, isTutor }) {
           </div>
         </div>
       </header>
+
+      {isRecording && (
+        <div role="status" className="z-20 flex h-8 shrink-0 items-center justify-center gap-2 bg-danger px-3 text-xs font-medium text-white">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
+          This session is being recorded by the host.
+        </div>
+      )}
 
       <main className="relative min-h-0 flex-1">
         <div className={`absolute inset-0 ${view === "whiteboard" ? "" : "invisible pointer-events-none"}`} aria-hidden={view !== "whiteboard"}>

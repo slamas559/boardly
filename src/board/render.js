@@ -5,6 +5,8 @@ import { compileInequalitySystem, graphGeometryPixels, graphSegments, sampleIneq
 
 const graphFunctionCache = new Map();
 const graphRegionCache = new Map();
+const mediaCache = new Map();
+const videoPlaybackCache = new Map();
 let graph3dModule;
 let graph3dLoad;
 let graph3dLoadError = "";
@@ -391,7 +393,7 @@ function drawGraph(ctx, o) {
 
 function drawTable(ctx, o) {
   ctx.save();
-  ctx.font = "14px system-ui, sans-serif";
+  ctx.font = `${o.fontSize || 14}px system-ui, sans-serif`;
   ctx.textBaseline = "middle";
   for (let row = 0; row < o.rows; row++) {
     for (let col = 0; col < o.cols; col++) {
@@ -406,13 +408,162 @@ function drawTable(ctx, o) {
       ctx.beginPath();
       ctx.rect(x + 6, y + 2, o.cellWidth - 12, o.cellHeight - 4);
       ctx.clip();
-      ctx.fillStyle = "#17181c";
+      ctx.fillStyle = o.color || "#17181c";
       ctx.textAlign = "left";
       ctx.fillText(o.cells[row * o.cols + col] || "", x + 8, y + o.cellHeight / 2, o.cellWidth - 16);
       ctx.restore();
     }
   }
   ctx.restore();
+}
+
+function getMediaElement(o) {
+  if (typeof window === "undefined") return null;
+  let element = mediaCache.get(o.src);
+  if (!element) {
+    const notifyReady = () => window.dispatchEvent(new Event("boardly-media-ready"));
+    if (o.mediaType === "video") {
+      element = document.createElement("video");
+      element.crossOrigin = "anonymous";
+      element.muted = false;
+      element.loop = true;
+      element.playsInline = true;
+      element.preload = "auto";
+      element.addEventListener("loadeddata", notifyReady);
+      element.addEventListener("loadedmetadata", notifyReady);
+      element.addEventListener("play", notifyReady);
+      element.addEventListener("error", notifyReady);
+      element.src = o.src;
+      element.load();
+    } else {
+      element = new Image();
+      element.crossOrigin = "anonymous";
+      element.onload = notifyReady;
+      element.onerror = notifyReady;
+      element.src = o.src;
+    }
+    mediaCache.set(o.src, element);
+  }
+
+  if (o.mediaType === "video") {
+    const currentTime = Number.isFinite(o.currentTime) ? o.currentTime : null;
+    let state = videoPlaybackCache.get(o.src);
+    if (!state || state.playing !== Boolean(o.playing) || state.currentTime !== currentTime) {
+      state = { playing: Boolean(o.playing), currentTime, synced: currentTime === null, playAttempted: false };
+      videoPlaybackCache.set(o.src, state);
+    }
+    if (!state.synced && element.readyState >= 1) {
+      state.synced = assignVideoTime(element, currentTime);
+    }
+    if (o.playing && element.paused && !state.playAttempted) {
+      state.playAttempted = true;
+      element.play().catch(() => {});
+    } else if (!o.playing && !element.paused) {
+      element.pause();
+    }
+  }
+  return element;
+}
+
+export function getVideoPlaybackState(o) {
+  if (o?.type !== "media" || o.mediaType !== "video") return { currentTime: 0, duration: 0 };
+  const element = getMediaElement(o);
+  return {
+    currentTime: Number.isFinite(element?.currentTime) ? element.currentTime : 0,
+    duration: Number.isFinite(element?.duration) ? element.duration : 0,
+    paused: element?.paused ?? true,
+  };
+}
+
+export function cleanupUnusedMedia(activeObjects) {
+  const activeSources = new Set(
+    activeObjects
+      .filter((o) => o.type === "media")
+      .map((o) => o.src)
+  );
+  for (const [src, element] of mediaCache) {
+    if (activeSources.has(src)) continue;
+    if (element instanceof HTMLVideoElement) {
+      element.pause();
+      element.removeAttribute("src");
+      element.load();
+    }
+    mediaCache.delete(src);
+    videoPlaybackCache.delete(src);
+  }
+}
+
+export function videoPlaybackPatch(o, playing, currentTime = getVideoPlaybackState(o).currentTime) {
+  return { playing, currentTime };
+}
+
+export function setVideoPlayback(o, patch) {
+  if (o?.type !== "media" || o.mediaType !== "video") return;
+  const element = getMediaElement({ ...o, ...patch });
+  if (!element) return;
+  if (patch.playing) element.play().catch(() => {});
+  else element.pause();
+}
+
+export function seekVideo(o, currentTime) {
+  if (o?.type !== "media" || o.mediaType !== "video" || !Number.isFinite(currentTime)) return;
+  const element = getMediaElement(o);
+  if (!element || element.readyState < 1) return;
+  const duration = Number.isFinite(element.duration) && element.duration > 0 ? element.duration : Infinity;
+  assignVideoTime(element, Math.max(0, Math.min(currentTime, duration)));
+}
+
+function assignVideoTime(element, currentTime) {
+  try {
+    element.currentTime = currentTime;
+    return true;
+  } catch {
+    // Media elements can reject seeks until metadata is available.
+    return false;
+  }
+}
+
+export function isVideoPlaying(o) {
+  if (o.type !== "media" || o.mediaType !== "video" || !o.playing) return false;
+  const element = mediaCache.get(o.src);
+  return Boolean(element && !element.paused && !element.ended);
+}
+
+function drawMedia(ctx, o) {
+  if (o.mediaType === "embed") {
+    ctx.fillStyle = "#17181c";
+    ctx.fillRect(o.x, o.y, o.w, o.h);
+    ctx.fillStyle = "#fff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `${Math.max(18, Math.min(28, o.h * 0.1))}px system-ui, sans-serif`;
+    const label = o.provider === "youtube" ? "YouTube video" : o.provider === "vimeo" ? "Vimeo video" : "Linked video";
+    ctx.fillText(label, o.x + o.w / 2, o.y + o.h / 2 - 12, o.w - 24);
+    ctx.font = `${Math.max(12, Math.min(16, o.h * 0.055))}px system-ui, sans-serif`;
+    ctx.fillStyle = "#d1d5db";
+    ctx.fillText("Select to load and play", o.x + o.w / 2, o.y + o.h / 2 + 18, o.w - 24);
+    return;
+  }
+  const element = getMediaElement(o);
+  if (!element) return;
+  const ready = o.mediaType === "video"
+    ? element.readyState >= 2
+    : element.complete && element.naturalWidth > 0;
+  if (ready) {
+    ctx.drawImage(element, o.x, o.y, o.w, o.h);
+    return;
+  }
+  ctx.fillStyle = "#f1f0ed";
+  ctx.fillRect(o.x, o.y, o.w, o.h);
+  ctx.strokeStyle = "#9a9994";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(o.x, o.y, o.w, o.h);
+  const failed = o.mediaType === "video" ? Boolean(element.error) : element.complete;
+  ctx.fillStyle = "#55534e";
+  ctx.font = `${Math.max(12, Math.min(18, o.h * 0.08))}px system-ui, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(failed ? "Could not load media" : `Loading ${o.mediaType}…`, o.x + o.w / 2, o.y + o.h / 2, Math.max(0, o.w - 20));
 }
 
 function drawMarkup(ctx, o, k) {
@@ -455,6 +606,7 @@ export function drawObject(ctx, o, { k = 1, pageSize, alpha = 1 } = {}) {
     case "shape": drawShape(ctx, o); break;
     case "graph": drawGraph(ctx, o); break;
     case "table": drawTable(ctx, o); break;
+    case "media": drawMedia(ctx, o); break;
     case "text": drawText(ctx, o); break;
     case "markup": drawMarkup(ctx, o, k); break;
     case "highlight": drawLegacyHighlight(ctx, o, pageSize); break;

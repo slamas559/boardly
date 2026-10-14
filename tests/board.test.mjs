@@ -8,6 +8,8 @@ import {
 } from '../src/board/graphMath.js';
 import { buildGraphPatch, graphToForm, normalizeEquation } from '../src/board/graphValidation.js';
 import { sampleParametricCurve3d, sampleParametricSurfaceMesh, sampleSurfaceMesh } from '../src/board/graph3d.js';
+import { videoPlaybackPatch } from '../src/board/render.js';
+import { parseVideoLink } from '../src/board/mediaLinks.js';
 
 const stroke = (id, pts, extra = {}) => ({ id, type: 'stroke', page: 0, color: '#000', width: 4, points: pts, ...extra });
 
@@ -274,6 +276,45 @@ test('graphs and tables support selection, movement and resizing', () => {
   assert.deepEqual(getBounds(table), { x: 5, y: 8, w: 300, h: 80 });
   assert.ok(hitObject(table, [200, 40], 1));
   assert.deepEqual(scalePatch(table, 2, 2, 0, 0), { x: 10, y: 16, cellWidth: 200, cellHeight: 80 });
+});
+
+test('media objects support selection, movement and resizing', () => {
+  const media = { id: 'm', type: 'media', mediaType: 'image', src: 'https://res.cloudinary.com/demo/image/upload/photo.jpg', x: 10, y: 20, w: 300, h: 200 };
+  assert.deepEqual(getBounds(media), { x: 10, y: 20, w: 300, h: 200 });
+  assert.ok(hitObject(media, [100, 100], 1));
+  assert.deepEqual(movePatch(media, 5, 6), { x: 15, y: 26 });
+  assert.deepEqual(scalePatch(media, 2, 2, 0, 0), { x: 20, y: 40, w: 600, h: 400 });
+});
+
+test('video playback updates share the play state and seek position', () => {
+  const video = { id: 'video', type: 'media', mediaType: 'video', playing: false };
+  const started = videoPlaybackPatch(video, true, 12.5);
+  assert.equal(started.playing, true);
+  assert.equal(started.currentTime, 12.5);
+
+  const paused = videoPlaybackPatch(video, false, 18);
+  assert.equal(paused.playing, false);
+  assert.equal(paused.currentTime, 18);
+});
+
+test('video links normalize supported YouTube, Vimeo, and direct HTTPS videos', () => {
+  assert.deepEqual(parseVideoLink('https://youtu.be/dQw4w9WgXcQ'), {
+    mediaType: 'embed',
+    provider: 'youtube',
+    src: 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ',
+  });
+  assert.deepEqual(parseVideoLink('https://vimeo.com/123456789'), {
+    mediaType: 'embed',
+    provider: 'vimeo',
+    src: 'https://player.vimeo.com/video/123456789',
+  });
+  assert.deepEqual(parseVideoLink('https://cdn.example.com/lesson.mp4?token=abc'), {
+    mediaType: 'embed',
+    provider: 'direct',
+    src: 'https://cdn.example.com/lesson.mp4?token=abc',
+  });
+  assert.throws(() => parseVideoLink('https://example.com/watch'));
+  assert.throws(() => parseVideoLink('http://cdn.example.com/lesson.mp4'));
 });
 
 test('move and scale patches', () => {

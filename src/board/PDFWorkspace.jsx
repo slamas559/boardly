@@ -64,7 +64,7 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
   const [hostViewport, setHostViewport] = useState(null);
   const [numPages, setNumPages] = useState(0);
   const [zoom, setZoom] = useState(1);
-  const [avail, setAvail] = useState(0);
+  const [avail, setAvail] = useState({ width: 0, height: 0 });
   const [aspect, setAspect] = useState(1.414);
   const [thumbs, setThumbs] = useState(false);
   const [following, setFollowing] = useState(true);
@@ -197,19 +197,25 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
     }
   }, [isHost, following, hostPage, page]);
 
-  /* sizing: fit the page to the available width, then apply zoom */
+  /* Fit the page to the available viewer area, then apply the user's zoom. */
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return undefined;
-    const measure = () => setAvail(el.clientWidth);
+    const measure = () => {
+      const next = { width: el.clientWidth, height: el.clientHeight };
+      setAvail((current) => current.width === next.width && current.height === next.height ? current : next);
+    };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
   }, [url]);
 
-  const pad = avail < 640 ? 16 : 48;
-  const fitWidth = Math.max(240, Math.min(avail - pad, 1000));
+  const pad = avail.width < 640 ? 16 : 48;
+  const verticalPad = avail.width < 640 ? 32 : 48;
+  const widthFit = Math.max(240, Math.min(avail.width - pad, 1000));
+  const heightFit = avail.height > verticalPad ? (avail.height - verticalPad) / aspect : widthFit;
+  const fitWidth = Math.max(1, Math.min(widthFit, heightFit));
   const width = Math.round(fitWidth * zoom);
   const height = Math.round(width * aspect);
   const view = useMemo(() => ({ x: 0, y: 0, k: width / PDF_WORLD_WIDTH }), [width]);
@@ -402,9 +408,9 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
           <div className="mx-1 hidden h-5 w-px bg-line sm:block" />
           <div className="hidden items-center sm:flex">
             <button type="button" aria-label="Zoom out" onClick={() => setZoom((z) => clampZoom(z / 1.2))} className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-sunken"><Minus size={15} /></button>
-            <button type="button" onClick={() => setZoom(1)} className="w-12 text-center text-xs tabular-nums text-gray-700 hover:text-ink" aria-label="Fit width">{Math.round(zoom * 100)}%</button>
+            <button type="button" onClick={() => setZoom(1)} className="w-12 text-center text-xs tabular-nums text-gray-700 hover:text-ink" aria-label="Fit screen">{Math.round(zoom * 100)}%</button>
             <button type="button" aria-label="Zoom in" onClick={() => setZoom((z) => clampZoom(z * 1.2))} className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-sunken"><Plus size={15} /></button>
-            <button type="button" aria-label="Fit width" title="Fit width" onClick={() => setZoom(1)} className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-sunken"><Maximize2 size={14} /></button>
+            <button type="button" aria-label="Fit screen" title="Fit screen" onClick={() => setZoom(1)} className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-sunken"><Maximize2 size={14} /></button>
           </div>
           <div className="ml-auto flex items-center gap-1">
             {!isHost && !following && (
@@ -481,6 +487,12 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
                 )}
               </div>
             </div>
+          </div>
+
+          <div className="absolute bottom-[calc(env(safe-area-inset-bottom)+6rem)] right-3 z-40 flex items-center rounded-lg border border-line bg-surface p-1 shadow-md sm:hidden">
+            <button type="button" aria-label="Zoom out" onClick={() => setZoom((z) => clampZoom(z / 1.2))} className="flex h-9 w-9 items-center justify-center rounded-md hover:bg-sunken"><Minus size={17} /></button>
+            <button type="button" onClick={() => setZoom(1)} className="min-w-12 px-1 text-center text-xs tabular-nums text-gray-700 hover:text-ink" aria-label="Fit screen">{Math.round(zoom * 100)}%</button>
+            <button type="button" aria-label="Zoom in" onClick={() => setZoom((z) => clampZoom(z * 1.2))} className="flex h-9 w-9 items-center justify-center rounded-md hover:bg-sunken"><Plus size={17} /></button>
           </div>
 
           {/* Style settings dock beside the page on desktop; a bottom sheet on phones */}

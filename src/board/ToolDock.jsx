@@ -1,15 +1,29 @@
 // Places the tool rail: a left rail on desktop, a bottom dock on phones. The properties panel
 // (style + graph settings) lives in the separate InspectorDock so it never covers the board.
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { ToolRail } from "./Toolbar.jsx";
 import { validateGraphExpressions } from "./graphValidation.js";
 
-export default function ToolDock({ mode, tools, inspector, onCreateGraph, onCreateTable, store }) {
+export default function ToolDock({ mode, tools, inspector, onCreateGraph, onCreateTable, onUploadMedia, onAddVideoLink, mediaUploading = false, mediaError = "", store }) {
   const [insertDialog, setInsertDialog] = useState(null);
+  const [videoLinkDialog, setVideoLinkDialog] = useState(false);
+  const mediaInputRef = useRef(null);
   const { tool, setTool, lastShape, keepTool, setKeepTool, activeStyle } = tools;
 
   return (
     <div className="pointer-events-none absolute bottom-2 left-2 right-2 z-20 safe-bottom md:bottom-auto md:right-auto md:left-3 md:top-3">
+      <input
+        ref={mediaInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
+        hidden
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) onUploadMedia?.(file);
+          event.target.value = "";
+        }}
+      />
       <div className="pointer-events-auto relative">
         <ToolRail
           mode={mode}
@@ -24,6 +38,9 @@ export default function ToolDock({ mode, tools, inspector, onCreateGraph, onCrea
           onKeepTool={() => setKeepTool((v) => !v)}
           onCreateGraph={() => setInsertDialog("graph")}
           onCreateTable={() => setInsertDialog("table")}
+          onUploadMedia={() => mediaInputRef.current?.click()}
+          onAddVideoLink={() => setVideoLinkDialog(true)}
+          mediaUploading={mediaUploading}
           hasStyle={inspector.kind !== null}
           styleSwatch={inspector.kind === "style" ? activeStyle?.color : null}
           styleLabel={inspector.kind === "graph" ? "Graph" : "Style"}
@@ -31,6 +48,19 @@ export default function ToolDock({ mode, tools, inspector, onCreateGraph, onCrea
           onStyleToggle={inspector.toggle}
         />
       </div>
+      {mediaUploading && (
+        <div role="status" aria-live="polite" className="pointer-events-auto fixed left-1/2 z-[40] flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-2 rounded-md bg-ink px-3 py-2 text-sm text-paper shadow" style={{ top: "calc(env(safe-area-inset-top) + 3.5rem)" }}>
+          <Loader2 size={15} className="animate-spin" />
+          Uploading media…
+        </div>
+      )}
+      {mediaError && <div role="alert" className="pointer-events-auto absolute bottom-full left-0 mb-2 max-w-xs rounded-md bg-danger px-3 py-2 text-sm text-white shadow">{mediaError}</div>}
+      {videoLinkDialog && (
+        <VideoLinkDialog
+          onClose={() => setVideoLinkDialog(false)}
+          onAdd={(link) => onAddVideoLink?.(link)}
+        />
+      )}
       {insertDialog && (
         <InsertDialog
           kind={insertDialog}
@@ -42,6 +72,45 @@ export default function ToolDock({ mode, tools, inspector, onCreateGraph, onCrea
           }}
         />
       )}
+    </div>
+  );
+}
+
+function VideoLinkDialog({ onClose, onAdd }) {
+  const [link, setLink] = useState("");
+  const [error, setError] = useState("");
+  const submit = (event) => {
+    event.preventDefault();
+    try {
+      onAdd(link);
+      onClose();
+    } catch (err) {
+      setError(err.message || "Could not add this video link.");
+    }
+  };
+  return (
+    <div className="pointer-events-auto fixed inset-0 z-[110] flex items-center justify-center bg-ink/40 p-4" role="dialog" aria-modal="true" aria-labelledby="video-link-title">
+      <form onSubmit={submit} className="float-panel w-full max-w-md p-5">
+        <div className="flex items-start justify-between">
+          <h3 id="video-link-title" className="text-base font-semibold">Add a video link</h3>
+          <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-sm text-muted hover:bg-sunken">Close</button>
+        </div>
+        <label htmlFor="video-link-input" className="mt-3 block text-sm font-medium">YouTube, Vimeo, or direct video URL</label>
+        <input
+          id="video-link-input"
+          autoFocus
+          type="url"
+          value={link}
+          onChange={(event) => { setLink(event.target.value); setError(""); }}
+          placeholder="https://youtu.be/… or https://example.com/video.mp4"
+          className="mt-1.5 h-10 w-full rounded-md border border-line bg-white px-3 text-sm outline-none focus:border-accent"
+        />
+        {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="h-9 rounded-md border border-line px-3 text-sm hover:bg-sunken">Cancel</button>
+          <button type="submit" className="h-9 rounded-md bg-ink px-3 text-sm font-medium text-paper hover:opacity-90">Add to board</button>
+        </div>
+      </form>
     </div>
   );
 }

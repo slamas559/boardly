@@ -30,6 +30,10 @@ export default function CreateRoom() {
       await api.post("/rooms", { topic: topic.trim(), isPaid: paid, price: paid ? Number(price) : 0, currency: "NGN" });
       navigate("/lobby");
     } catch (err) {
+      if (paid && err.response?.status === 403) {
+        navigate("/bank-setup");
+        return;
+      }
       setError(err.response?.data?.message || "Could not create the room. Try again.");
     } finally {
       setCreating(false);

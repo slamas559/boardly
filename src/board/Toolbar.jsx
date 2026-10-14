@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  Activity, AlignCenter, AlignLeft, AlignRight, ArrowUpRight, Bold, Brush, Circle, Copy, Crosshair, Diamond, Eraser, Hand, Highlighter,
+  Activity, AlignCenter, AlignLeft, AlignRight, ArrowUpRight, Bold, Brush, Circle, Copy, Crosshair, Diamond, Eraser, Hand, Highlighter, ImagePlus, Link2,
   Hexagon, Italic, Lock, Minus, MousePointer2, PenLine, Plus, Redo2, Shapes, SlidersHorizontal, Square, Star, Strikethrough, Trash2,
   RectangleHorizontal, Table2, Triangle,
   Type, Underline, Undo2, Unlock,
@@ -43,8 +43,8 @@ function ToolButton({ icon: Icon, label, shortcut, active, onClick, disabled, ch
 const Divider = () => <div className="mx-0.5 h-6 w-px shrink-0 bg-line md:mx-0 md:my-0.5 md:h-px md:w-6" />;
 
 export function ToolRail({
-  mode, tool, onTool, lastShape, canUndo, canRedo, onUndo, onRedo, keepTool, onKeepTool, onCreateGraph, onCreateTable,
-  onStyleToggle, styleSwatch, hasStyle, styleOpen, styleLabel = "Style",
+  mode, tool, onTool, lastShape, canUndo, canRedo, onUndo, onRedo, keepTool, onKeepTool, onCreateGraph, onCreateTable, onAddVideoLink,
+  onStyleToggle, styleSwatch, hasStyle, styleOpen, styleLabel = "Style", onUploadMedia, mediaUploading = false,
 }) {
   const [shapesOpen, setShapesOpen] = useState(false);
   const wrapRef = useRef(null);
@@ -158,6 +158,8 @@ export function ToolRail({
           <Divider />
           <ToolButton icon={Activity} label="Add graph" onClick={onCreateGraph} />
           <ToolButton icon={Table2} label="Add table" onClick={onCreateTable} />
+          <ToolButton icon={ImagePlus} label={mediaUploading ? "Uploading media" : "Add image or video"} disabled={mediaUploading} onClick={onUploadMedia} />
+          <ToolButton icon={Link2} label="Add video link" onClick={onAddVideoLink} />
         </>
       )}
 
@@ -264,6 +266,23 @@ function SegButton({ active, onClick, label, children, className = "" }) {
 // The panel body only: the properties dock supplies the frame, header and close button.
 export function StylePanel({ group, style, onChange, selectionCount, onDelete, onDuplicate, mode }) {
   if (!group || !style) return null;
+  if (group === "media") {
+    return (
+      <div className="space-y-3 text-sm">
+        {["video", "embed"].includes(style.mediaType) && (
+          <button
+            type="button"
+            onPointerDown={keepFocus}
+            onClick={() => onChange({ playing: !style.playing })}
+            className="h-9 w-full rounded-md border border-line font-medium hover:bg-sunken"
+          >
+            {style.playing ? "Pause video" : "Play video"}
+          </button>
+        )}
+        <p className="leading-5 text-muted">Drag to move this media. Drag a corner handle to resize it.</p>
+      </div>
+    );
+  }
   const isMarker = group === "highlighter" || group === "markup";
   const colors = isMarker ? HIGHLIGHT_PALETTE : PALETTE;
 
@@ -274,6 +293,50 @@ export function StylePanel({ group, style, onChange, selectionCount, onDelete, o
           <Label>Colour</Label>
           <Swatches colors={colors} value={style.color} onPick={(c) => onChange({ color: c })} />
         </div>
+
+        {group === "table" && (
+          <>
+            <div>
+              <Label>Cell text size · {Math.round(style.fontSize)} px</Label>
+              <input
+                type="range"
+                min="8"
+                max="40"
+                step="1"
+                value={style.fontSize}
+                onChange={(e) => onChange({ fontSize: Number(e.target.value) })}
+                className="w-full"
+                aria-label="Cell text size"
+              />
+            </div>
+            <div>
+              <Label>Column width · {Math.round(style.cellWidth)} px</Label>
+              <input
+                type="range"
+                min="40"
+                max="320"
+                step="5"
+                value={style.cellWidth}
+                onChange={(e) => onChange({ cellWidth: Number(e.target.value) })}
+                className="w-full"
+                aria-label="Table column width"
+              />
+            </div>
+            <div>
+              <Label>Row height · {Math.round(style.cellHeight)} px</Label>
+              <input
+                type="range"
+                min="24"
+                max="120"
+                step="2"
+                value={style.cellHeight}
+                onChange={(e) => onChange({ cellHeight: Number(e.target.value) })}
+                className="w-full"
+                aria-label="Table row height"
+              />
+            </div>
+          </>
+        )}
 
         {(group === "pen" || group === "highlighter" || group === "shape") && (
           <div>

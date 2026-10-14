@@ -1,18 +1,13 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { GoogleOAuthProvider, GoogleLogin } from "@react-oauth/google";
-import { Eye, EyeOff, Loader2, Presentation, Users } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import api from "../../utils/api";
 import AuthLayout, { fieldClass, primaryBtn } from "./AuthLayout";
 import EmailVerificationRequired from "../EmailVerificationComponents/EmailVerificationRequired";
 
-const ROLES = [
-  { id: "student", label: "I want to join sessions", hint: "Listener", icon: Users },
-  { id: "tutor", label: "I want to host sessions", hint: "Host", icon: Presentation },
-];
-
 const Register = () => {
-  const [form, setForm] = useState({ name: "", email: "", password: "", bio: "", role: "student" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", bio: "" });
   const [avatar, setAvatar] = useState(null);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -30,14 +25,14 @@ const Register = () => {
     setError("");
     try {
       const data = new FormData();
-      ["name", "email", "password", "bio", "role"].forEach((k) => data.append(k, form[k]));
+      ["name", "email", "password", "bio"].forEach((k) => data.append(k, form[k]));
       if (avatar) data.append("avatar", avatar);
       const res = await api.post("/auth/register", data);
       if (res.data.verificationSent) {
         setRegistrationSuccess(true);
         setUserEmail(res.data.email);
       } else {
-        navigate(form.role === "tutor" ? "/bank-setup" : "/dashboard");
+        navigate("/dashboard");
         window.location.reload();
       }
     } catch (err) {
@@ -55,10 +50,9 @@ const Register = () => {
       const res = await api.post("/auth/google", {
         credential: credentialResponse.credential,
         context: "register",
-        role: form.role,
         userInfo: { email: decoded.email, name: decoded.name, picture: decoded.picture, googleId: decoded.sub },
       });
-      navigate(res.data.user.role === "tutor" ? "/bank-setup" : "/lobby");
+      navigate("/dashboard");
       window.location.reload();
     } catch (err) {
       setError(err.response?.data?.message || "Google sign up failed. Try again.");
@@ -77,20 +71,6 @@ const Register = () => {
         footer={<>Already have an account? <Link to="/login" className="font-medium text-accent hover:underline">Sign in</Link></>}
       >
         {error && <div role="alert" className="mb-4 rounded-md border border-danger/20 bg-danger-soft px-3 py-2.5 text-sm text-danger">{error}</div>}
-
-        <fieldset className="mb-5">
-          <legend className="mb-1.5 text-sm font-medium">How will you use Boardly?</legend>
-          <div className="grid grid-cols-2 gap-2">
-            {ROLES.map(({ id, label, hint, icon: Icon }) => (
-              <label key={id} className={`flex cursor-pointer flex-col gap-1.5 rounded-md border p-3 text-sm ${form.role === id ? "border-ink bg-white outline outline-1 outline-ink" : "border-line-strong bg-white hover:border-gray-400"}`}>
-                <input type="radio" name="role" value={id} checked={form.role === id} onChange={set("role")} className="sr-only" />
-                <Icon size={17} strokeWidth={1.7} />
-                <span className="font-medium leading-snug">{hint}</span>
-                <span className="text-xs leading-snug text-muted">{label}</span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

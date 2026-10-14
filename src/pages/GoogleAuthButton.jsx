@@ -8,7 +8,6 @@ import api from '../utils/api';
 const GoogleAuthButton = ({ 
   onSuccess, 
   onError, 
-  role = null, 
   isLogin = false,
   disabled = false,
   className = ""
@@ -28,7 +27,6 @@ const GoogleAuthButton = ({
       // Send the access token to your backend
       const response = await api.post('/auth/google', {
         token: tokenResponse.data.access_token,
-        role: role
       });
 
       if (onSuccess) {

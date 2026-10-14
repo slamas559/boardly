@@ -6,7 +6,6 @@ const StateContext = createContext();
 
 export const StateProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [userRole, setUserRole] = useState(null);
 
   useEffect(() => {
       const fetchUserRole = async () => {
@@ -20,21 +19,13 @@ export const StateProvider = ({ children }) => {
           authentication = false;
         }
   
-        if (authentication) {
-          try {
-            const res = await api.get("/auth/profile");
-            setUserRole(res.data.role);
-          } catch (err) {
-            console.error("Failed to fetch user profile", err);
-          }
-        }
       };
       fetchUserRole();
     }, []);
   
 
   return (
-    <StateContext.Provider value={{ isAuthenticated, setIsAuthenticated, userRole, setUserRole }}>
+    <StateContext.Provider value={{ isAuthenticated, setIsAuthenticated }}>
       {children}
     </StateContext.Provider>
   );

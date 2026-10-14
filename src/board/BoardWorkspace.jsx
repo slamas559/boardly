@@ -10,6 +10,8 @@ import { ObjectStore } from "./store.js";
 import { BOARD_HOME, uid } from "./constants.js";
 import { compileExpression, compileImplicitEquation, compileInequalitySystem } from "./graphMath.js";
 import { useAnnotationTools } from "./useAnnotationTools.js";
+import { parseVideoLink } from "./mediaLinks.js";
+import api from "../utils/api";
 
 const MIN_K = 0.1;
 const MAX_K = 8;
@@ -33,6 +35,8 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible 
   const [laser, setLaser] = useState(null);
   const [remotePreviews, setRemotePreviews] = useState(() => new Map());
   const [confirmClear, setConfirmClear] = useState(false);
+  const [mediaUploading, setMediaUploading] = useState(false);
+  const [mediaError, setMediaError] = useState("");
   const initialised = useRef(false);
   const previewTimers = useRef(new Map());
 
@@ -282,11 +286,74 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible 
   };
 
   const addTable = (rows, cols) => {
-    const cellWidth = 110, cellHeight = 40;
+    const tableStyle = tools.styles.table;
+    const cellWidth = tableStyle.cellWidth, cellHeight = tableStyle.cellHeight;
     const w = cols * cellWidth, h = rows * cellHeight;
     const x = view.x + size.w / view.k / 2 - w / 2;
     const y = view.y + size.h / view.k / 2 - h / 2;
-    const obj = { id: uid(), type: "table", page, x, y, rows, cols, cellWidth, cellHeight, cells: Array(rows * cols).fill("") };
+    const obj = { id: uid(), type: "table", page, x, y, rows, cols, cellWidth, cellHeight, color: tableStyle.color, fontSize: tableStyle.fontSize, cells: Array(rows * cols).fill("") };
+    store.commit([{ op: "add", obj }]);
+    tools.setSelectedIds([obj.id]);
+    tools.setTool("select");
+  };
+
+  const uploadMedia = async (file) => {
+    if (!file) return;
+    setMediaUploading(true);
+    setMediaError("");
+    try {
+      const form = new FormData();
+      form.append("media", file);
+      const { data } = await api.post(`/media/board/${roomId}`, form, {
+        timeout: 300000,
+      });
+      const media = data.media;
+      const aspect = media.width > 0 && media.height > 0 ? media.width / media.height : 4 / 3;
+      const maxWidth = Math.min(640, (size.w / view.k) * 0.65);
+      const maxHeight = Math.min(480, (size.h / view.k) * 0.65);
+      const w = Math.max(80, Math.min(maxWidth, maxHeight * aspect));
+      const h = w / aspect;
+      const obj = {
+        id: uid(),
+        type: "media",
+        mediaType: media.mediaType,
+        src: media.src,
+        filename: media.filename,
+        x: view.x + size.w / view.k / 2 - w / 2,
+        y: view.y + size.h / view.k / 2 - h / 2,
+        w,
+        h,
+        playing: false,
+        currentTime: 0,
+      };
+      store.commit([{ op: "add", obj }]);
+      tools.setSelectedIds([obj.id]);
+      tools.setTool("select");
+    } catch (error) {
+      setMediaError(error.response?.data?.message || "Media upload failed. Please try again.");
+    } finally {
+      setMediaUploading(false);
+    }
+  };
+
+  const addVideoLink = (input) => {
+    const media = parseVideoLink(input);
+    const maxWidth = Math.min(640, (size.w / view.k) * 0.65);
+    const maxHeight = Math.min(480, (size.h / view.k) * 0.65);
+    const w = Math.max(160, Math.min(maxWidth, maxHeight * (16 / 9)));
+    const h = w * 9 / 16;
+    const obj = {
+      id: uid(),
+      type: "media",
+      page,
+      ...media,
+      x: view.x + size.w / view.k / 2 - w / 2,
+      y: view.y + size.h / view.k / 2 - h / 2,
+      w,
+      h,
+      playing: false,
+      currentTime: 0,
+    };
     store.commit([{ op: "add", obj }]);
     tools.setSelectedIds([obj.id]);
     tools.setTool("select");
@@ -319,7 +386,7 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible 
           keepTool={tools.keepTool}
         />
 
-        {isHost && <ToolDock mode="board" tools={tools} store={store} inspector={inspector} onCreateGraph={addGraph} onCreateTable={addTable} />}
+        {isHost && <ToolDock mode="board" tools={tools} store={store} inspector={inspector} onCreateGraph={addGraph} onCreateTable={addTable} onUploadMedia={uploadMedia} onAddVideoLink={addVideoLink} mediaUploading={mediaUploading} mediaError={mediaError} />}
         {isHost && (
           <QuickBar
             tools={tools}

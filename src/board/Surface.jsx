@@ -9,8 +9,9 @@ import {
 import {
   dist, hitGraphGeometry, hitObject, isMovable, measureText, movePatch, objectInRect, q, scalePatch,
 } from "./geometry.js";
-import { drawGrid, drawObject, drawSelection, handlePoints } from "./render.js";
+import { cleanupUnusedMedia, drawGrid, drawObject, drawSelection, getVideoPlaybackState, handlePoints, isVideoPlaying, seekVideo, setVideoPlayback, videoPlaybackPatch } from "./render.js";
 import { cursorFor } from "./cursors.js";
+import { Pause, Play } from "lucide-react";
 
 let clipboard = [];
 const LASER_COLOR = "#E2492B";
@@ -63,6 +64,8 @@ const Surface = forwardRef(function Surface(
   const spaceDown = useRef(false);
   const lastPenTime = useRef(0);
   const raf = useRef(0);
+  const drawRef = useRef(null);
+  const scheduleRef = useRef(null);
   const lastLaserSend = useRef(0);
   const lastCursorSend = useRef(0);
   const lastPreviewSend = useRef(new Map());
@@ -88,6 +91,7 @@ const Surface = forwardRef(function Surface(
     if (!canvas) return;
     const { store: st, page: pg, view: v, size: sz, selectedIds: sel, editing: ed, pageSize: ps, mode: md, remotePreviews: previews } = live.current;
     if (!v || !sz.w || !sz.h) return;
+    if (md === "board") cleanupUnusedMedia(st.list());
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
     const pw = Math.round(sz.w * dpr);
@@ -149,6 +153,13 @@ const Surface = forwardRef(function Surface(
       drawSelection(ctx, selected, v.k, { showHandles: !live.current.readOnly && !(d && d.type === "move") });
     }
 
+    if (!raf.current && objs.some(isVideoPlaying)) {
+      raf.current = requestAnimationFrame(() => {
+        raf.current = 0;
+        drawRef.current?.();
+      });
+    }
+
     // Laser pointer trails
     const now = performance.now();
     lasers.current = lasers.current.filter((p) => now - p.t < 900);
@@ -165,7 +176,7 @@ const Surface = forwardRef(function Surface(
         ctx.fill();
       }
       ctx.restore();
-      schedule();
+      scheduleRef.current?.();
     }
     const cursor = remoteCursor.current;
     if (cursor && cursor.page === pg && now - cursor.t < 5000) {
@@ -195,13 +206,16 @@ const Surface = forwardRef(function Surface(
         ctx.fillText(cursor.tool, 18 / v.k, 12 / v.k);
       }
       ctx.restore();
-      if (now - cursor.t < 5000) schedule();
+      if (now - cursor.t < 5000) scheduleRef.current?.();
     }
   }, [background]);
+
+  drawRef.current = draw;
 
   const schedule = useCallback(() => {
     if (!raf.current) raf.current = requestAnimationFrame(draw);
   }, [draw]);
+  scheduleRef.current = schedule;
 
   useEffect(() => {
     schedule();
@@ -211,13 +225,22 @@ const Surface = forwardRef(function Surface(
     if (typeof window === "undefined") return undefined;
     const redraw = () => schedule();
     window.addEventListener("boardly-3d-renderer-ready", redraw);
-    return () => window.removeEventListener("boardly-3d-renderer-ready", redraw);
+    window.addEventListener("boardly-media-ready", redraw);
+    return () => {
+      window.removeEventListener("boardly-3d-renderer-ready", redraw);
+      window.removeEventListener("boardly-media-ready", redraw);
+    };
   }, [schedule]);
 
   useEffect(() => () => {
     cancelAnimationFrame(raf.current);
     raf.current = 0;
   }, []);
+
+  useEffect(() => {
+    if (mode !== "board") return undefined;
+    return () => cleanupUnusedMedia([]);
+  }, [mode]);
 
   // Web fonts load after first paint: redraw so text uses the right metrics
   useEffect(() => {
@@ -349,6 +372,11 @@ const Surface = forwardRef(function Surface(
           const p = {};
           for (const [k, v] of Object.entries(patch)) {
             if (k in o || styleKeyApplies(o, k)) p[k] = v;
+          }
+          if (o.type === "media" && o.mediaType === "video" && typeof p.playing === "boolean") {
+            const playback = videoPlaybackPatch(o, p.playing);
+            Object.assign(p, playback);
+            setVideoPlayback(o, playback);
           }
           return Object.keys(p).length ? { op: "update", id: o.id, patch: p } : null;
         })
@@ -591,7 +619,14 @@ const Surface = forwardRef(function Surface(
           if (e.shiftKey) sel = sel.includes(hit.id) ? sel.filter((i) => i !== hit.id) : [...sel, hit.id];
           else if (!sel.includes(hit.id)) sel = [hit.id];
           onSelectedChange?.(sel);
-          drag.current = { type: "move", start: p, moved: false, ids: sel, objs: sel.map((id) => s.get(id)).filter(Boolean) };
+          drag.current = {
+            type: "move",
+            start: p,
+            moved: false,
+            ids: sel,
+            objs: sel.map((id) => s.get(id)).filter(Boolean),
+            togglePlayback: !e.shiftKey && hit.type === "media" && hit.mediaType === "video",
+          };
         } else {
           if (!e.shiftKey) onSelectedChange?.([]);
           drag.current = { type: "marquee", start: p, rect: { x: p[0], y: p[1], w: 0, h: 0 }, base: e.shiftKey ? live.current.selectedIds || [] : [] };
@@ -888,6 +923,17 @@ const Surface = forwardRef(function Surface(
           transient.current.clear();
           s.commit(ops);
           for (const o of d.objs) clearPreview(o.id, o.page);
+        } else if (d.togglePlayback) {
+          const video = s.get(d.ids[0]);
+          if (video?.type === "media" && video.mediaType === "video") {
+            const state = getVideoPlaybackState(video);
+            const shouldPlay = video.playing && state.paused ? true : !video.playing;
+            const playback = videoPlaybackPatch(video, shouldPlay, state.currentTime);
+            setVideoPlayback(video, playback);
+            if (playback.playing !== video.playing || playback.currentTime !== video.currentTime) {
+              s.commit([{ op: "update", id: video.id, patch: playback }]);
+            }
+          }
         }
         break;
       }
@@ -1035,6 +1081,37 @@ const Surface = forwardRef(function Surface(
   const tableEditor = tableEditing && view
     ? <TableCellEditor key={`${tableEditing.id}-${tableEditing.row}-${tableEditing.col}`} editing={tableEditing} store={store} view={view} onCommit={finishTableEdit} onPreview={sharePreview} />
     : null;
+  const selectedVideo = mode === "board" && !readOnly && selectedIds?.length === 1
+    ? store.get(selectedIds[0])
+    : null;
+  const embeddedVideos = mode === "board"
+    ? store.onPage(page).filter((obj) => obj.type === "media" && obj.mediaType === "embed")
+    : [];
+  const videoControls = selectedVideo?.type === "media" && selectedVideo.mediaType === "video" && view
+    ? <VideoControls
+      key={selectedVideo.id}
+      video={selectedVideo}
+      view={view}
+      onToggle={(state) => {
+        const current = store.get(selectedVideo.id);
+        if (!current) return;
+        const shouldPlay = current.playing && state.paused ? true : !current.playing;
+        const patch = videoPlaybackPatch(current, shouldPlay, state.currentTime);
+        setVideoPlayback(current, patch);
+        if (patch.playing !== current.playing || patch.currentTime !== current.currentTime) {
+          store.commit([{ op: "update", id: current.id, patch }]);
+        }
+      }}
+      onSeek={(currentTime) => {
+        const current = store.get(selectedVideo.id);
+        if (!current) return;
+        seekVideo(current, currentTime);
+        const patch = videoPlaybackPatch(current, Boolean(current.playing), currentTime);
+        setVideoPlayback(current, patch);
+        store.commit([{ op: "update", id: current.id, patch }]);
+      }}
+    />
+    : null;
 
   const cursor = readOnly
     ? (mode === "board" ? "grab" : "default")
@@ -1060,6 +1137,40 @@ const Surface = forwardRef(function Surface(
         onContextMenu={(e) => e.preventDefault()}
         aria-label={mode === "board" ? "Whiteboard" : "Document annotations"}
       />
+      {videoControls}
+      {view && embeddedVideos.map((video) => {
+        const isSelected = selectedIds?.includes(video.id) || false;
+        return (
+          <EmbeddedVideo
+            key={video.id}
+            video={video}
+            view={view}
+            selected={isSelected}
+            readOnly={readOnly}
+            isHost={!readOnly}
+            onPlaybackChange={(playing, currentTime) => {
+              const current = store.get(video.id);
+              if (!current || readOnly || current.mediaType !== "embed") return;
+              const patch = {
+                playing,
+                ...(Number.isFinite(currentTime) ? { currentTime: Math.max(0, currentTime) } : {}),
+              };
+              if (patch.playing !== current.playing
+                || (patch.currentTime !== undefined && Math.abs(patch.currentTime - (current.currentTime || 0)) >= 0.75)) {
+                store.commit([{ op: "update", id: current.id, patch }]);
+              }
+            }}
+            onMove={(dx, dy) => {
+              const current = store.get(video.id);
+              if (current) store.commit([{ op: "update", id: current.id, patch: { x: current.x + dx / view.k, y: current.y + dy / view.k } }]);
+            }}
+            onResize={(dw, dh) => {
+              const current = store.get(video.id);
+              if (current) store.commit([{ op: "update", id: current.id, patch: { w: Math.max(160, current.w + dw / view.k), h: Math.max(90, current.h + dh / view.k) } }]);
+            }}
+          />
+        );
+      })}
       {tableEditor}
       {editor}
     </div>
@@ -1067,6 +1178,310 @@ const Surface = forwardRef(function Surface(
 });
 
 export default Surface;
+
+function EmbeddedVideo({ video, view, selected, readOnly, isHost, onPlaybackChange, onMove, onResize }) {
+  const directVideoRef = useRef(null);
+  const playerHostRef = useRef(null);
+  const playerRef = useRef(null);
+  const latestVideo = useRef(video);
+  const playbackCallback = useRef(onPlaybackChange);
+  const latestIsHost = useRef(isHost);
+  latestVideo.current = video;
+  playbackCallback.current = onPlaybackChange;
+  latestIsHost.current = isHost;
+  const left = (video.x - view.x) * view.k;
+  const top = (video.y - view.y) * view.k;
+  const width = video.w * view.k;
+  const height = video.h * view.k;
+
+  useEffect(() => {
+    if (video.provider === "direct") return undefined;
+    let disposed = false;
+    let player;
+    const host = playerHostRef.current;
+    if (!host) return undefined;
+    const initialize = async () => {
+      try {
+        if (video.provider === "youtube") {
+          await loadVideoApi("youtube");
+          if (disposed) return;
+          const videoId = new URL(video.src).pathname.split("/").filter(Boolean).pop();
+          player = new window.YT.Player(host, {
+            width: "100%",
+            height: "100%",
+            videoId,
+            playerVars: { enablejsapi: 1, origin: window.location.origin },
+            events: {
+              onReady: (event) => {
+                if (disposed) return;
+                playerRef.current = event.target;
+                applyEmbedPlayback(latestVideo.current, event.target, "youtube", latestIsHost.current);
+              },
+              onStateChange: (event) => {
+                if (!isHost || disposed) return;
+                const playing = event.data === window.YT.PlayerState.PLAYING;
+                if (playing || event.data === window.YT.PlayerState.PAUSED || event.data === window.YT.PlayerState.ENDED) {
+                  playbackCallback.current(playing, event.target.getCurrentTime());
+                }
+              },
+            },
+          });
+        } else if (video.provider === "vimeo") {
+          await loadVideoApi("vimeo");
+          if (disposed) return;
+          const iframe = document.createElement("iframe");
+          iframe.src = video.src;
+          iframe.title = "Vimeo video player";
+          iframe.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
+          iframe.allowFullscreen = true;
+          iframe.referrerPolicy = "strict-origin-when-cross-origin";
+          iframe.className = "absolute inset-0 h-full w-full border-0";
+          host.appendChild(iframe);
+          player = new window.Vimeo.Player(iframe);
+          playerRef.current = player;
+          player.on("play", () => player.getCurrentTime().then((time) => playbackCallback.current(true, time)).catch(() => {}));
+          player.on("pause", () => player.getCurrentTime().then((time) => playbackCallback.current(false, time)).catch(() => {}));
+          player.on("seeked", (event) => player.getPaused().then((paused) => playbackCallback.current(!paused, event.seconds)).catch(() => {}));
+          player.on("timeupdate", (event) => {
+            if (isHost && latestVideo.current.playing) playbackCallback.current(true, event.seconds);
+          });
+          await applyEmbedPlayback(latestVideo.current, player, "vimeo", isHost);
+        }
+      } catch (error) {
+        if (!disposed) console.error("Could not initialize embedded video player", error);
+      }
+    };
+    initialize();
+    return () => {
+      disposed = true;
+      playerRef.current = null;
+      if (player?.destroy) player.destroy();
+      else if (player?.unload) player.unload().catch(() => {});
+      host.replaceChildren();
+    };
+  }, [video.id, video.src, video.provider, isHost]);
+
+  useEffect(() => {
+    const player = latestVideo.current.provider === "direct" ? directVideoRef.current : playerRef.current;
+    if (player) applyEmbedPlayback(latestVideo.current, player, latestVideo.current.provider, latestIsHost.current);
+  }, [video.playing, video.currentTime, video.provider, isHost]);
+
+  useEffect(() => {
+    const element = directVideoRef.current;
+    if (!element) return undefined;
+    let lastUpdate = 0;
+    const reportTime = (force = false) => {
+      const now = Date.now();
+      if (!force && now - lastUpdate < 750) return;
+      lastUpdate = now;
+      if (isHost) playbackCallback.current(!element.paused, element.currentTime);
+    };
+    const onPlay = () => reportTime(true);
+    const onPause = () => reportTime(true);
+    const onSeeked = () => reportTime(true);
+    const onTimeUpdate = () => reportTime();
+    element.addEventListener("play", onPlay);
+    element.addEventListener("pause", onPause);
+    element.addEventListener("seeked", onSeeked);
+    element.addEventListener("timeupdate", onTimeUpdate);
+    return () => {
+      element.removeEventListener("play", onPlay);
+      element.removeEventListener("pause", onPause);
+      element.removeEventListener("seeked", onSeeked);
+      element.removeEventListener("timeupdate", onTimeUpdate);
+    };
+  }, [video.id, video.provider, isHost]);
+
+  useEffect(() => {
+    if (video.provider !== "youtube" || !isHost) return undefined;
+    const timer = window.setInterval(() => {
+      const player = playerRef.current;
+      if (player?.getCurrentTime && player.getPlayerState) {
+        const state = player.getPlayerState();
+        const validStates = window.YT?.PlayerState;
+        if (state === validStates?.PLAYING || state === validStates?.PAUSED || state === validStates?.CUED) {
+          playbackCallback.current(state === validStates.PLAYING, player.getCurrentTime());
+        }
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [video.id, video.provider, isHost]);
+
+  const drag = (event, callback) => {
+    if (readOnly || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const up = (next) => {
+      window.removeEventListener("pointerup", up);
+      callback(next.clientX - startX, next.clientY - startY);
+    };
+    window.addEventListener("pointerup", up, { once: true });
+  };
+  return (
+    <div className="pointer-events-none absolute z-10 overflow-visible" style={{ left, top, width, height }}>
+      {video.provider === "direct" ? (
+        <video
+          ref={directVideoRef}
+          src={video.src}
+          controls
+          playsInline
+          onPlay={() => { if (isHost) playbackCallback.current(true, directVideoRef.current?.currentTime); }}
+          onPause={() => { if (isHost) playbackCallback.current(false, directVideoRef.current?.currentTime); }}
+          onSeeking={() => { if (isHost) playbackCallback.current(true, directVideoRef.current?.currentTime); }}
+          className={`absolute inset-0 h-full w-full bg-black object-contain ${selected || readOnly ? "pointer-events-auto" : "pointer-events-none"}`}
+        />
+      ) : video.provider === "youtube" || video.provider === "vimeo" ? (
+        <div ref={playerHostRef} className={`absolute inset-0 h-full w-full ${selected || readOnly ? "pointer-events-auto" : "pointer-events-none"}`} />
+      ) : (
+        <iframe
+          title={`${video.provider === "youtube" ? "YouTube" : "Vimeo"} video player`}
+          src={video.src}
+          referrerPolicy="strict-origin-when-cross-origin"
+          allow="autoplay; encrypted-media; picture-in-picture; fullscreen; web-share"
+          allowFullScreen
+          className={`absolute inset-0 h-full w-full border-0 ${selected || readOnly ? "pointer-events-auto" : "pointer-events-none"}`}
+        />
+      )}
+      {!readOnly && selected && (
+        <>
+          <div
+            className="pointer-events-auto absolute inset-x-0 top-0 z-10 h-6 cursor-move bg-black/50"
+            aria-label="Drag to move video"
+            onPointerDown={(event) => drag(event, (dx, dy) => onMove(dx, dy))}
+          />
+          <div
+            className="pointer-events-auto absolute -bottom-2 -right-2 z-20 h-4 w-4 cursor-nwse-resize rounded-sm border-2 border-white bg-accent"
+            aria-label="Resize video"
+            onPointerDown={(event) => drag(event, (dx, dy) => onResize(dx, dy))}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+const videoApiPromises = new Map();
+
+function loadVideoApi(provider) {
+  if ((provider === "youtube" && window.YT?.Player)
+    || (provider === "vimeo" && window.Vimeo?.Player)) return Promise.resolve();
+  const existing = videoApiPromises.get(provider);
+  if (existing) return existing;
+  const promise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.async = true;
+    if (provider === "youtube") {
+      const previousReady = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => {
+        previousReady?.();
+        resolve();
+      };
+      script.src = "https://www.youtube.com/iframe_api";
+    } else {
+      script.src = "https://player.vimeo.com/api/player.js";
+      script.onload = () => resolve();
+    }
+    script.onerror = () => reject(new Error(`Could not load ${provider} player API`));
+    document.head.appendChild(script);
+  });
+  videoApiPromises.set(provider, promise);
+  promise.catch(() => videoApiPromises.delete(provider));
+  return promise;
+}
+
+async function applyEmbedPlayback(video, player, provider, isHost) {
+  const currentTime = Number.isFinite(video.currentTime) ? Math.max(0, video.currentTime) : 0;
+  try {
+    if (provider === "youtube") {
+      if (!player?.getPlayerState) return;
+      const playerTime = player.getCurrentTime();
+      if (Number.isFinite(playerTime) && Math.abs(playerTime - currentTime) > 1.5) player.seekTo(currentTime, true);
+      const state = player.getPlayerState();
+      if (video.playing && state !== window.YT.PlayerState.PLAYING) {
+        await player.playVideo();
+      } else if (!video.playing && state === window.YT.PlayerState.PLAYING) {
+        player.pauseVideo();
+      }
+    } else if (provider === "vimeo") {
+      const playerTime = await player.getCurrentTime();
+      if (Number.isFinite(playerTime) && Math.abs(playerTime - currentTime) > 1.5) await player.setCurrentTime(currentTime);
+      const paused = await player.getPaused();
+      if (video.playing && paused) await player.play();
+      else if (!video.playing && !paused) await player.pause();
+    } else if (provider === "direct") {
+      if (Math.abs(player.currentTime - currentTime) > 1.5) player.currentTime = currentTime;
+      if (video.playing && player.paused) await player.play();
+      else if (!video.playing && !player.paused) player.pause();
+    }
+  } catch (error) {
+    if (!isHost) console.warn("Embedded video playback may require viewer interaction", error);
+  }
+}
+
+function VideoControls({ video, view, onToggle, onSeek }) {
+  const [playback, setPlayback] = useState(() => getVideoPlaybackState(video));
+  const left = (video.x - view.x) * view.k;
+  const top = (video.y - view.y) * view.k;
+  const width = video.w * view.k;
+  const height = video.h * view.k;
+  const controlWidth = Math.max(width, 196);
+  const controlLeft = left + (width - controlWidth) / 2;
+  const controlHeight = 48;
+  const controlTop = top + (height >= controlHeight + 16 ? height - controlHeight - 16 : height + 4);
+
+  useEffect(() => {
+    const refresh = () => setPlayback(getVideoPlaybackState(video));
+    refresh();
+    const timer = window.setInterval(refresh, 150);
+    return () => window.clearInterval(timer);
+  }, [video]);
+
+  return (
+    <div
+      className="pointer-events-none absolute z-10 flex items-center gap-2 rounded-md bg-black/80 px-4 text-white shadow-lg"
+      style={{
+        left: controlLeft,
+        top: controlTop,
+        width: controlWidth,
+        height: controlHeight,
+      }}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+      aria-label="Video playback controls"
+    >
+      <button
+        type="button"
+        onClick={() => onToggle(playback)}
+        aria-label={video.playing && !playback.paused ? "Pause video" : "Play video"}
+        title={video.playing && !playback.paused ? "Pause video" : "Play video"}
+        className="pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded hover:bg-white/20"
+      >
+        {video.playing && !playback.paused ? <Pause size={17} /> : <Play size={17} />}
+      </button>
+      <span className="shrink-0 text-[10px] tabular-nums">{formatPlaybackTime(playback.currentTime)}</span>
+      <input
+        type="range"
+        min="0"
+        max={playback.duration || 0}
+        step="0.1"
+        value={Math.min(playback.currentTime, playback.duration || 0)}
+        disabled={!playback.duration}
+        aria-label="Seek video"
+        onChange={(event) => onSeek(Number(event.target.value))}
+        className="pointer-events-auto min-w-0 flex-1 accent-white disabled:opacity-50"
+      />
+      <span className="shrink-0 text-[10px] tabular-nums">{formatPlaybackTime(playback.duration)}</span>
+    </div>
+  );
+}
+
+function formatPlaybackTime(value) {
+  if (!Number.isFinite(value) || value < 0) return "0:00";
+  const total = Math.floor(value);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
 
 function TableCellEditor({ editing, store, view, onCommit, onPreview }) {
   const [value, setValue] = useState(editing.value);
@@ -1107,8 +1522,8 @@ function TableCellEditor({ editing, store, view, onCommit, onPreview }) {
         }
       }}
       onPointerDown={(e) => e.stopPropagation()}
-      className="absolute z-10 border-2 border-accent bg-white px-2 text-sm outline-none"
-      style={{ left, top, width: table.cellWidth * view.k, height: table.cellHeight * view.k, pointerEvents: "auto" }}
+      className="absolute z-10 border-2 border-accent bg-white px-2 outline-none"
+      style={{ left, top, width: table.cellWidth * view.k, height: table.cellHeight * view.k, fontSize: (table.fontSize || 14) * view.k, color: table.color || "#17181C", pointerEvents: "auto" }}
     />
   );
 }
@@ -1120,6 +1535,8 @@ function styleKeyApplies(o, k) {
   if (k === "color" || k === "opacity") return true;
   if (k === "width") return o.type === "stroke" || o.type === "shape";
   if (k === "fill") return o.type === "shape";
+  if (k === "fontSize") return o.type === "table";
+  if (k === "playing") return o.type === "media" && o.mediaType === "video";
   return false;
 }
 

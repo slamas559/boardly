@@ -8,20 +8,18 @@ const navClass = ({ isActive }) =>
   `rounded-md px-3 py-1.5 text-sm ${isActive ? "bg-sunken text-ink" : "text-gray-600 hover:text-ink"}`;
 
 function Header() {
-  const { isAuthenticated, userRole } = useContext(StateContext);
+  const { isAuthenticated } = useContext(StateContext);
   const [open, setOpen] = useState(false);
 
   const links = isAuthenticated
     ? [
         ["/dashboard", "Dashboard"],
-        ...(userRole === "tutor" ? [["/lobby", "My rooms"]] : []),
+        ["/lobby", "My rooms"],
         ["/profile", "Profile"],
       ]
     : [["/faq", "FAQ"], ["/contact", "Contact"]];
 
-  const cta = isAuthenticated
-    ? userRole === "tutor" ? { to: "/create", label: "New room" } : null
-    : { to: "/register", label: "Get started" };
+  const cta = isAuthenticated ? { to: "/create", label: "New room" } : { to: "/register", label: "Get started" };
 
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-paper/95 backdrop-blur-sm safe-top">

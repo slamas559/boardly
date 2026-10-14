@@ -110,6 +110,8 @@ function groupOf(o, tool) {
   if (o.type === "stroke") return o.tool === "highlighter" ? "highlighter" : "pen";
   if (o.type === "shape") return "shape";
   if (o.type === "text") return "text";
+  if (o.type === "table") return "table";
+  if (o.type === "media") return "media";
   if (o.type === "markup") return o.kind === "highlight" ? "markup" : "markupLine";
   return STYLE_GROUP[tool] || null;
 }
@@ -117,6 +119,13 @@ function groupOf(o, tool) {
 const pickText = (o) => ({ color: o.color, fontFamily: o.fontFamily, fontSize: o.fontSize, bold: o.bold, italic: o.italic, underline: o.underline, align: o.align });
 function pickStyle(o) {
   if (o.type === "text") return pickText(o);
+  if (o.type === "table") return {
+    color: o.color || "#17181C",
+    fontSize: o.fontSize || 14,
+    cellWidth: o.cellWidth,
+    cellHeight: o.cellHeight,
+  };
+  if (o.type === "media") return { mediaType: o.mediaType, playing: Boolean(o.playing) };
   const out = { color: o.color };
   if (o.width !== undefined) out.width = o.width;
   if (o.opacity !== undefined) out.opacity = o.opacity;

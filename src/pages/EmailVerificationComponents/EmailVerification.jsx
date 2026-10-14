@@ -33,11 +33,7 @@ const EmailVerification = () => {
         
         // Redirect after 3 seconds
         setTimeout(() => {
-          if (response.data.user.role === 'tutor') {
-            navigate('/bank-setup');
-          } else {
-            navigate('/dashboard');
-          }
+          navigate('/dashboard');
           window.location.reload();
         }, 3000);
         

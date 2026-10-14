@@ -105,6 +105,8 @@ export function getBounds(o) {
       return { x: o.x, y: o.y, w: o.w, h: o.h };
     case "table":
       return { x: o.x, y: o.y, w: o.cols * o.cellWidth, h: o.rows * o.cellHeight };
+    case "media":
+      return { x: o.x, y: o.y, w: o.w, h: o.h };
     case "text": {
       const m = measureText(o);
       const x = o.align === "center" ? o.x - m.w / 2 : o.align === "right" ? o.x - m.w : o.x;
@@ -189,6 +191,7 @@ export function hitObject(o, p, tol) {
     }
     case "graph":
     case "table":
+    case "media":
       return pointInRect(p, getBounds(o), tol);
     case "text":
       return pointInRect(p, getBounds(o), tol);
@@ -253,6 +256,7 @@ export function movePatch(o, dx, dy) {
       return { x1: o.x1 + dx, y1: o.y1 + dy, x2: o.x2 + dx, y2: o.y2 + dy };
     case "graph":
     case "table":
+    case "media":
       return { x: o.x + dx, y: o.y + dy };
     case "text":
       return { x: o.x + dx, y: o.y + dy };
@@ -275,6 +279,8 @@ export function scalePatch(o, sx, sy, ox, oy) {
       return { x1: fx(o.x1), y1: fy(o.y1), x2: fx(o.x2), y2: fy(o.y2) };
     case "graph":
       return { x: fx(o.x), y: fy(o.y), w: Math.max(80, o.w * Math.abs(sx)), h: Math.max(80, o.h * Math.abs(sy)) };
+    case "media":
+      return { x: fx(o.x), y: fy(o.y), w: Math.max(40, o.w * Math.abs(sx)), h: Math.max(40, o.h * Math.abs(sy)) };
     case "table":
       return {
         x: fx(o.x),

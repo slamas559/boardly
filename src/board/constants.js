@@ -21,7 +21,7 @@ export const PALETTE = ["#17181C", "#6B6A64", "#2540D9", "#0E8A6B", "#D99A00", "
 export const HIGHLIGHT_PALETTE = ["#FFE14D", "#7CE8A0", "#7FD4FF", "#FF9EC8", "#FFB36B", "#C9A7FF"];
 
 // Heading shown for each remembered-style group in the properties panel
-export const STYLE_TITLES = { pen: "Pen", highlighter: "Marker", shape: "Shape", text: "Text", markup: "Highlight", markupLine: "Markup" };
+export const STYLE_TITLES = { pen: "Pen", highlighter: "Marker", shape: "Shape", text: "Text", table: "Table", media: "Media", markup: "Highlight", markupLine: "Markup" };
 
 export const TEXT_SIZES = [14, 18, 24, 32, 48, 72, 96];
 
@@ -63,6 +63,7 @@ export function defaultStyles(mode) {
       underline: false,
       align: "left",
     },
+    table: { color: "#17181C", fontSize: 14, cellWidth: 110, cellHeight: 40 },
     markup: { color: "#FFE14D", opacity: 0.45 },
     markupLine: { color: "#E2492B", opacity: 1 },
   };
