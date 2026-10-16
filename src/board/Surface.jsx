@@ -10,6 +10,7 @@ import {
   dist, hitGraphGeometry, hitGraphTrace, hitObject, isMovable, measureText, movePatch, objectInRect, q, scalePatch,
 } from "./geometry.js";
 import { drawPaper, paperSnapGrid } from "./paper.js";
+import { togglePatch } from "./cover.js";
 import { hitInstrumentHandle, rotationFromPoint, sizeFromPoint, snapPoint, snapRotation } from "./geometryTools.js";
 import { drawSnapMark } from "./instrumentRender.js";
 import { angleFromPoint, hitFractionPart, hitUnitCirclePoint, shadePatch, snapToSpecial } from "./mathAids.js";
@@ -124,17 +125,21 @@ const Surface = forwardRef(function Surface(
     const objs = st.onPage(pg);
     const selected = [];
     const previewIds = new Set((previews || []).map((preview) => preview.id));
+    // Covers are painted last, over everything else on the page, so they really hide what is under them
+    const viewer = live.current.readOnly ? "listener" : "host";
+    const covers = [];
     for (const base of objs) {
       if (ed && ed.id === base.id) continue;
       if (previewIds.has(base.id)) continue;
       const o = transient.current.get(base.id) || base;
-      const fade = erasing.current.has(base.id) ? 0.2 : 1;
-      drawObject(ctx, o, { k: v.k, pageSize: ps, alpha: fade });
+      if (o.type === "cover") covers.push(o);
+      else drawObject(ctx, o, { k: v.k, pageSize: ps, alpha: erasing.current.has(base.id) ? 0.2 : 1 });
       if (sel && sel.includes(base.id)) selected.push(o);
     }
     for (const preview of previews || []) if ((preview.page ?? 0) === pg) {
       drawObject(ctx, preview, { k: v.k, pageSize: ps, alpha: preview.previewAlpha ?? 1 });
     }
+    for (const cover of covers) drawObject(ctx, cover, { k: v.k, viewer });
 
     // In-progress drawing
     const d = drag.current;
@@ -278,7 +283,12 @@ const Surface = forwardRef(function Surface(
     return [(e.clientX - r.left) / v.k + v.x, (e.clientY - r.top) / v.k + v.y];
   }, []);
 
-  const objectsTopFirst = () => live.current.store.onPage(live.current.page).slice().reverse();
+  // Newest first, but a cover is always last: you can still pick the content under it, and a click on the
+  // empty part of a cover picks the cover
+  const objectsTopFirst = () => {
+    const all = live.current.store.onPage(live.current.page);
+    return [...all.filter((o) => o.type !== "cover").reverse(), ...all.filter((o) => o.type === "cover").reverse()];
+  };
 
   /* ----------------------------- text editing ----------------------------- */
   const startEdit = useCallback((obj, isNew) => {
@@ -680,7 +690,7 @@ const Surface = forwardRef(function Surface(
     const { view: v, store: s, page: pg } = live.current;
     const tol = 10 / v.k;
     for (const o of s.onPage(pg)) {
-      if (!erasing.current.has(o.id) && o.type !== "highlight" && o.type !== "instrument" && hitObject(o, p, tol)) {
+      if (!erasing.current.has(o.id) && o.type !== "highlight" && o.type !== "instrument" && o.type !== "cover" && hitObject(o, p, tol)) {
         erasing.current.add(o.id);
         sharePreview({ ...o, previewAlpha: 0.2 });
       }
@@ -1138,7 +1148,13 @@ const Surface = forwardRef(function Surface(
       return;
     }
     const hit = objectsTopFirst().find((o) => o.type === "text" && hitObject(o, p, 4 / v.k));
-    if (hit) startEdit(hit, false);
+    if (hit) {
+      startEdit(hit, false);
+      return;
+    }
+    // Double-click on a cover reveals it (or hides it again)
+    const cover = objectsTopFirst().find((o) => o.type === "cover" && hitObject(o, p, 0));
+    if (cover) live.current.store.commit([{ op: "update", id: cover.id, patch: togglePatch(cover) }]);
   };
 
   /* PDF text markup: map a pointer drag to the text between two caret positions */

@@ -235,7 +235,8 @@ export default function AidInspector({ aid, store }) {
     <div className="space-y-5" aria-label="Math aid settings">
       {aid.kind === "unitcircle" ? <UnitCircleSettings aid={aid} commit={commit} />
         : aid.kind === "fractions" ? <FractionSettings aid={aid} commit={commit} />
-          : <NumberLineSettings aid={aid} commit={commit} />}
+          : aid.kind === "pollbars" ? <p className="text-sm text-muted">These are the results of your question, as they stood when you put them on the board. You can move, resize and recolour them.</p>
+            : <NumberLineSettings aid={aid} commit={commit} />}
       <div className="border-t border-line pt-3">
         <FieldLabel>Colour</FieldLabel>
         <Swatches colors={PALETTE.filter((c) => c !== "#FFFFFF")} value={aid.color || "#2540D9"} onPick={(color) => store.commit([{ op: "update", id: aid.id, patch: { color } }], { coalesce: `aid-color:${aid.id}` })} />

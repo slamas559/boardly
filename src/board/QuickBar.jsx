@@ -3,10 +3,11 @@
 // object, flips below when there is no room, and hides while the pointer is down so it never
 // gets in the way of dragging, resizing or panning.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Copy, Pencil, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Copy, Eye, EyeOff, Pencil, SlidersHorizontal, Trash2 } from "lucide-react";
 import { HIGHLIGHT_PALETTE, PALETTE } from "./constants.js";
 import { getBounds, unionBounds } from "./geometry.js";
 import { Swatches } from "./Toolbar.jsx";
+import { COVER_DEFAULT_COLOR, togglePatch } from "./cover.js";
 
 const GAP = 10;
 const EDGE = 8;
@@ -63,11 +64,12 @@ export default function QuickBar({ tools, store, surfaceRef, inspector, view, si
   const formula = objects.length === 1 && objects[0].type === "equation" ? objects[0] : null;
   const aid = objects.length === 1 && objects[0].type === "aid" ? objects[0] : null;
   const chart = objects.length === 1 && objects[0].type === "stats" ? objects[0] : null;
-  const own = graph || formula || aid || chart; // these keep their colour on the object itself
-  const colour = graph ? graph.color || "#2540D9" : formula ? formula.color || "#17181C" : aid || chart ? (aid || chart).color || "#2540D9" : group && activeStyle ? activeStyle.color : null;
+  const cover = objects.length === 1 && objects[0].type === "cover" ? objects[0] : null;
+  const own = graph || formula || aid || chart || cover; // these keep their colour on the object itself
+  const colour = graph ? graph.color || "#2540D9" : formula ? formula.color || "#17181C" : aid || chart ? (aid || chart).color || "#2540D9" : cover ? cover.color || COVER_DEFAULT_COLOR : group && activeStyle ? activeStyle.color : null;
   const palette = own ? PALETTE.filter((c) => c !== "#FFFFFF") : group === "highlighter" || group === "markup" ? HIGHLIGHT_PALETTE : PALETTE;
   const pickColour = (c) => {
-    if (own) store.commit([{ op: "update", id: own.id, patch: { color: c } }], { coalesce: `${graph ? "graph" : formula ? "equation" : aid ? "aid" : "stats"}-color:${own.id}` });
+    if (own) store.commit([{ op: "update", id: own.id, patch: { color: c } }], { coalesce: `${graph ? "graph" : formula ? "equation" : aid ? "aid" : cover ? "cover" : "stats"}-color:${own.id}` });
     else tools.setStyle({ color: c });
     setPaletteOpen(false);
   };
@@ -101,6 +103,16 @@ export default function QuickBar({ tools, store, surfaceRef, inspector, view, si
             className={`${iconButton} ${paletteOpen ? "bg-sunken" : ""}`}
           >
             <span className="h-5 w-5 rounded-[5px] border border-black/15" style={{ background: colour }} />
+          </button>
+        )}
+        {cover && (
+          <button
+            type="button"
+            onClick={() => store.commit([{ op: "update", id: cover.id, patch: togglePatch(cover) }])}
+            title={cover.open ? "Hide this again from students" : "Show what is under this to students"}
+            className={`flex h-8 items-center gap-1.5 rounded-md px-2 text-sm font-medium ${cover.open ? "text-gray-700 hover:bg-sunken" : "bg-accent text-white hover:opacity-90"}`}
+          >
+            {cover.open ? <EyeOff size={15} /> : <Eye size={15} />} {cover.open ? "Hide again" : "Reveal"}
           </button>
         )}
         {!inspector.visible && (inspector.kind === "graph" || inspector.kind === "equation" || inspector.kind === "aid" || inspector.kind === "stats") && (

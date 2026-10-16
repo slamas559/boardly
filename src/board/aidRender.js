@@ -355,6 +355,86 @@ function drawFractions(ctx, o, color) {
   }
 }
 
+/* ------------------------------ poll results ------------------------------ */
+
+function drawPollBars(ctx, o, color) {
+  const bars = o.bars || [];
+  const total = bars.reduce((sum, bar) => sum + bar.count, 0);
+  const top = o.y + (o.title ? 54 : 22);
+  ctx.textBaseline = "middle";
+  if (o.title) {
+    ctx.fillStyle = INK;
+    ctx.font = `700 19px ${FONT}`;
+    ctx.textAlign = "left";
+    ctx.fillText(o.title, o.x + 22, o.y + 30, o.w - 44);
+  }
+  const rowGap = 10;
+  const rowHeight = clamp((o.y + o.h - top - 40 - (bars.length - 1) * rowGap) / Math.max(1, bars.length), 22, 52);
+  const labelWidth = Math.min(o.w * 0.32, 190);
+  const left = o.x + 22 + 34 + labelWidth;
+  const right = o.x + o.w - 22 - 74;
+  const peak = Math.max(1, ...bars.map((bar) => bar.count));
+  bars.forEach((bar, index) => {
+    const y = top + index * (rowHeight + rowGap);
+    const right_ = o.correct === index;
+    const tone = o.correct === undefined || o.correct === null ? color : right_ ? "#16803C" : "#9A9BA3";
+    // Letter badge and the choice text
+    ctx.beginPath();
+    ctx.arc(o.x + 22 + 14, y + rowHeight / 2, 14, 0, Math.PI * 2);
+    ctx.fillStyle = tone;
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.font = `700 14px ${FONT}`;
+    ctx.textAlign = "center";
+    ctx.fillText("ABCDEF"[index], o.x + 22 + 14, y + rowHeight / 2 + 1);
+    ctx.fillStyle = INK;
+    ctx.font = `600 ${clamp(rowHeight * 0.42, 13, 19)}px ${FONT}`;
+    ctx.textAlign = "left";
+    ctx.fillText(bar.label, o.x + 22 + 38, y + rowHeight / 2, labelWidth - 8);
+    // The bar, with its count and share
+    ctx.fillStyle = "#EEEBE3";
+    ctx.beginPath();
+    roundedRect(ctx, left, y, right - left, rowHeight, 6);
+    ctx.fill();
+    const width = bar.count ? Math.max(8, ((right - left) * bar.count) / peak) : 0;
+    if (width) {
+      ctx.beginPath();
+      roundedRect(ctx, left, y, width, rowHeight, 6);
+      ctx.fillStyle = tone;
+      ctx.globalAlpha = 0.9;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    ctx.fillStyle = INK;
+    ctx.font = `700 ${clamp(rowHeight * 0.42, 13, 19)}px ${FONT}`;
+    ctx.textAlign = "left";
+    const share = total ? Math.round((bar.count / total) * 100) : 0;
+    ctx.fillText(`${bar.count}`, right + 12, y + rowHeight / 2 - 7);
+    ctx.fillStyle = MUTED;
+    ctx.font = `500 12px ${FONT}`;
+    ctx.fillText(`${share}%`, right + 12, y + rowHeight / 2 + 9);
+    if (right_) {
+      // A tick drawn as a shape (not a font glyph), white on the green bar
+      const size = clamp(rowHeight * 0.26, 6, 11);
+      const tx = right - 16 - size;
+      const ty = y + rowHeight / 2;
+      ctx.strokeStyle = width > size * 4 + 24 ? "#fff" : "#16803C";
+      ctx.lineWidth = 3;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      ctx.moveTo(tx - size, ty);
+      ctx.lineTo(tx - size * 0.3, ty + size * 0.75);
+      ctx.lineTo(tx + size, ty - size * 0.7);
+      ctx.stroke();
+    }
+  });
+  ctx.fillStyle = MUTED;
+  ctx.font = `500 12px ${FONT}`;
+  ctx.textAlign = "right";
+  ctx.fillText(`${total} ${total === 1 ? "answer" : "answers"}`, o.x + o.w - 22, o.y + o.h - 18);
+}
+
 /** Draw one math aid (an object with type "aid"). */
 export function drawAid(ctx, o) {
   ctx.save();
@@ -365,6 +445,7 @@ export function drawAid(ctx, o) {
   const color = typeof o.color === "string" && /^#[0-9a-f]{3,8}$/i.test(o.color) ? o.color : AID_DEFAULT_COLOR;
   if (o.kind === "unitcircle") drawUnitCircle(ctx, o, color);
   else if (o.kind === "fractions") drawFractions(ctx, o, color);
+  else if (o.kind === "pollbars") drawPollBars(ctx, o, color);
   else drawNumberLine(ctx, o, color);
   ctx.restore();
 }

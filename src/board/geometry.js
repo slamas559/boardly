@@ -78,6 +78,7 @@ export function getBounds(o) {
     case "equation":
     case "aid":
     case "stats":
+    case "cover":
       return { x: o.x, y: o.y, w: o.w, h: o.h };
     case "instrument":
       return instrumentBounds(o);
@@ -173,6 +174,7 @@ export function hitObject(o, p, tol) {
     case "equation":
     case "aid":
     case "stats":
+    case "cover":
     case "table":
     case "media":
       return pointInRect(p, getBounds(o), tol);
@@ -251,6 +253,7 @@ export function movePatch(o, dx, dy) {
     case "equation":
     case "aid":
     case "stats":
+    case "cover":
     case "instrument":
     case "table":
     case "media":
@@ -282,6 +285,8 @@ export function scalePatch(o, sx, sy, ox, oy) {
       return { x: fx(o.x), y: fy(o.y), w: Math.max(160, o.w * Math.abs(sx)), h: Math.max(110, o.h * Math.abs(sy)) };
     case "stats":
       return { x: fx(o.x), y: fy(o.y), w: Math.max(320, o.w * Math.abs(sx)), h: Math.max(220, o.h * Math.abs(sy)) };
+    case "cover":
+      return { x: fx(o.x), y: fy(o.y), w: Math.max(60, o.w * Math.abs(sx)), h: Math.max(40, o.h * Math.abs(sy)) };
     case "instrument": {
       // Instruments keep their shape: they only get bigger or smaller
       const limits = INSTRUMENT_SIZES[o.kind] || INSTRUMENT_SIZES.ruler;

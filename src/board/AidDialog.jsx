@@ -5,6 +5,7 @@ import { AID_KINDS, newAid } from "./mathAids.js";
 import { INSTRUMENTS, instrumentBounds, newInstrument } from "./geometryTools.js";
 import { drawInstrument } from "./instrumentRender.js";
 import { drawStats } from "./statsRender.js";
+import { drawCover, newCover } from "./cover.js";
 import { CHARTS, newStats } from "./stats.js";
 
 const PREVIEW_WIDTH = 288;
@@ -34,6 +35,25 @@ function AidPreview({ kind }) {
     drawAid(ctx, aid);
   }, [kind]);
   return <canvas ref={ref} className="block h-auto w-full rounded-lg" aria-hidden="true" />;
+}
+
+/** A cover as students see it. */
+function CoverPreview() {
+  const ref = useRef(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const cover = { ...newCover({ id: "preview", page: 0, cx: 0, cy: 0 }), x: 0, y: 0, w: 360, h: 170 };
+    const k = PREVIEW_WIDTH / cover.w;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = PREVIEW_WIDTH * dpr;
+    canvas.height = Math.ceil(cover.h * k * dpr);
+    canvas.style.aspectRatio = `${PREVIEW_WIDTH} / ${cover.h * k}`;
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr * k, 0, 0, dpr * k, 0, 0);
+    drawCover(ctx, cover, "listener", 1);
+  }, []);
+  return <canvas ref={ref} className="block h-auto w-full rounded-lg bg-white" aria-hidden="true" />;
 }
 
 /** A statistics chart with its example data. */
@@ -92,7 +112,7 @@ export default function AidDialog({ onClose, onPick }) {
       <div className="float-panel max-h-[calc(100dvh-2rem)] w-full max-w-2xl overflow-y-auto p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 id="aid-dialog-title" className="text-base font-semibold">Math aids, data and tools</h3>
+            <h3 id="aid-dialog-title" className="text-base font-semibold">Math aids, data and class tools</h3>
             <p className="mt-0.5 text-sm text-muted">Drop one on the board, then change it live while you teach.</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-sm text-muted hover:bg-sunken">Close</button>
@@ -130,6 +150,20 @@ export default function AidDialog({ onClose, onPick }) {
               </span>
             </button>
           ))}
+        </div>
+        <h4 className="mt-5 text-[11px] font-medium uppercase tracking-wider text-muted">Class tools</h4>
+        <div className="mt-2 grid gap-3 sm:grid-cols-3">
+          <button
+            type="button"
+            onClick={() => onPick("cover")}
+            className="flex flex-col gap-2 rounded-lg border border-line bg-white p-2 text-left transition-colors hover:border-accent hover:bg-accent-soft focus-visible:border-accent"
+          >
+            <CoverPreview />
+            <span className="px-1 pb-1">
+              <span className="block text-sm font-medium">Cover</span>
+              <span className="block text-xs text-muted">Hide part of the board, then reveal it</span>
+            </span>
+          </button>
         </div>
         <h4 className="mt-5 text-[11px] font-medium uppercase tracking-wider text-muted">Geometry tools</h4>
         <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">

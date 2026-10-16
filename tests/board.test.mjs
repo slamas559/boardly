@@ -15,6 +15,12 @@ import {
   CHARTS, EXAMPLES, datasetToText, describeCorrelation, formatStat, histogramBins, linearRegression, newStats, niceNumber, niceScale, numbersOf,
   pairsOf, parseDataset, regressionEquation, statsTable, summarize,
 } from '../src/board/stats.js';
+import {
+  ACTIVITY_LIMITS, CHOICE_TEMPLATES, choiceCounts, draftToSpec, emptyDraft, numberSummary, parseAnswerNumber, percent, pollResultsForBoard,
+  progressLabel, showValue, upsertResponse,
+} from '../src/board/activityLogic.js';
+import { COVER_DEFAULT_COLOR, drawCover, newCover, togglePatch } from '../src/board/cover.js';
+import { MAX_IMAGE_CHARS, fitImage } from '../src/board/workImage.js';
 import { chartProblem, drawStats } from '../src/board/statsRender.js';
 import { PAPER_KINDS, PLANE_ORIGIN, drawPaper, niceStep, paperId, paperSnapGrid } from '../src/board/paper.js';
 import {
@@ -1188,4 +1194,127 @@ test('every chart draws, including empty, tiny and awkward data', () => {
   drawStats(labelled.ctx, base);
   const text = labelled.calls.filter(([name]) => name === 'fillText').map((call) => call[1]);
   assert.ok(['Mean', '71.23', 'Median', '70.5', 'Frequency', 'Score'].every((word) => text.includes(word)));
+});
+
+/* ------------------------------ class activities ------------------------------ */
+
+const draftOf = (patch) => ({ ...emptyDraft('choice'), prompt: 'What is 2 + 2?', ...patch });
+
+test('a multiple choice question is checked before it is sent and blank choices are dropped', () => {
+  const ok = draftToSpec(draftOf({ options: ['3', '4', '5', ''], correct: 1 }));
+  assert.deepEqual(ok, { ok: true, spec: { kind: 'choice', prompt: 'What is 2 + 2?', options: ['3', '4', '5'], correct: 1 } });
+  // A blank choice in the middle shifts the marked answer along with the choices that follow it
+  const shifted = draftToSpec(draftOf({ options: ['3', '', '4', '5'], correct: 2 }));
+  assert.deepEqual(shifted.spec.options, ['3', '4', '5']);
+  assert.equal(shifted.spec.correct, 1);
+  assert.equal(draftToSpec(draftOf({ options: ['3', '4', '', ''] })).spec.correct, undefined); // a poll with no right answer
+  assert.match(draftToSpec(draftOf({ prompt: '   ' })).error, /Write the question/);
+  assert.match(draftToSpec(draftOf({ options: ['only', '', '', ''] })).error, /at least two choices/);
+  assert.match(draftToSpec(draftOf({ options: ['a', 'b', '', ''], correct: 3 })).error, /marked as correct is empty/);
+  assert.equal(draftToSpec(draftOf({ prompt: '  lots   of   space  ', options: ['a', 'b', '', ''] })).spec.prompt, 'lots of space');
+  assert.equal(CHOICE_TEMPLATES.every((template) => template.options.length >= ACTIVITY_LIMITS.minOptions && template.options.length <= ACTIVITY_LIMITS.maxOptions), true);
+});
+
+test('number and drawing questions build the right request', () => {
+  assert.deepEqual(draftToSpec({ ...emptyDraft('number'), prompt: 'Add them', answer: '7/8', tolerance: '0.01' }).spec, { kind: 'number', prompt: 'Add them', answer: 0.875, tolerance: 0.01 });
+  assert.deepEqual(draftToSpec({ ...emptyDraft('number'), prompt: 'Estimate' }).spec, { kind: 'number', prompt: 'Estimate' }); // no answer: just collect numbers
+  assert.match(draftToSpec({ ...emptyDraft('number'), prompt: 'q', answer: 'abc' }).error, /must be a number/);
+  assert.match(draftToSpec({ ...emptyDraft('number'), prompt: 'q', answer: '5', tolerance: '-1' }).error, /0 or more/);
+  assert.deepEqual(draftToSpec({ ...emptyDraft('work'), prompt: 'Show your steps' }).spec, { kind: 'work', prompt: 'Show your steps' });
+  for (const [typed, expected] of [['12', 12], [' -3.5 ', -3.5], ['3,5', 3.5], ['3/4', 0.75], ['−4', -4]]) assert.equal(parseAnswerNumber(typed), expected, typed);
+  for (const bad of ['', 'abc', '1/0', '12 apples', null]) assert.equal(parseAnswerNumber(bad), null, String(bad));
+});
+
+test('the host sees counts, summaries and board-ready results from the answers', () => {
+  const answer = (key, value, correct = null) => ({ key, name: key, value, correct, at: key.length + value });
+  const choice = { kind: 'choice', prompt: 'x'.repeat(100), options: ['3', '4', '5'], correct: 1, responses: [answer('a', 1, true), answer('b', 1, true), answer('c', 0, false)] };
+  assert.deepEqual(choiceCounts(choice), [1, 2, 0]);
+  const board = pollResultsForBoard(choice);
+  assert.deepEqual(board.bars, [{ label: '3', count: 1 }, { label: '4', count: 2 }, { label: '5', count: 0 }]);
+  assert.equal(board.correct, 1);
+  assert.ok(board.title.length <= 80 && board.title.endsWith('…')); // long questions are shortened for the chart
+  assert.equal('correct' in pollResultsForBoard({ ...choice, correct: undefined }), false);
+  const numbers = { kind: 'number', answer: 5, responses: [answer('a', 9, false), answer('b', 5, true), answer('c', 3, false), answer('d', 5, true)] };
+  assert.deepEqual(numberSummary(numbers), { total: 4, values: [3, 5, 5, 9], mean: 5.5, median: 5, correct: 2 });
+  assert.deepEqual(numberSummary({ responses: [] }), { total: 0, values: [], mean: null, median: null, correct: 0 });
+  assert.equal(percent(1, 3), 33);
+  assert.equal(percent(0, 0), 0);
+  assert.equal(progressLabel(12, 18), '12 of 18 answered');
+  assert.equal(progressLabel(20, 18), '18 of 18 answered'); // never more than the class
+  assert.equal(progressLabel(3, 0), '3 answered');
+  assert.deepEqual([showValue(3.14159265), showValue(-4), showValue(0.75), showValue(NaN)], ['3.14159', '−4', '0.75', '—']);
+});
+
+test('a changed answer replaces the old one instead of counting twice', () => {
+  const first = [{ key: 'a', value: 1, at: 1 }, { key: 'b', value: 2, at: 2 }];
+  const next = upsertResponse(first, { key: 'a', value: 0, at: 3 });
+  assert.equal(next.length, 2);
+  assert.equal(next.find((r) => r.key === 'a').value, 0);
+  assert.deepEqual(next.map((r) => r.key), ['b', 'a']); // newest last
+  assert.equal(upsertResponse([], { key: 'z', value: 1, at: 1 }).length, 1);
+  assert.equal(first.length, 2); // the original list is untouched
+});
+
+test('drawings are sent as the smallest picture that fits', () => {
+  const calls = [];
+  const sizes = new Map([['1/0.8', 400000], ['1/0.65', 350000], ['1/0.5', 300000], ['1/0.35', 250000]]);
+  const url = fitImage((scale, quality) => { calls.push([scale, quality]); return 'x'.repeat(sizes.get(`${scale}/${quality}`) ?? 100); });
+  assert.equal(url.length, 250000); // quality was lowered step by step until it fitted
+  assert.deepEqual(calls.at(-1), [1, 0.35]);
+  assert.equal(fitImage(() => 'tiny'), 'tiny'); // a small drawing is sent at full quality straight away
+  const shrunk = fitImage((scale) => 'x'.repeat(scale === 1 ? 999999 : 1000)); // too big until the picture itself is smaller
+  assert.equal(shrunk.length, 1000);
+  assert.equal(fitImage(() => 'x'.repeat(MAX_IMAGE_CHARS + 1)), null); // cannot be made small enough
+  assert.ok(MAX_IMAGE_CHARS < 300000); // always under the server's limit
+});
+
+test('a cover hides things from students but never from the host', () => {
+  const closed = newCover({ id: 'c', page: 0, cx: 500, cy: 300 });
+  assert.equal(closed.open, false);
+  assert.equal(closed.color, COVER_DEFAULT_COLOR);
+  assert.ok(near(closed.x + closed.w / 2, 500, 0.01) && near(closed.y + closed.h / 2, 300, 0.01));
+  assert.deepEqual(togglePatch(closed), { open: true });
+  assert.deepEqual(togglePatch({ ...closed, open: true }), { open: false });
+  const text = (o, viewer) => {
+    const { ctx, calls } = recordingContext();
+    drawCover(ctx, o, viewer, 1);
+    return { calls, words: calls.filter(([name]) => name === 'fillText').map((call) => call[1]) };
+  };
+  const studentClosed = text(closed, 'listener');
+  assert.ok(studentClosed.calls.some(([name]) => name === 'fill'), 'a closed cover is a solid panel for students');
+  assert.ok(studentClosed.words.includes('?'));
+  assert.equal(text({ ...closed, open: true }, 'listener').calls.filter(([name]) => ['fill', 'stroke', 'fillText'].includes(name)).length, 0); // revealed: nothing left to see
+  assert.ok(text({ ...closed, label: 'Answer' }, 'listener').words.includes('Answer'));
+  assert.ok(text(closed, 'host').words.includes('Hidden from students'));
+  assert.ok(text({ ...closed, open: true }, 'host').words.includes('Revealed to students'));
+  const hostFill = text(closed, 'host').calls.find(([name]) => name === 'fill');
+  assert.ok(hostFill); // translucent tint, so the host can still work under it
+  drawCover(recordingContext().ctx, { ...closed, color: 'not a colour' }, 'listener', 1); // a bad colour cannot break drawing
+});
+
+test('covers move, resize and are hit like other objects', () => {
+  const cover = newCover({ id: 'c', page: 0, cx: 300, cy: 200 });
+  assert.deepEqual(getBounds(cover), { x: cover.x, y: cover.y, w: cover.w, h: cover.h });
+  assert.equal(hitObject(cover, [cover.x + 5, cover.y + 5], 0), true);
+  assert.equal(hitObject(cover, [cover.x - 40, cover.y], 0), false);
+  assert.deepEqual(movePatch(cover, 10, 20), { x: cover.x + 10, y: cover.y + 20 });
+  assert.equal(scalePatch(cover, 2, 1, 0, 0).w, cover.w * 2);
+  assert.equal(scalePatch(cover, 0.01, 0.01, 0, 0).w, 60);
+  assert.equal(scalePatch(cover, 0.01, 0.01, 0, 0).h, 40);
+  assert.ok(isMovable(cover));
+});
+
+test('poll results draw as lettered bars with the right answer marked', () => {
+  const results = { id: 'p', type: 'aid', kind: 'pollbars', page: 0, x: 0, y: 0, w: 600, h: 300, color: '#2540D9', title: 'What is 2 + 2?', bars: [{ label: '3', count: 2 }, { label: '4', count: 14 }, { label: '5', count: 1 }], correct: 1 };
+  const { ctx, calls } = recordingContext();
+  drawAid(ctx, results);
+  const words = calls.filter(([name]) => name === 'fillText').map((call) => call[1]);
+  assert.ok(['What is 2 + 2?', 'A', 'B', 'C', '2', '14', '1', '17 answers'].every((word) => words.includes(word)), words.join('|'));
+  assert.equal(words.includes('✓'), false); // the tick is a drawn shape, so it shows on every device
+  assert.ok(calls.filter(([name]) => name === 'lineTo').length >= 2);
+  assert.ok(words.includes('82%')); // 14 of 17
+  for (const odd of [{ ...results, bars: [{ label: 'a', count: 0 }] }, { ...results, title: undefined, correct: undefined }, { ...results, bars: [] }]) {
+    drawAid(recordingContext().ctx, odd); // no answers yet, no title, no bars: still draws
+  }
+  assert.equal(hitObject(results, [10, 10], 0), true);
 });

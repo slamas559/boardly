@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import {
-  ArrowLeft, Check, CircleHelp, FileText, Link2, LogOut, MoreHorizontal, PenLine, Square, Users, X,
+  ArrowLeft, Check, CircleHelp, FileText, Link2, ListChecks, LogOut, MoreHorizontal, PenLine, Square, Users, X,
 } from "lucide-react";
 import { useSocket } from "../context/SocketContext";
 import api from "../utils/api";
@@ -16,6 +16,10 @@ import VoiceBroadcast from "../components/layout/VoiceBroadcast";
 import SessionRecorder from "../components/layout/SessionRecorder.jsx";
 import InactiveRoom from "../components/layout/InactiveRoom";
 import Logo from "../ui/Logo.jsx";
+import ActivityHost from "../board/ActivityHost.jsx";
+import ActivityStudent, { Spotlight } from "../board/ActivityStudent.jsx";
+import { useActivity } from "../board/useActivity.js";
+import { getClientId } from "../utils/clientId.js";
 
 function useOutsideClose(open, onClose) {
   const ref = useRef(null);
@@ -55,6 +59,9 @@ export default function RoomShell({ room, isTutor }) {
   const [roomState, setRoomState] = useState(null);
   const [isHost, setIsHost] = useState(isTutor);
   const [stats, setStats] = useState({ students: 0, userList: [] });
+  const [activityOpen, setActivityOpen] = useState(false);
+  const boardApiRef = useRef(null); // lets the class panel put results onto the board
+  const activity = useActivity(socket, room._id, useCallback((message) => toast.error(message), []));
   const [profile, setProfile] = useState(null);
   const [peopleOpen, setPeopleOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -77,7 +84,7 @@ export default function RoomShell({ room, isTutor }) {
   useEffect(() => {
     if (!socket || !isRoomActive || !profile) return undefined;
     const join = () => {
-      socket.emit("join-room", { roomId: room._id, user: { id: profile._id || "", name: profile.name || "Guest", isTutor } });
+      socket.emit("join-room", { roomId: room._id, user: { id: profile._id || "", name: profile.name || "Guest", isTutor, clientId: getClientId() } });
     };
     const onState = (s) => { setRoomState(s); setIsHost(Boolean(s.isHost)); setIsRecording(Boolean(s.isRecording)); };
     const onConnect = () => { setConnected(true); join(); };
@@ -207,6 +214,15 @@ export default function RoomShell({ room, isTutor }) {
               <CircleHelp size={16} /> Q&A {qa.qaEnabled ? "on" : "off"}
             </button>
           ) : null}
+          {isHost && (
+            <IconButton
+              icon={ListChecks}
+              label="Class questions and polls"
+              badge={activity.activity?.status === "open" ? activity.activity.responses.length : 0}
+              active={activityOpen}
+              onClick={() => setActivityOpen((open) => !open)}
+            />
+          )}
           {(isHost ? qa.qaEnabled || unanswered > 0 : qa.qaEnabled) && (
             <IconButton icon={CircleHelp} label={isHost ? "Open questions" : "Ask a question"} badge={isHost ? unanswered : 0} active={qa.qaPanelOpen} onClick={() => qa.setQaPanelOpen(!qa.qaPanelOpen)}/>
           )}
@@ -251,12 +267,24 @@ export default function RoomShell({ room, isTutor }) {
 
       <main className="relative min-h-0 flex-1">
         <div className={`absolute inset-0 ${view === "whiteboard" ? "" : "invisible pointer-events-none"}`} aria-hidden={view !== "whiteboard"}>
-          <BoardWorkspace room={room} socket={socket} isHost={isHost} initial={roomState} visible={view === "whiteboard"} />
+          <BoardWorkspace room={room} socket={socket} isHost={isHost} initial={roomState} visible={view === "whiteboard"} apiRef={boardApiRef} />
         </div>
         <div className={`absolute inset-0 ${view === "pdf" ? "" : "invisible pointer-events-none"}`} aria-hidden={view !== "pdf"}>
           <PDFWorkspace room={room} socket={socket} isHost={isHost} initial={roomState} visible={view === "pdf"} />
         </div>
       </main>
+
+      {isHost && activityOpen && (
+        <ActivityHost
+          activity={activity.activity}
+          students={stats.students || 0}
+          actions={activity}
+          boardApi={boardApiRef}
+          onClose={() => setActivityOpen(false)}
+        />
+      )}
+      {!isHost && <ActivityStudent activity={activity.activity} onRespond={activity.respond} />}
+      {!isHost && <Spotlight spotlight={activity.activity?.spotlight} />}
 
       <QaPanel
         qaPanelOpen={qa.qaPanelOpen}

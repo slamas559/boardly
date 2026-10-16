@@ -6,6 +6,7 @@ import { findKeyPoints, formatNumber, isExplicitGraph, tracePoint } from "./grap
 import { equationImage } from "./mathRender.js";
 import { drawAid } from "./aidRender.js";
 import { drawStats } from "./statsRender.js";
+import { drawCover } from "./cover.js";
 import { drawInstrument, drawInstrumentSelection, drawMeasure } from "./instrumentRender.js";
 
 const keyPointCache = new Map();
@@ -758,7 +759,7 @@ function drawLegacyHighlight(ctx, o, pageSize) {
   ctx.restore();
 }
 
-export function drawObject(ctx, o, { k = 1, pageSize, alpha = 1 } = {}) {
+export function drawObject(ctx, o, { k = 1, pageSize, alpha = 1, viewer = "host" } = {}) {
   ctx.save();
   ctx.globalAlpha = alpha;
   switch (o.type) {
@@ -770,6 +771,7 @@ export function drawObject(ctx, o, { k = 1, pageSize, alpha = 1 } = {}) {
     case "equation": drawEquation(ctx, o); break;
     case "aid": drawAid(ctx, o); break;
     case "stats": drawStats(ctx, o); break;
+    case "cover": drawCover(ctx, o, viewer, k); break;
     case "media": drawMedia(ctx, o); break;
     case "text": drawText(ctx, o); break;
     case "markup": drawMarkup(ctx, o, k); break;

@@ -62,7 +62,7 @@ function titleOf(inspector, tools) {
   if (inspector.kind === "graph") return { title: "Graph", subtitle: MODE_LABELS[inspector.selectedGraph?.mode || "explicit"] };
   if (inspector.kind === "equation") return { title: "Equation", subtitle: "" };
   if (inspector.kind === "stats") return { title: "Statistics", subtitle: CHARTS.find((item) => item.id === inspector.selectedStats?.chart)?.label || "" };
-  if (inspector.kind === "aid") return { title: "Math aid", subtitle: AID_KINDS.find((item) => item.id === inspector.selectedAid?.kind)?.label || "" };
+  if (inspector.kind === "aid") return { title: "Math aid", subtitle: AID_KINDS.find((item) => item.id === inspector.selectedAid?.kind)?.label || (inspector.selectedAid?.kind === "pollbars" ? "Poll results" : "") };
   const count = tools.selectedIds.length;
   return { title: STYLE_TITLES[tools.group] || "Style", subtitle: count > 1 ? `${count} selected` : "" };
 }

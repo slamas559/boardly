@@ -14,6 +14,7 @@ import PaperPicker from "./PaperPicker.jsx";
 import { newAid } from "./mathAids.js";
 import { INSTRUMENTS, newInstrument } from "./geometryTools.js";
 import { CHARTS, newStats } from "./stats.js";
+import { newCover } from "./cover.js";
 import { useAnnotationTools } from "./useAnnotationTools.js";
 import { parseVideoLink } from "./mediaLinks.js";
 import api from "../utils/api";
@@ -26,7 +27,7 @@ function fitRect(rect, size) {
   return { k, x: rect.x - (size.w / k - rect.w) / 2, y: rect.y - (size.h / k - rect.h) / 2 };
 }
 
-export default function BoardWorkspace({ room, socket, isHost, initial, visible }) {
+export default function BoardWorkspace({ room, socket, isHost, initial, visible, apiRef }) {
   const roomId = room._id;
   const frameRef = useRef(null);
   const surfaceRef = useRef(null);
@@ -312,12 +313,36 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible 
   const addAid = (kind) => {
     const spot = { id: uid(), page, cx: view.x + size.w / view.k / 2, cy: view.y + size.h / view.k / 2 };
     const instrument = INSTRUMENTS.some((item) => item.id === kind);
-    const obj = instrument ? newInstrument(kind, spot) : CHARTS.some((item) => item.id === kind) ? newStats(kind, spot) : newAid(kind, spot);
+    const obj = kind === "cover" ? newCover(spot)
+      : instrument ? newInstrument(kind, spot)
+        : CHARTS.some((item) => item.id === kind) ? newStats(kind, spot)
+          : newAid(kind, spot);
     store.commit([{ op: "add", obj }]);
     tools.setSelectedIds([obj.id]);
     tools.setTool("select");
-    if (!instrument) inspector.open("half"); // instruments are adjusted with their handles on the board
+    if (!instrument && kind !== "cover") inspector.open("half"); // instruments and covers are adjusted on the board itself
   };
+
+  // Things the class-activity panel can put on the board: poll results, and a chart of numeric answers
+  useEffect(() => {
+    if (!apiRef) return undefined;
+    const place = (obj) => {
+      const placed = { ...obj, id: uid(), page, x: Number((view.x + size.w / view.k / 2 - obj.w / 2).toFixed(2)), y: Number((view.y + size.h / view.k / 2 - obj.h / 2).toFixed(2)) };
+      store.commit([{ op: "add", obj: placed }]);
+      tools.setSelectedIds([placed.id]);
+      tools.setTool("select");
+    };
+    apiRef.current = {
+      addPollResults: ({ title, bars, correct }) => place({
+        type: "aid", kind: "pollbars", w: 600, h: Math.max(240, 120 + bars.length * 58), color: "#2540D9", title, bars, ...(correct === undefined || correct === null ? {} : { correct }),
+      }),
+      addNumberChart: ({ title, values }) => {
+        const chart = newStats("histogram", { id: "x", page, cx: 0, cy: 0 });
+        place({ ...chart, title, columns: [{ name: "Answers", values: values.slice(0, 300) }], showMean: true, showMedian: true });
+      },
+    };
+    return () => { apiRef.current = null; };
+  });
 
   const addTable = (rows, cols) => {
     const tableStyle = tools.styles.table;
