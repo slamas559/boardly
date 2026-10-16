@@ -37,7 +37,11 @@ export class ObjectStore {
     return this.objects.get(id);
   }
   onPage(page) {
-    return this.list().filter((o) => (o.page ?? 0) === page);
+    return this.list().filter((o) => (o.page ?? 0) === page && o.type !== "paper");
+  }
+  /** The paper (background pattern) of a page, or undefined for the default dots. */
+  paperFor(page) {
+    return this.objects.get(`paper-${page}`);
   }
 
   /** Replace everything (used for the initial room-state sync). Clears history. */
@@ -65,7 +69,7 @@ export class ObjectStore {
         break;
       case "clear":
         for (const [id, o] of this.objects) {
-          if (op.page === undefined || (o.page ?? 0) === op.page) this.objects.delete(id);
+          if (o.type !== "paper" && (op.page === undefined || (o.page ?? 0) === op.page)) this.objects.delete(id);
         }
         break;
       default:
@@ -102,7 +106,7 @@ export class ObjectStore {
         case "clear": {
           const removed = [];
           for (const [id, o] of scratch) {
-            if (op.page === undefined || (o.page ?? 0) === op.page) {
+            if (o.type !== "paper" && (op.page === undefined || (o.page ?? 0) === op.page)) {
               removed.push({ op: "add", obj: o });
               scratch.delete(id);
             }

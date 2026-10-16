@@ -6,6 +6,10 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronRight, X } from "lucide-react";
 import GraphInspector from "./GraphInspector.jsx";
 import EquationInspector from "./EquationInspector.jsx";
+import AidInspector from "./AidInspector.jsx";
+import StatsInspector from "./StatsInspector.jsx";
+import { AID_KINDS } from "./mathAids.js";
+import { CHARTS } from "./stats.js";
 import { STYLE_TITLES } from "./constants.js";
 import { StylePanel } from "./Toolbar.jsx";
 import { graphParamNames } from "./graphMath.js";
@@ -35,6 +39,12 @@ function PanelBody({ mode, tools, store, surfaceRef, inspector, peek = false }) 
       />
     );
   }
+  if (inspector.kind === "stats" && inspector.selectedStats) {
+    return <StatsInspector key={inspector.selectedStats.id} chart={inspector.selectedStats} store={store} />;
+  }
+  if (inspector.kind === "aid" && inspector.selectedAid) {
+    return <AidInspector key={inspector.selectedAid.id} aid={inspector.selectedAid} store={store} />;
+  }
   return (
     <StylePanel
       mode={mode}
@@ -51,6 +61,8 @@ function PanelBody({ mode, tools, store, surfaceRef, inspector, peek = false }) 
 function titleOf(inspector, tools) {
   if (inspector.kind === "graph") return { title: "Graph", subtitle: MODE_LABELS[inspector.selectedGraph?.mode || "explicit"] };
   if (inspector.kind === "equation") return { title: "Equation", subtitle: "" };
+  if (inspector.kind === "stats") return { title: "Statistics", subtitle: CHARTS.find((item) => item.id === inspector.selectedStats?.chart)?.label || "" };
+  if (inspector.kind === "aid") return { title: "Math aid", subtitle: AID_KINDS.find((item) => item.id === inspector.selectedAid?.kind)?.label || "" };
   const count = tools.selectedIds.length;
   return { title: STYLE_TITLES[tools.group] || "Style", subtitle: count > 1 ? `${count} selected` : "" };
 }

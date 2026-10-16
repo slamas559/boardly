@@ -129,6 +129,6 @@ function pickStyle(o) {
   const out = { color: o.color };
   if (o.width !== undefined) out.width = o.width;
   if (o.opacity !== undefined) out.opacity = o.opacity;
-  if (o.type === "shape") out.fill = !!o.fill;
+  if (o.type === "shape") { out.fill = !!o.fill; out.measure = !!o.measure; }
   return out;
 }

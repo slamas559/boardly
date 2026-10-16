@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { findKeyPoints, formatNumber, tracePoint } from "./graphAnalysis.js";
 import { NumberBox } from "./GraphParams.jsx";
 
-function ToggleRow({ checked, onChange, title, hint, disabled = false }) {
+export function ToggleRow({ checked, onChange, title, hint, disabled = false }) {
   return (
     <label className={`flex items-start gap-2.5 rounded-md border px-2.5 py-2 ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-sunken"} ${checked ? "border-accent/40 bg-accent-soft" : "border-line"}`}>
       <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0" />

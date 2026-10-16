@@ -4,6 +4,9 @@ import { LINE_HEIGHT } from "./constants.js";
 import { compileInequalitySystem, graphGeometryPixels, graphSegments, paramConstants, paramKey, sampleInequalityRegion, sampleImplicit } from "./graphMath.js";
 import { findKeyPoints, formatNumber, isExplicitGraph, tracePoint } from "./graphAnalysis.js";
 import { equationImage } from "./mathRender.js";
+import { drawAid } from "./aidRender.js";
+import { drawStats } from "./statsRender.js";
+import { drawInstrument, drawInstrumentSelection, drawMeasure } from "./instrumentRender.js";
 
 const keyPointCache = new Map();
 
@@ -78,7 +81,7 @@ function drawStroke(ctx, o) {
   ctx.restore();
 }
 
-function drawShape(ctx, o) {
+function drawShape(ctx, o, k = 1) {
   const width = o.width || 3;
   const x = Math.min(o.x1, o.x2), y = Math.min(o.y1, o.y2);
   const w = Math.abs(o.x2 - o.x1), h = Math.abs(o.y2 - o.y1);
@@ -145,6 +148,7 @@ function drawShape(ctx, o) {
       ctx.stroke();
   }
   ctx.restore();
+  if (o.measure) drawMeasure(ctx, o, k); // lengths and angles, drawn at full strength on top of the shape
 }
 
 function drawText(ctx, o) {
@@ -759,10 +763,13 @@ export function drawObject(ctx, o, { k = 1, pageSize, alpha = 1 } = {}) {
   ctx.globalAlpha = alpha;
   switch (o.type) {
     case "stroke": drawStroke(ctx, o); break;
-    case "shape": drawShape(ctx, o); break;
+    case "shape": drawShape(ctx, o, k); break;
+    case "instrument": drawInstrument(ctx, o); break;
     case "graph": drawGraph(ctx, o); break;
     case "table": drawTable(ctx, o); break;
     case "equation": drawEquation(ctx, o); break;
+    case "aid": drawAid(ctx, o); break;
+    case "stats": drawStats(ctx, o); break;
     case "media": drawMedia(ctx, o); break;
     case "text": drawText(ctx, o); break;
     case "markup": drawMarkup(ctx, o, k); break;
@@ -803,13 +810,20 @@ export function drawSelection(ctx, objects, k, { showHandles = true, mode = "box
   const pad = 4 / k;
 
   for (const o of objects) {
+    if (o.type === "instrument") {
+      drawInstrumentSelection(ctx, o, k);
+      ctx.lineWidth = 1.25 / k;
+      continue;
+    }
     const b = getBounds(o);
     ctx.setLineDash([4 / k, 3 / k]);
     ctx.strokeRect(b.x - pad, b.y - pad, b.w + pad * 2, b.h + pad * 2);
   }
   ctx.setLineDash([]);
 
-  if (showHandles) {
+  // An instrument has its own rotate and size handles instead of the box handles
+  const ownHandles = objects.length === 1 && objects[0].type === "instrument";
+  if (showHandles && !ownHandles) {
     const hs = 9 / k;
     for (const [hx, hy] of handlePoints(objects, mode, pad)) {
       ctx.beginPath();
@@ -823,6 +837,7 @@ export function drawSelection(ctx, objects, k, { showHandles = true, mode = "box
 
 /** Handle positions: endpoints for a single line/arrow, otherwise the 4 corners of the union bounds. */
 export function handlePoints(objects, mode, pad = 0) {
+  if (objects.length === 1 && objects[0].type === "instrument") return [];
   if (objects.length === 1 && objects[0].type === "shape" && (objects[0].kind === "line" || objects[0].kind === "arrow")) {
     const o = objects[0];
     return [[o.x1, o.y1], [o.x2, o.y2]];

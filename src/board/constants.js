@@ -53,7 +53,7 @@ export function defaultStyles(mode) {
   return {
     pen: { color: "#17181C", width: pdf ? 2.5 : 4, opacity: 1 },
     highlighter: { color: "#FFE14D", width: pdf ? 14 : 22, opacity: 0.45 },
-    shape: { color: "#2540D9", width: pdf ? 2.5 : 4, opacity: 1, fill: false },
+    shape: { color: "#2540D9", width: pdf ? 2.5 : 4, opacity: 1, fill: false, measure: false, snap: false },
     text: {
       color: "#17181C",
       fontFamily: "sans",

@@ -1,7 +1,10 @@
 // Pure geometry helpers: bounds, hit-testing, move/resize patches.
 import { FONT_STACKS, LINE_HEIGHT } from "./constants.js";
+import { shapeOutline } from "./shapeOutline.js";
+export { shapeOutline };
 import { graphGeometryPixels } from "./graphMath.js";
 import { tracePoint } from "./graphAnalysis.js";
+import { INSTRUMENT_SIZES, hitInstrument, instrumentBounds } from "./geometryTools.js";
 
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
@@ -15,37 +18,6 @@ export function segDist(p, a, b) {
   return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
 }
 
-export function shapeOutline(kind, x, y, w, h) {
-  if (kind === "rect") return [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
-  if (kind === "diamond") return [[x + w / 2, y], [x + w, y + h / 2], [x + w / 2, y + h], [x, y + h / 2]];
-  if (kind === "triangle") return [[x + w / 2, y], [x + w, y + h], [x, y + h]];
-  if (kind === "hexagon") return [[x + w * 0.25, y], [x + w * 0.75, y], [x + w, y + h / 2], [x + w * 0.75, y + h], [x + w * 0.25, y + h], [x, y + h / 2]];
-  if (kind === "star") {
-    const points = [];
-    for (let i = 0; i < 10; i++) {
-      const angle = -Math.PI / 2 + i * Math.PI / 5;
-      const radius = i % 2 === 0 ? 1 : 0.45;
-      points.push([x + w / 2 + Math.cos(angle) * w / 2 * radius, y + h / 2 + Math.sin(angle) * h / 2 * radius]);
-    }
-    return points;
-  }
-  if (kind === "roundedRect") {
-    const radius = Math.min(12, w / 4, h / 4);
-    const corners = [
-      [x + w - radius, y + radius, -Math.PI / 2],
-      [x + w - radius, y + h - radius, 0],
-      [x + radius, y + h - radius, Math.PI / 2],
-      [x + radius, y + radius, Math.PI],
-    ];
-    return corners.flatMap(([cx, cy, start]) =>
-      Array.from({ length: 9 }, (_, i) => {
-        const angle = start + (Math.PI / 2) * (i / 8);
-        return [cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius];
-      })
-    );
-  }
-  return [];
-}
 
 /* ---------- text measuring ---------- */
 let measureCtx = null;
@@ -104,7 +76,11 @@ export function getBounds(o) {
     }
     case "graph":
     case "equation":
+    case "aid":
+    case "stats":
       return { x: o.x, y: o.y, w: o.w, h: o.h };
+    case "instrument":
+      return instrumentBounds(o);
     case "table":
       return { x: o.x, y: o.y, w: o.cols * o.cellWidth, h: o.rows * o.cellHeight };
     case "media":
@@ -191,8 +167,12 @@ export function hitObject(o, p, tol) {
       for (let i = 0; i < 4; i++) if (segDist(p, corners[i], corners[(i + 1) % 4]) <= reach) return true;
       return false;
     }
+    case "instrument":
+      return hitInstrument(o, p, tol);
     case "graph":
     case "equation":
+    case "aid":
+    case "stats":
     case "table":
     case "media":
       return pointInRect(p, getBounds(o), tol);
@@ -269,6 +249,9 @@ export function movePatch(o, dx, dy) {
       return { x1: o.x1 + dx, y1: o.y1 + dy, x2: o.x2 + dx, y2: o.y2 + dy };
     case "graph":
     case "equation":
+    case "aid":
+    case "stats":
+    case "instrument":
     case "table":
     case "media":
       return { x: o.x + dx, y: o.y + dy };
@@ -295,6 +278,15 @@ export function scalePatch(o, sx, sy, ox, oy) {
       return { x: fx(o.x), y: fy(o.y), w: Math.max(80, o.w * Math.abs(sx)), h: Math.max(80, o.h * Math.abs(sy)) };
     case "media":
       return { x: fx(o.x), y: fy(o.y), w: Math.max(40, o.w * Math.abs(sx)), h: Math.max(40, o.h * Math.abs(sy)) };
+    case "aid":
+      return { x: fx(o.x), y: fy(o.y), w: Math.max(160, o.w * Math.abs(sx)), h: Math.max(110, o.h * Math.abs(sy)) };
+    case "stats":
+      return { x: fx(o.x), y: fy(o.y), w: Math.max(320, o.w * Math.abs(sx)), h: Math.max(220, o.h * Math.abs(sy)) };
+    case "instrument": {
+      // Instruments keep their shape: they only get bigger or smaller
+      const limits = INSTRUMENT_SIZES[o.kind] || INSTRUMENT_SIZES.ruler;
+      return { x: fx(o.x), y: fy(o.y), w: Math.round(clamp(o.w * Math.max(Math.abs(sx), Math.abs(sy)), limits.min, limits.max)) };
+    }
     case "equation": {
       // Formulas keep their proportions, like text: the font size scales with the box
       const s = Math.max(Math.abs(sx), Math.abs(sy));

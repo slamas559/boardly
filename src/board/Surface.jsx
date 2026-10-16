@@ -9,7 +9,11 @@ import {
 import {
   dist, hitGraphGeometry, hitGraphTrace, hitObject, isMovable, measureText, movePatch, objectInRect, q, scalePatch,
 } from "./geometry.js";
-import { cleanupUnusedMedia, drawGrid, drawObject, drawSelection, getVideoPlaybackState, handlePoints, isVideoPlaying, seekVideo, setVideoPlayback, videoPlaybackPatch } from "./render.js";
+import { drawPaper, paperSnapGrid } from "./paper.js";
+import { hitInstrumentHandle, rotationFromPoint, sizeFromPoint, snapPoint, snapRotation } from "./geometryTools.js";
+import { drawSnapMark } from "./instrumentRender.js";
+import { angleFromPoint, hitFractionPart, hitUnitCirclePoint, shadePatch, snapToSpecial } from "./mathAids.js";
+import { cleanupUnusedMedia, drawObject, drawSelection, getVideoPlaybackState, handlePoints, isVideoPlaying, seekVideo, setVideoPlayback, videoPlaybackPatch } from "./render.js";
 import { cursorFor } from "./cursors.js";
 import { Pause, Play } from "lucide-react";
 
@@ -112,7 +116,10 @@ const Surface = forwardRef(function Surface(
     }
 
     ctx.setTransform(dpr * v.k, 0, 0, dpr * v.k, -v.x * v.k * dpr, -v.y * v.k * dpr);
-    if (background === "grid") drawGrid(ctx, v, sz.w, sz.h);
+    if (background === "grid") {
+      const paper = st.paperFor(pg);
+      drawPaper(ctx, v, sz.w, sz.h, paper?.kind || "dots", paper?.scale || 1);
+    }
 
     const objs = st.onPage(pg);
     const selected = [];
@@ -153,6 +160,7 @@ const Surface = forwardRef(function Surface(
     if (selected.length && !(d && d.type === "marquee")) {
       drawSelection(ctx, selected, v.k, { showHandles: !live.current.readOnly && !(d && d.type === "move") });
     }
+    if (snapMark.current && d && (d.type === "shape" || d.type === "endpoint")) drawSnapMark(ctx, snapMark.current, v.k);
 
     if (!raf.current && objs.some(isVideoPlaying)) {
       raf.current = requestAnimationFrame(() => {
@@ -535,11 +543,13 @@ const Surface = forwardRef(function Surface(
       case "line":
       case "arrow": {
         const g = st.shape;
+        const id = uid();
+        const start = snapAt(p, e, id);
         drag.current = {
           type: "shape",
           kind: tl,
-          start: p,
-          obj: { id: uid(), type: "shape", kind: tl, page: pg, x1: p[0], y1: p[1], x2: p[0], y2: p[1], color: g.color, width: g.width, opacity: g.opacity ?? 1, fill: !!g.fill },
+          start,
+          obj: { id, type: "shape", kind: tl, page: pg, x1: start[0], y1: start[1], x2: start[0], y2: start[1], color: g.color, width: g.width, opacity: g.opacity ?? 1, fill: !!g.fill, ...(g.measure ? { measure: true } : {}) },
         };
         sharePreview(drag.current.obj, true, true);
         break;
@@ -609,6 +619,23 @@ const Surface = forwardRef(function Surface(
             break;
           }
         }
+        // A selected ruler, protractor or set square: its rotate and size handles
+        if (selected.length === 1 && selected[0].type === "instrument") {
+          const which = hitInstrumentHandle(selected[0], p, 18 / v.k);
+          if (which) {
+            e.preventDefault();
+            drag.current = { type: "instrument", which, obj: selected[0], moved: false };
+            canvas.style.cursor = "grabbing";
+            break;
+          }
+        }
+        // A selected unit circle: drag its point to change the angle
+        if (selected.length === 1 && selected[0].type === "aid" && hitUnitCirclePoint(selected[0], p, 18 / v.k)) {
+          e.preventDefault();
+          drag.current = { type: "aidAngle", obj: selected[0], moved: false };
+          canvas.style.cursor = "grabbing";
+          break;
+        }
         const hi = hitHandle(screen);
         if (hi >= 0) {
           const objs = selectedObjects();
@@ -626,6 +653,8 @@ const Surface = forwardRef(function Surface(
         const hit = objectsTopFirst().find((o) => hitObject(o, p, 6 / v.k));
         if (hit) {
           let sel = live.current.selectedIds || [];
+          // Tapping a part of an already selected fraction aid shades it (a drag still moves the aid)
+          const part = !e.shiftKey && hit.type === "aid" && sel.length === 1 && sel[0] === hit.id ? hitFractionPart(hit, p) : null;
           if (e.shiftKey) sel = sel.includes(hit.id) ? sel.filter((i) => i !== hit.id) : [...sel, hit.id];
           else if (!sel.includes(hit.id)) sel = [hit.id];
           onSelectedChange?.(sel);
@@ -633,6 +662,7 @@ const Surface = forwardRef(function Surface(
             type: "move",
             start: p,
             moved: false,
+            tapPart: part,
             ids: sel,
             objs: sel.map((id) => s.get(id)).filter(Boolean),
             togglePlayback: !e.shiftKey && hit.type === "media" && hit.mediaType === "video",
@@ -650,11 +680,33 @@ const Surface = forwardRef(function Surface(
     const { view: v, store: s, page: pg } = live.current;
     const tol = 10 / v.k;
     for (const o of s.onPage(pg)) {
-      if (!erasing.current.has(o.id) && o.type !== "highlight" && hitObject(o, p, tol)) {
+      if (!erasing.current.has(o.id) && o.type !== "highlight" && o.type !== "instrument" && hitObject(o, p, tol)) {
         erasing.current.add(o.id);
         sharePreview({ ...o, previewAlpha: 0.2 });
       }
     }
+  };
+
+  // Snapping while drawing a shape: corners / midpoints / edges / the paper grid when "Snap" is on, and always
+  // onto the edge of a ruler or set square so they work as straightedges. Hold Alt to draw freely.
+  const snapMark = useRef(null);
+  const snapAt = (p, e, excludeId = null) => {
+    const { view: v, styles: stl, store: s, page: pg } = live.current;
+    if (e?.altKey) {
+      snapMark.current = null;
+      return p;
+    }
+    const wantSnap = Boolean(stl.shape?.snap);
+    const objects = s.onPage(pg);
+    if (!wantSnap && !objects.some((o) => o.type === "instrument")) {
+      snapMark.current = null;
+      return p;
+    }
+    const result = snapPoint(p, {
+      objects, k: v.k, points: wantSnap, edges: wantSnap, grid: wantSnap ? paperSnapGrid(s.paperFor(pg)) : null, exclude: excludeId,
+    });
+    snapMark.current = result.target;
+    return result.point;
   };
 
   const flushStroke = (force = false) => {
@@ -737,9 +789,11 @@ const Surface = forwardRef(function Surface(
         break;
       }
       case "shape": {
-        let [x2, y2] = p;
+        let [x2, y2] = snapAt(p, e, d.obj.id);
         const [x1, y1] = d.start;
         if (e.shiftKey) {
+          snapMark.current = null;
+          [x2, y2] = p;
           if (d.kind === "line" || d.kind === "arrow") {
             const ang = Math.round(Math.atan2(y2 - y1, x2 - x1) / (Math.PI / 12)) * (Math.PI / 12);
             const len = Math.hypot(x2 - x1, y2 - y1);
@@ -789,10 +843,12 @@ const Surface = forwardRef(function Surface(
         break;
       }
       case "endpoint": {
-        let [x, y] = p;
         const o = d.obj;
+        let [x, y] = snapAt(p, e, o.id);
         const fixed = d.index === 0 ? [o.x2, o.y2] : [o.x1, o.y1];
         if (e.shiftKey) {
+          snapMark.current = null;
+          [x, y] = p;
           const ang = Math.round(Math.atan2(y - fixed[1], x - fixed[0]) / (Math.PI / 12)) * (Math.PI / 12);
           const len = Math.hypot(x - fixed[0], y - fixed[1]);
           x = fixed[0] + len * Math.cos(ang);
@@ -832,6 +888,27 @@ const Surface = forwardRef(function Surface(
         });
         const preview = { ...graph, geometry };
         transient.current.set(graph.id, preview);
+        sharePreview(preview);
+        break;
+      }
+      case "instrument": {
+        const o = d.obj;
+        const patch = d.which === "rotate"
+          ? { angle: Math.round((e.altKey ? rotationFromPoint(o, p) : snapRotation(rotationFromPoint(o, p))) * 10) / 10 }
+          : { w: sizeFromPoint(o, p) };
+        d.moved = true;
+        const preview = { ...o, ...patch };
+        transient.current.set(o.id, preview);
+        sharePreview(preview);
+        break;
+      }
+      case "aidAngle": {
+        const aid = d.obj;
+        const raw = angleFromPoint(aid, p);
+        const angle = Math.round((aid.snap === false ? raw : snapToSpecial(raw)) * 10) / 10;
+        d.moved = true;
+        const preview = { ...aid, angle };
+        transient.current.set(aid.id, preview);
         sharePreview(preview);
         break;
       }
@@ -889,6 +966,7 @@ const Surface = forwardRef(function Surface(
     pointers.current.delete(e.pointerId);
     const d = drag.current;
     const { store: s, page: pg } = live.current;
+    snapMark.current = null;
 
     if (d?.type === "pinch") {
       if (pointers.current.size < 2) drag.current = null;
@@ -944,6 +1022,9 @@ const Surface = forwardRef(function Surface(
           transient.current.clear();
           s.commit(ops);
           for (const o of d.objs) clearPreview(o.id, o.page);
+        } else if (d.tapPart) {
+          const aid = s.get(d.ids[0]);
+          if (aid?.type === "aid" && aid.kind === "fractions") s.commit([{ op: "update", id: aid.id, patch: shadePatch(aid, d.tapPart) }]);
         } else if (d.togglePlayback) {
           const video = s.get(d.ids[0]);
           if (video?.type === "media" && video.mediaType === "video") {
@@ -971,6 +1052,22 @@ const Surface = forwardRef(function Surface(
         transient.current.clear();
         if (updated && d.moved) s.commit([{ op: "update", id: d.obj.id, patch: { geometry: updated.geometry } }]);
         clearPreview(d.obj.id, d.obj.page);
+        break;
+      }
+      case "instrument": {
+        const updated = transient.current.get(d.obj.id);
+        transient.current.clear();
+        if (updated && d.moved) s.commit([{ op: "update", id: d.obj.id, patch: d.which === "rotate" ? { angle: updated.angle } : { w: updated.w } }], { coalesce: `instrument:${d.obj.id}` });
+        clearPreview(d.obj.id, d.obj.page);
+        if (canvasRef.current) canvasRef.current.style.cursor = cursorRef.current;
+        break;
+      }
+      case "aidAngle": {
+        const updated = transient.current.get(d.obj.id);
+        transient.current.clear();
+        if (updated && d.moved) s.commit([{ op: "update", id: d.obj.id, patch: { angle: updated.angle } }], { coalesce: `aid-angle:${d.obj.id}` });
+        clearPreview(d.obj.id, d.obj.page);
+        if (canvasRef.current) canvasRef.current.style.cursor = cursorRef.current;
         break;
       }
       case "graphTrace": {
@@ -1003,7 +1100,7 @@ const Surface = forwardRef(function Surface(
     pointers.current.delete(e.pointerId);
     if (drag.current?.type === "stroke" && drag.current.sent > 0) finishStroke();
     if (drag.current?.type === "pan" && canvasRef.current) canvasRef.current.style.cursor = cursorRef.current;
-    if ((drag.current?.type === "graphCamera" || drag.current?.type === "graphTrace") && canvasRef.current) canvasRef.current.style.cursor = cursorRef.current;
+    if ((drag.current?.type === "graphCamera" || drag.current?.type === "graphTrace" || drag.current?.type === "aidAngle" || drag.current?.type === "instrument") && canvasRef.current) canvasRef.current.style.cursor = cursorRef.current;
     if (drag.current?.obj?.id) clearPreview(drag.current.obj.id, drag.current.obj.page);
     if (drag.current?.type === "shape" || drag.current?.type === "markup") clearPreview(drag.current.obj.id, drag.current.obj.page);
     for (const [id, obj] of transient.current) clearPreview(id, obj.page);
@@ -1569,7 +1666,7 @@ function styleKeyApplies(o, k) {
   // Allow colour changes on any object type; fill only on shapes; text keys only on text
   if (k === "color" || k === "opacity") return true;
   if (k === "width") return o.type === "stroke" || o.type === "shape";
-  if (k === "fill") return o.type === "shape";
+  if (k === "fill" || k === "measure") return o.type === "shape";
   if (k === "fontSize") return o.type === "table";
   if (k === "playing") return o.type === "media" && o.mediaType === "video";
   return false;

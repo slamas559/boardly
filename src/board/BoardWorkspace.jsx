@@ -10,6 +10,10 @@ import { ObjectStore } from "./store.js";
 import { BOARD_HOME, uid } from "./constants.js";
 import { compileExpression, compileImplicitEquation, compileInequalitySystem } from "./graphMath.js";
 import { ensureMath, estimateEquationSize, measureEquation } from "./mathRender.js";
+import PaperPicker from "./PaperPicker.jsx";
+import { newAid } from "./mathAids.js";
+import { INSTRUMENTS, newInstrument } from "./geometryTools.js";
+import { CHARTS, newStats } from "./stats.js";
 import { useAnnotationTools } from "./useAnnotationTools.js";
 import { parseVideoLink } from "./mediaLinks.js";
 import api from "../utils/api";
@@ -67,7 +71,7 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible 
 
   /* Keep a selected graph clear of the properties panel: the docked panel narrows the canvas on desktop,
      and the bottom sheet covers its lower part on phones. Runs on selection / panel changes, never while panning. */
-  const selectedGraphId = inspector.selectedGraph?.id ?? inspector.selectedEquation?.id;
+  const selectedGraphId = inspector.selectedGraph?.id ?? inspector.selectedEquation?.id ?? inspector.selectedAid?.id ?? inspector.selectedStats?.id;
   const sheetInset = inspector.insetBottom;
   const desktopLayout = inspector.desktop;
   useEffect(() => {
@@ -304,6 +308,17 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible 
     inspector.open("half");
   };
 
+  // A math aid (number line, unit circle, fraction bars) appears in the middle of the view, ready to edit
+  const addAid = (kind) => {
+    const spot = { id: uid(), page, cx: view.x + size.w / view.k / 2, cy: view.y + size.h / view.k / 2 };
+    const instrument = INSTRUMENTS.some((item) => item.id === kind);
+    const obj = instrument ? newInstrument(kind, spot) : CHARTS.some((item) => item.id === kind) ? newStats(kind, spot) : newAid(kind, spot);
+    store.commit([{ op: "add", obj }]);
+    tools.setSelectedIds([obj.id]);
+    tools.setTool("select");
+    if (!instrument) inspector.open("half"); // instruments are adjusted with their handles on the board
+  };
+
   const addTable = (rows, cols) => {
     const tableStyle = tools.styles.table;
     const cellWidth = tableStyle.cellWidth, cellHeight = tableStyle.cellHeight;
@@ -406,7 +421,7 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible 
           keepTool={tools.keepTool}
         />
 
-        {isHost && <ToolDock mode="board" tools={tools} store={store} inspector={inspector} onCreateGraph={addGraph} onCreateEquation={addEquation} onCreateTable={addTable} onUploadMedia={uploadMedia} onAddVideoLink={addVideoLink} mediaUploading={mediaUploading} mediaError={mediaError} />}
+        {isHost && <ToolDock mode="board" tools={tools} store={store} inspector={inspector} onCreateGraph={addGraph} onCreateEquation={addEquation} onCreateAid={addAid} onCreateTable={addTable} onUploadMedia={uploadMedia} onAddVideoLink={addVideoLink} mediaUploading={mediaUploading} mediaError={mediaError} />}
         {isHost && (
           <QuickBar
             tools={tools}
@@ -449,6 +464,7 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible 
               <>
                 <div className="mx-0.5 h-5 w-px bg-line" />
                 <button type="button" aria-label="Add page" title="Add page" onClick={addPage} className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-sunken"><Plus size={16} /></button>
+                <PaperPicker store={store} page={page} pageCount={pageCount} />
                 <button type="button" aria-label="Clear this page" title="Clear this page" onClick={() => setConfirmClear(true)} className="flex h-8 w-8 items-center justify-center rounded-md text-danger hover:bg-danger-soft"><Trash2 size={15} /></button>
               </>
             )}

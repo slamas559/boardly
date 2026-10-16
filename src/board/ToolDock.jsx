@@ -4,9 +4,11 @@ import { useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { ToolRail } from "./Toolbar.jsx";
 import { validateGraphExpressions } from "./graphValidation.js";
+import AidDialog from "./AidDialog.jsx";
 
-export default function ToolDock({ mode, tools, inspector, onCreateGraph, onCreateEquation, onCreateTable, onUploadMedia, onAddVideoLink, mediaUploading = false, mediaError = "", store }) {
+export default function ToolDock({ mode, tools, inspector, onCreateGraph, onCreateEquation, onCreateAid, onCreateTable, onUploadMedia, onAddVideoLink, mediaUploading = false, mediaError = "", store }) {
   const [insertDialog, setInsertDialog] = useState(null);
+  const [aidDialog, setAidDialog] = useState(false);
   const [videoLinkDialog, setVideoLinkDialog] = useState(false);
   const mediaInputRef = useRef(null);
   const { tool, setTool, lastShape, keepTool, setKeepTool, activeStyle } = tools;
@@ -38,6 +40,7 @@ export default function ToolDock({ mode, tools, inspector, onCreateGraph, onCrea
           onKeepTool={() => setKeepTool((v) => !v)}
           onCreateGraph={() => setInsertDialog("graph")}
           onCreateEquation={onCreateEquation}
+          onCreateAid={() => setAidDialog(true)}
           onCreateTable={() => setInsertDialog("table")}
           onUploadMedia={() => mediaInputRef.current?.click()}
           onAddVideoLink={() => setVideoLinkDialog(true)}
@@ -60,6 +63,15 @@ export default function ToolDock({ mode, tools, inspector, onCreateGraph, onCrea
         <VideoLinkDialog
           onClose={() => setVideoLinkDialog(false)}
           onAdd={(link) => onAddVideoLink?.(link)}
+        />
+      )}
+      {aidDialog && (
+        <AidDialog
+          onClose={() => setAidDialog(false)}
+          onPick={(kind) => {
+            onCreateAid?.(kind);
+            setAidDialog(false);
+          }}
         />
       )}
       {insertDialog && (
