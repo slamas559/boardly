@@ -107,10 +107,10 @@ function SheetDock(props) {
   const vh = typeof window !== "undefined" ? window.innerHeight : 800;
   // The peek height makes room for up to two slider rows so a presenter can scrub without expanding the sheet
   const sliderRows = inspector.kind === "graph" && inspector.selectedGraph ? Math.min(2, graphParamNames(inspector.selectedGraph).length) : 0;
-  // A formula sheet is taller: its half height has to hold the preview, the field and the whole keyboard
+  // A formula sheet is taller: its half height has to hold the open section (the keyboard is the tallest)
   const formula = inspector.kind === "equation";
   const heights = formula
-    ? { peek: 268, half: Math.round(vh * 0.62), full: Math.round(vh * 0.86) }
+    ? { peek: 216, half: Math.round(vh * 0.62), full: Math.round(vh * 0.86) }
     : { peek: 132 + sliderRows * 46 + (sliderRows ? 40 : 0), half: Math.round(vh * 0.46), full: Math.round(vh * 0.8) };
   const setSnap = (next) => inspector.setSheet({ open: true, snap: next });
 

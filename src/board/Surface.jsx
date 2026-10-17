@@ -16,6 +16,9 @@ import { drawSnapMark } from "./instrumentRender.js";
 import { angleFromPoint, hitFractionPart, hitUnitCirclePoint, shadePatch, snapToSpecial } from "./mathAids.js";
 import { cleanupUnusedMedia, drawObject, drawSelection, getVideoPlaybackState, handlePoints, isVideoPlaying, seekVideo, setVideoPlayback, videoPlaybackPatch } from "./render.js";
 import { cursorFor } from "./cursors.js";
+import { expandToGroups, groupOps, remapGroupIds, ungroupOps, isGroupable } from "./groups.js";
+import { leafAt } from "./equationLeaves.js";
+import { LeafEditor, LeafOutlines } from "./EquationLeafEditor.jsx";
 import { Pause, Play } from "lucide-react";
 
 let clipboard = [];
@@ -56,6 +59,10 @@ const Surface = forwardRef(function Surface(
   const [editing, setEditing] = useState(null); // {id, isNew, obj}
   const [tableEditing, setTableEditing] = useState(null);
   const tableEditRef = useRef(null);
+  const [leafEdit, setLeafEdit] = useState(null); // { id, index, key }: a number or letter of a formula being edited on the board
+  const leafEditRef = useRef(null);
+  const [leafHover, setLeafHover] = useState(null); // index of the part under the mouse
+  const [leavesHidden, setLeavesHidden] = useState(false); // outlines step aside while the formula is dragged
   const version = useSyncExternalStore(store.subscribe, store.getVersion);
 
   // Latest props for event handlers without re-binding
@@ -340,6 +347,36 @@ const Surface = forwardRef(function Surface(
     live.current.store.commit([{ op: "update", id: ed.id, patch: { cells } }]);
   }, []);
 
+  /* Editing a number or letter of a formula right on the board: typing shows live (and to everyone else) as a
+     preview, and the change is saved once, as one undo step, when the field closes */
+  const startLeafEdit = (id, index) => {
+    const cur = leafEditRef.current;
+    if (cur && cur.id === id && cur.index === index) return;
+    const eq = live.current.store.get(id);
+    if (!eq || eq.type !== "equation" || live.current.readOnly) return;
+    leafEditRef.current = { id, index };
+    setLeafEdit({ id, index, key: `${id}-${index}-${performance.now()}` });
+  };
+  const previewLeafEdit = (id, patch) => {
+    const base = live.current.store.get(id);
+    if (!base) return;
+    const preview = { ...base, ...patch };
+    transient.current.set(id, preview);
+    sharePreview(preview, true, true);
+    schedule();
+  };
+  const finishLeafEdit = (patch, nextIndex = null) => {
+    const ed = leafEditRef.current;
+    if (!ed) return;
+    leafEditRef.current = null;
+    setLeafEdit(null);
+    transient.current.delete(ed.id);
+    clearPreview(ed.id);
+    if (patch && live.current.store.get(ed.id)) live.current.store.commit([{ op: "update", id: ed.id, patch }]);
+    schedule();
+    if (nextIndex !== null) startLeafEdit(ed.id, nextIndex);
+  };
+
   /* ----------------------------- selection ops ----------------------------- */
   const selectedObjects = () => {
     const { store: st, selectedIds: sel } = live.current;
@@ -362,10 +399,9 @@ const Surface = forwardRef(function Surface(
     paste(offset = 24) {
       if (!clipboard.length) return;
       const { page: pg } = live.current;
-      const ops = clipboard.filter((o) => o.type !== "markup").map((o) => {
-        const copy = { ...JSON.parse(JSON.stringify(o)), id: uid(), page: pg };
-        return { op: "add", obj: { ...copy, ...movePatch(copy, offset, offset) } };
-      });
+      const copies = clipboard.filter((o) => o.type !== "markup").map((o) => ({ ...JSON.parse(JSON.stringify(o)), id: uid(), page: pg }));
+      remapGroupIds(copies, uid); // a pasted group is a new group, not glued to the original
+      const ops = copies.map((copy) => ({ op: "add", obj: { ...copy, ...movePatch(copy, offset, offset) } }));
       if (!ops.length) return;
       live.current.store.commit(ops);
       onSelectedChange?.(ops.map((o) => o.obj.id));
@@ -374,6 +410,21 @@ const Surface = forwardRef(function Surface(
     duplicate() {
       api.copy();
       api.paste();
+    },
+    /** Glue the selected objects into one group (they then select, move and scale together). */
+    group() {
+      const objs = selectedObjects().filter(isGroupable);
+      if (objs.length < 2) return false;
+      live.current.store.commit(groupOps(objs, uid()));
+      return true;
+    },
+    /** Release the group(s) of the selection; the objects stay selected so they can be adjusted right away. */
+    ungroup() {
+      const { store: st, page: pg } = live.current;
+      const ops = ungroupOps(st, pg, selectedObjects());
+      if (!ops.length) return false;
+      st.commit(ops);
+      return true;
     },
     nudge(dx, dy) {
       const ops = selectedObjects().filter(isMovable).map((o) => ({ op: "update", id: o.id, patch: movePatch(o, dx, dy) }));
@@ -422,6 +473,7 @@ const Surface = forwardRef(function Surface(
     drag.current = null;
     transient.current.clear();
     erasing.current.clear();
+    if (leafEditRef.current) { const id = leafEditRef.current.id; leafEditRef.current = null; setLeafEdit(null); clearPreview(id); }
     if (live.current.editing) api.finishEditing();
     schedule();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -663,16 +715,21 @@ const Surface = forwardRef(function Surface(
         const hit = objectsTopFirst().find((o) => hitObject(o, p, 6 / v.k));
         if (hit) {
           let sel = live.current.selectedIds || [];
+          // A formula that is already selected on its own: pressing on one of its numbers or letters (and letting go
+          // without dragging) edits that part; dragging still moves the formula
+          const tapLeaf = !e.shiftKey && !ro && hit.type === "equation" && sel.length === 1 && sel[0] === hit.id ? leafAt(hit, p, 10 / v.k) : null;
           // Tapping a part of an already selected fraction aid shades it (a drag still moves the aid)
           const part = !e.shiftKey && hit.type === "aid" && sel.length === 1 && sel[0] === hit.id ? hitFractionPart(hit, p) : null;
-          if (e.shiftKey) sel = sel.includes(hit.id) ? sel.filter((i) => i !== hit.id) : [...sel, hit.id];
-          else if (!sel.includes(hit.id)) sel = [hit.id];
+          const members = expandToGroups(s, pg, [hit.id]); // a grouped object brings its whole group
+          if (e.shiftKey) sel = sel.includes(hit.id) ? sel.filter((i) => !members.includes(i)) : [...new Set([...sel, ...members])];
+          else if (!sel.includes(hit.id)) sel = members;
           onSelectedChange?.(sel);
           drag.current = {
             type: "move",
             start: p,
             moved: false,
             tapPart: part,
+            tapLeaf: tapLeaf ? tapLeaf.part.index : null,
             ids: sel,
             objs: sel.map((id) => s.get(id)).filter(Boolean),
             togglePlayback: !e.shiftKey && hit.type === "media" && hit.mediaType === "video",
@@ -757,6 +814,12 @@ const Surface = forwardRef(function Surface(
       emitLaser(p);
       schedule();
       return;
+    }
+    if (!d && tl === "select" && !ro && e.pointerType === "mouse" && !leafEditRef.current) {
+      const ids = live.current.selectedIds || [];
+      const sole = ids.length === 1 ? live.current.store.get(ids[0]) : null;
+      const over = sole && sole.type === "equation" ? leafAt(sole, toWorld(e), 10 / v.k) : null;
+      setLeafHover(over ? over.part.index : null);
     }
     if (!d) return;
 
@@ -843,6 +906,7 @@ const Surface = forwardRef(function Surface(
         const dx = p[0] - d.start[0];
         const dy = p[1] - d.start[1];
         if (!d.moved && Math.hypot(dx, dy) * v.k < 3) break;
+        if (!d.moved) setLeavesHidden(true);
         d.moved = true;
         transient.current.clear();
         for (const o of d.objs) if (isMovable(o)) {
@@ -973,6 +1037,7 @@ const Surface = forwardRef(function Surface(
   };
 
   const onPointerUp = (e) => {
+    setLeavesHidden(false);
     pointers.current.delete(e.pointerId);
     const d = drag.current;
     const { store: s, page: pg } = live.current;
@@ -1019,7 +1084,7 @@ const Surface = forwardRef(function Surface(
         if (e.pointerType !== "mouse") emitLaser(null, false);
         break;
       case "marquee": {
-        const hits = s.onPage(pg).filter((o) => objectInRect(o, d.rect)).map((o) => o.id);
+        const hits = expandToGroups(s, pg, s.onPage(pg).filter((o) => objectInRect(o, d.rect)).map((o) => o.id));
         onSelectedChange?.([...new Set([...(d.base || []), ...hits])]);
         break;
       }
@@ -1032,6 +1097,8 @@ const Surface = forwardRef(function Surface(
           transient.current.clear();
           s.commit(ops);
           for (const o of d.objs) clearPreview(o.id, o.page);
+        } else if (d.tapLeaf !== null && d.tapLeaf !== undefined) {
+          startLeafEdit(d.ids[0], d.tapLeaf);
         } else if (d.tapPart) {
           const aid = s.get(d.ids[0]);
           if (aid?.type === "aid" && aid.kind === "fractions") s.commit([{ op: "update", id: aid.id, patch: shadePatch(aid, d.tapPart) }]);
@@ -1123,6 +1190,7 @@ const Surface = forwardRef(function Surface(
   };
 
   const onPointerLeave = () => {
+    setLeafHover(null);
     if (live.current.tool === "laser" && !drag.current) emitLaser(null, false);
     if (!live.current.readOnly && live.current.mode === "board") shareCursor(null, true);
   };
@@ -1144,7 +1212,9 @@ const Surface = forwardRef(function Surface(
     const formula = objectsTopFirst().find((o) => o.type === "equation" && hitObject(o, p, 4 / v.k));
     if (formula) {
       onSelectedChange?.([formula.id]);
-      onEquationEdit?.(formula.id);
+      const part = leafAt(formula, p, 10 / v.k);
+      if (part) startLeafEdit(formula.id, part.part.index); // double-clicking a value edits it; anywhere else opens the panel
+      else onEquationEdit?.(formula.id);
       return;
     }
     const hit = objectsTopFirst().find((o) => o.type === "text" && hitObject(o, p, 4 / v.k));
@@ -1261,9 +1331,11 @@ const Surface = forwardRef(function Surface(
     />
     : null;
 
+  const soleSelected = !readOnly && tool === "select" && selectedIds?.length === 1 ? store.get(selectedIds[0]) : null;
+  const leafOverlay = view && soleSelected?.type === "equation" && soleSelected.page === page ? soleSelected : null;
   const cursor = readOnly
     ? (mode === "board" ? "grab" : "default")
-    : cursorFor(tool);
+    : leafHover !== null && !leafEdit ? "text" : cursorFor(tool);
   cursorRef.current = cursor;
 
   // On a PDF, the overlay only captures input when a tool needs it; otherwise the page scrolls natively
@@ -1286,6 +1358,17 @@ const Surface = forwardRef(function Surface(
         aria-label={mode === "board" ? "Whiteboard" : "Document annotations"}
       />
       {videoControls}
+      {leafOverlay && !leafEdit && !leavesHidden && <LeafOutlines eq={leafOverlay} view={view} hover={leafHover} />}
+      {view && leafEdit && store.get(leafEdit.id) && (
+        <LeafEditor
+          key={leafEdit.key}
+          eq={store.get(leafEdit.id)}
+          partIndex={leafEdit.index}
+          view={view}
+          onPreview={(patch) => previewLeafEdit(leafEdit.id, patch)}
+          onFinish={finishLeafEdit}
+        />
+      )}
       {view && embeddedVideos.map((video) => {
         const isSelected = selectedIds?.includes(video.id) || false;
         return (

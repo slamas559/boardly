@@ -1,19 +1,35 @@
-// Editor for the selected equation block, shown in the same docked panel / phone sheet as the graph
-// settings: a live preview, the formula field, the math keyboard and size / colour. Edits are applied
-// to the board as you type (debounced), so listeners watch the formula take shape.
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Keyboard } from "lucide-react";
+// Settings for the selected equation block, in the same docked panel / phone sheet as the graph settings.
+// Numbers and letters are edited right on the board (see EquationLeafEditor); this panel keeps it short:
+// size and colour, plus sections that open only when wanted:
+//  - All values: every number and letter as a labelled field (also the keyboard-friendly way)
+//  - Type a formula: write it the way you would on a calculator (x^2/3 + sqrt(x))
+//  - Templates: ready-made formulas with named blanks
+//  - Keys and LaTeX: the math keyboard, with the LaTeX field for people who know it
+// Edits are applied to the board as you type (debounced), so listeners watch the formula take shape.
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { ChevronDown, Keyboard, MousePointerClick } from "lucide-react";
 import { PALETTE } from "./constants.js";
 import { Swatches } from "./Toolbar.jsx";
 import { NumberBox } from "./GraphParams.jsx";
 import MathKeyboard from "./MathKeyboard.jsx";
+import EquationParts from "./EquationParts.jsx";
+import EquationType from "./EquationType.jsx";
+import EquationTemplates from "./EquationTemplates.jsx";
 import { backspace, insertSnippet, nextSlot, stepCaret } from "./mathKeys.js";
-import { MAX_LATEX_LENGTH, equationSvgUrl, measureEquation, renderLatex } from "./mathRender.js";
+import { MAX_LATEX_LENGTH, measureEquation, renderLatex } from "./mathRender.js";
 import { useMathReady } from "./useMath.js";
+import { getEquationSection, requestEquationSection, subscribeEquationSection } from "./equationSection.js";
 
 const COMMIT_DELAY_MS = 220;
 const MIN_SIZE = 12;
 const MAX_SIZE = 200;
+
+const SECTIONS = [
+  { id: "values", label: "All values", hint: "Every number and letter as a field" },
+  { id: "type", label: "Type a formula", hint: "Like on a calculator: x^2/3 + sqrt(x)" },
+  { id: "templates", label: "Templates", hint: "Ready-made formulas with blanks" },
+  { id: "keys", label: "Keys and LaTeX", hint: "Math keyboard" },
+];
 
 const isTouchDevice = () => typeof window !== "undefined" && Boolean(window.matchMedia?.("(pointer: coarse)").matches);
 
@@ -26,22 +42,20 @@ export default function EquationInspector({ equation, store, peek = false, onExp
   // Phones show only the on-screen keyboard unless the presenter asks for the device keyboard
   const [deviceKeyboard, setDeviceKeyboard] = useState(() => !isTouchDevice());
   const touch = isTouchDevice();
+  const section = useSyncExternalStore(subscribeEquationSection, getEquationSection, () => null);
+  const toggleSection = (name) => requestEquationSection(section === name ? null : name);
 
   const fieldRef = useRef(null);
   const committed = useRef(equation.latex);
   const timer = useRef(null);
   const nextCaret = useRef(null);
-  const lastUrl = useRef(null);
 
   const color = equation.color || "#17181C";
   const fontSize = equation.fontSize || 36;
   const result = ready ? renderLatex(latex) : null;
   const error = result?.error || "";
-  const url = ready && result && !result.error ? equationSvgUrl(latex, color) : null;
-  if (url) lastUrl.current = url; // while the formula is half-typed, keep showing the last good picture
-  const shownUrl = url || lastUrl.current;
 
-  const commitLatex = useCallback((text) => {
+  const commitLatex = useCallback((text, { separate = false } = {}) => {
     clearTimeout(timer.current);
     timer.current = null;
     const current = store.get(id);
@@ -50,9 +64,16 @@ export default function EquationInspector({ equation, store, peek = false, onExp
     if (!size || size.error) return; // invalid or not typeset yet: keep the last good formula on the board
     if (text === current.latex && Math.abs(size.w - current.w) < 0.5 && Math.abs(size.h - current.h) < 0.5) return;
     committed.current = text;
-    // Coalesced so typing a whole formula is a single Ctrl+Z step
-    store.commit([{ op: "update", id, patch: { latex: text, w: size.w, h: size.h } }], { coalesce: `equation:${id}` });
+    // Coalesced so typing a whole formula is a single Ctrl+Z step (a template is its own step)
+    store.commit([{ op: "update", id, patch: { latex: text, w: size.w, h: size.h } }], { coalesce: separate ? null : `equation:${id}` });
   }, [store, id]);
+
+  // Used by templates: the whole formula changes at once, so it is saved straight away
+  const applyNow = (text) => {
+    if (text.length > MAX_LATEX_LENGTH) return;
+    setLatex(text);
+    commitLatex(text, { separate: true });
+  };
 
   const commitRef = useRef(commitLatex);
   commitRef.current = commitLatex;
@@ -137,20 +158,10 @@ export default function EquationInspector({ equation, store, peek = false, onExp
   };
   const setColour = (value) => store.commit([{ op: "update", id, patch: { color: value } }], { coalesce: `equation-color:${id}` });
 
-  const preview = (
-    <div className="flex min-h-[72px] items-center justify-center overflow-hidden rounded-md border border-line bg-white p-3" aria-live="polite">
-      {shownUrl ? (
-        <img src={shownUrl} alt={`Equation: ${latex}`} draggable={false} className={`h-auto w-auto max-w-full ${error ? "opacity-35" : ""}`} style={{ maxHeight: peek ? 52 : 120 }} />
-      ) : (
-        <span className="text-xs text-muted">{ready ? "Tap a key to start your formula" : "Loading the equation engine…"}</span>
-      )}
-    </div>
-  );
-
   const field = (
     <div>
       <div className="mb-1 flex items-center justify-between gap-2">
-        <label htmlFor={`latex-${id}`} className="text-xs font-medium">Formula</label>
+        <label htmlFor={`latex-${id}`} className="text-xs font-medium">Formula in LaTeX <span className="font-normal text-muted">(for people who know it)</span></label>
         {touch && !peek && (
           <button
             type="button"
@@ -176,7 +187,7 @@ export default function EquationInspector({ equation, store, peek = false, onExp
         spellCheck={false}
         aria-label="Formula in LaTeX"
         aria-invalid={Boolean(error) || undefined}
-        placeholder="Use the keys below, or type LaTeX such as \frac{a}{b}"
+        placeholder="Use the keys below, or write LaTeX such as \frac{a}{b}"
         onChange={(e) => change(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Tab" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
@@ -191,13 +202,20 @@ export default function EquationInspector({ equation, store, peek = false, onExp
   );
 
   /* ------------------------------ compact (phone peek) ------------------------------ */
+  const hint = (
+    <p className="flex items-start gap-2 rounded-md bg-accent-soft px-2.5 py-2 text-[13px] leading-[1.35] text-accent-strong">
+      <MousePointerClick size={15} className="mt-0.5 shrink-0" aria-hidden="true" />
+      <span>Tap a number or letter on the board to change it.</span>
+    </p>
+  );
+
   if (peek) {
     return (
       <div className="space-y-2">
-        {preview}
-        {field}
+        {hint}
+        <EquationParts latex={latex} onChange={change} compact />
         <button type="button" onClick={onExpand} className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-line text-sm hover:bg-sunken">
-          <Keyboard size={16} /> Show math keyboard
+          <Keyboard size={16} /> More ways to edit
         </button>
       </div>
     );
@@ -205,11 +223,9 @@ export default function EquationInspector({ equation, store, peek = false, onExp
 
   return (
     <div className="space-y-3" aria-label="Equation settings">
-      {preview}
-      {field}
-      <MathKeyboard onInsert={onInsert} onAction={onAction} />
+      {hint}
 
-      <div className="space-y-3 border-t border-line pt-3">
+      <div className="space-y-3">
         <div>
           <FieldLabel>Size</FieldLabel>
           <div className="flex items-center gap-2">
@@ -228,8 +244,45 @@ export default function EquationInspector({ equation, store, peek = false, onExp
         </div>
         <div>
           <FieldLabel>Colour</FieldLabel>
-          <Swatches colors={PALETTE.filter((c) => c !== "#FFFFFF")} value={color} onPick={setColour} />
+          <Swatches colors={PALETTE.filter((c) => c !== "#FFFFFF")} value={color} onPick={(value) => setColour(value)} />
         </div>
+      </div>
+
+      <div className="divide-y divide-line overflow-hidden rounded-md border border-line">
+        {SECTIONS.map((item) => {
+          const open = section === item.id;
+          return (
+            <div key={item.id}>
+              <button
+                type="button"
+                id={`eq-head-${item.id}`}
+                aria-expanded={open}
+                aria-controls={`eq-section-${item.id}`}
+                onClick={() => toggleSection(item.id)}
+                className={`flex min-h-10 w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-sunken ${open ? "bg-sunken" : ""}`}
+              >
+                <span>
+                  <span className="block text-[13px] font-medium">{item.label}</span>
+                  {!open && <span className="block text-[11px] leading-4 text-muted">{item.hint}</span>}
+                </span>
+                <ChevronDown size={16} className={`shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />
+              </button>
+              {open && (
+                <div role="region" id={`eq-section-${item.id}`} aria-labelledby={`eq-head-${item.id}`} className="border-t border-line bg-white px-3 py-3">
+                  {item.id === "values" && <EquationParts latex={latex} onChange={change} />}
+                  {item.id === "type" && <EquationType latex={latex} onChange={change} />}
+                  {item.id === "templates" && <EquationTemplates ready={ready} color={color} onUse={(text) => { applyNow(text); requestEquationSection(null); }} />}
+                  {item.id === "keys" && (
+                    <div className="space-y-3">
+                      {field}
+                      <MathKeyboard onInsert={onInsert} onAction={onAction} />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

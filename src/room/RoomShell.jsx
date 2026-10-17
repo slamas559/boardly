@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import {
-  ArrowLeft, Check, CircleHelp, FileText, Link2, ListChecks, LogOut, MoreHorizontal, PenLine, Square, Users, X,
+  ArrowLeft, Check, CircleHelp, Expand, FileText, Link2, ListChecks, LogOut, MoreHorizontal, PenLine, Shrink, Square, Users, X,
 } from "lucide-react";
 import { useSocket } from "../context/SocketContext";
 import api from "../utils/api";
@@ -20,6 +20,7 @@ import ActivityHost from "../board/ActivityHost.jsx";
 import ActivityStudent, { Spotlight } from "../board/ActivityStudent.jsx";
 import { useActivity } from "../board/useActivity.js";
 import { getClientId } from "../utils/clientId.js";
+import { useFullscreen } from "../utils/useFullscreen.js";
 
 function useOutsideClose(open, onClose) {
   const ref = useRef(null);
@@ -69,6 +70,7 @@ export default function RoomShell({ room, isTutor }) {
   const [connected, setConnected] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
 
+  const fullscreen = useFullscreen();
   const qa = useQaManager(room, socket, isTutor);
   const unanswered = qa.studentQuestions.filter((q) => !q.answered).length;
 
@@ -225,6 +227,19 @@ export default function RoomShell({ room, isTutor }) {
           )}
           {(isHost ? qa.qaEnabled || unanswered > 0 : qa.qaEnabled) && (
             <IconButton icon={CircleHelp} label={isHost ? "Open questions" : "Ask a question"} badge={isHost ? unanswered : 0} active={qa.qaPanelOpen} onClick={() => qa.setQaPanelOpen(!qa.qaPanelOpen)}/>
+          )}
+
+          {fullscreen.supported && (
+            <button
+              type="button"
+              onClick={fullscreen.toggle}
+              aria-pressed={fullscreen.active}
+              aria-label={fullscreen.active ? "Exit full screen" : "Full screen"}
+              title={fullscreen.active ? "Exit full screen (Esc or F)" : "Full screen (F)"}
+              className={`flex h-9 w-9 items-center justify-center rounded-md text-gray-700 hover:bg-sunken ${fullscreen.active ? "bg-sunken" : ""}`}
+            >
+              {fullscreen.active ? <Shrink size={18} strokeWidth={1.8} /> : <Expand size={18} strokeWidth={1.8} />}
+            </button>
           )}
 
           <div ref={menuRef} className="relative">

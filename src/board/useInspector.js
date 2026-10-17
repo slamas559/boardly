@@ -44,9 +44,9 @@ export function useInspector(tools) {
   }, []);
 
   // Phones: selecting a graph slides the sheet up to its "peek" height so the equation can be edited at once;
-  // selecting a formula opens it at half height, where the math keyboard is
-  const panelId = selectedGraph?.id ?? selectedEquation?.id ?? selectedAid?.id ?? selectedStats?.id ?? null;
-  const panelSnap = selectedEquation || selectedAid || selectedStats ? "half" : "peek";
+  // aids and charts open at half height (a formula is edited right on the board, so it leaves the sheet alone)
+  const panelId = selectedGraph?.id ?? selectedAid?.id ?? selectedStats?.id ?? null; // a formula is edited on the board, so it does not pull the sheet up
+  const panelSnap = selectedAid || selectedStats ? "half" : "peek";
   const lastPanelId = useRef(null);
   useEffect(() => {
     if (!desktop) {

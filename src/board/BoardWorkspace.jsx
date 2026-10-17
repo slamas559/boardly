@@ -6,6 +6,8 @@ import ToolDock from "./ToolDock.jsx";
 import { InspectorDock } from "./Inspector.jsx";
 import { useInspector } from "./useInspector.js";
 import QuickBar from "./QuickBar.jsx";
+import { resolveDock, useToolbarDock } from "./useToolbarDock.js";
+import { requestEquationSection } from "./equationSection.js";
 import { ObjectStore } from "./store.js";
 import { BOARD_HOME, uid } from "./constants.js";
 import { compileExpression, compileImplicitEquation, compileInequalitySystem } from "./graphMath.js";
@@ -52,6 +54,8 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible,
   );
   const tools = useAnnotationTools({ mode: "board", store, surfaceRef, enabled: isHost && visible });
   const inspector = useInspector(tools);
+  const [savedDock] = useToolbarDock();
+  const dockEdge = resolveDock(savedDock, inspector.desktop).edge; // keep selections clear of wherever the tool bar sits
 
   /* sizing + first framing */
   useEffect(() => {
@@ -80,9 +84,9 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible,
     const graph = store.get(selectedGraphId);
     if (!graph) return;
     const pad = 24;
-    const leftSafe = desktopLayout ? 76 : pad; // desktop: the tool rail
-    const topSafe = 56; // room for the quick bar above the graph
-    const bottomSafe = (desktopLayout ? 0 : Math.max(sheetInset, 72)) + pad;
+    const leftSafe = dockEdge === "left" ? 76 : pad; // the tool bar, when it is docked on the left
+    const topSafe = 56 + (dockEdge === "top" ? 56 : 0); // room for the quick bar above the graph (and a top-docked tool bar)
+    const bottomSafe = (desktopLayout ? 0 : Math.max(sheetInset, 72)) + (desktopLayout && dockEdge === "bottom" ? 60 : 0) + pad;
     setView((v) => {
       const l = (graph.x - v.x) * v.k;
       const t = (graph.y - v.y) * v.k;
@@ -97,7 +101,7 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible,
       if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return v;
       return { ...v, x: v.x + dx / v.k, y: v.y + dy / v.k };
     });
-  }, [isHost, size.w, size.h, selectedGraphId, sheetInset, desktopLayout, store]);
+  }, [isHost, size.w, size.h, selectedGraphId, sheetInset, desktopLayout, dockEdge, store]);
 
   /* initial state from the server (also covers late joiners and reconnects) */
   useEffect(() => {
@@ -306,6 +310,7 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible,
     store.commit([{ op: "add", obj }]);
     tools.setSelectedIds([obj.id]);
     tools.setTool("select");
+    requestEquationSection("type"); // a new formula starts with typing it
     inspector.open("half");
   };
 
@@ -446,7 +451,7 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible,
           keepTool={tools.keepTool}
         />
 
-        {isHost && <ToolDock mode="board" tools={tools} store={store} inspector={inspector} onCreateGraph={addGraph} onCreateEquation={addEquation} onCreateAid={addAid} onCreateTable={addTable} onUploadMedia={uploadMedia} onAddVideoLink={addVideoLink} mediaUploading={mediaUploading} mediaError={mediaError} />}
+        {isHost && <ToolDock mode="board" tools={tools} store={store} inspector={inspector} surfaceRef={surfaceRef} onCreateGraph={addGraph} onCreateEquation={addEquation} onCreateAid={addAid} onCreateTable={addTable} onUploadMedia={uploadMedia} onAddVideoLink={addVideoLink} mediaUploading={mediaUploading} mediaError={mediaError} />}
         {isHost && (
           <QuickBar
             tools={tools}
@@ -455,8 +460,8 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible,
             inspector={inspector}
             view={view}
             size={size}
-            safeLeft={inspector.desktop ? 68 : 8}
-            safeBottom={inspector.desktop ? 8 : Math.max(72, inspector.insetBottom)}
+            safeLeft={dockEdge === "left" ? 68 : 8}
+            safeBottom={inspector.desktop ? (dockEdge === "bottom" ? 64 : 8) : Math.max(72, inspector.insetBottom)}
           />
         )}
 

@@ -1,6 +1,7 @@
 // Shared tool state + keyboard shortcuts for the board and PDF annotation toolbars.
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { SHAPE_KINDS, STYLE_GROUP, defaultStyles } from "./constants.js";
+import { groupState } from "./groups.js";
 
 const SHORTCUTS = {
   board: { v: "select", h: "pan", p: "pen", m: "highlighter", e: "eraser", t: "text", r: "rect", o: "ellipse", d: "diamond", l: "line", a: "arrow", k: "laser" },
@@ -74,6 +75,7 @@ export function useAnnotationTools({ mode, store, surfaceRef, enabled }) {
       if (mod && key === "c") { sr.current?.copy(); return; }
       if (mod && key === "v") { e.preventDefault(); sr.current?.paste(); return; }
       if (mod && key === "d") { e.preventDefault(); sr.current?.duplicate(); return; }
+      if (mod && key === "g") { e.preventDefault(); if (e.shiftKey) sr.current?.ungroup(); else sr.current?.group(); return; }
       if (mod || e.altKey) return;
 
       if ((key === "delete" || key === "backspace") && sel.length) {
@@ -102,6 +104,7 @@ export function useAnnotationTools({ mode, store, surfaceRef, enabled }) {
     tool, setTool: chooseTool, styles, setStyle, group, activeStyle,
     selectedIds: liveSelected, setSelectedIds, selectedObjects,
     editingObj, setEditingObj, keepTool, setKeepTool, lastShape,
+    ...groupState(selectedObjects),
     canUndo: store.canUndo, canRedo: store.canRedo,
   };
 }

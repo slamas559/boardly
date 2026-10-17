@@ -208,6 +208,8 @@ export class ObjectStore {
 
 function pick(obj, keys) {
   const out = {};
-  for (const k of keys) out[k] = obj[k];
+  // `undefined` would be dropped when the op is sent as JSON, so a group id that did not exist yet is
+  // restored as null; that is what makes undoing "group" reach collaborators too.
+  for (const k of keys) out[k] = obj[k] === undefined && k === "groupId" ? null : obj[k];
   return out;
 }

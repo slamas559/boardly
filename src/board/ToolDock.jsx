@@ -1,20 +1,116 @@
-// Places the tool rail: a left rail on desktop, a bottom dock on phones. The properties panel
+// Places the tool rail. It sits on a screen edge (left by default on desktop, bottom on phones) and can be
+// dragged to any other edge, where it lays itself out vertically or horizontally. The properties panel
 // (style + graph settings) lives in the separate InspectorDock so it never covers the board.
 import { useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { ToolRail } from "./Toolbar.jsx";
 import { validateGraphExpressions } from "./graphValidation.js";
 import AidDialog from "./AidDialog.jsx";
+import { describeDock, isVerticalDock, nearestDock, resolveDock, setToolbarDock, stepDock, useToolbarDock } from "./useToolbarDock.js";
 
-export default function ToolDock({ mode, tools, inspector, onCreateGraph, onCreateEquation, onCreateAid, onCreateTable, onUploadMedia, onAddVideoLink, mediaUploading = false, mediaError = "", store }) {
+const ALIGN_MAIN = { start: "justify-start", center: "justify-center", end: "justify-end" };
+const FLYOUT_SIDE = { left: "right", right: "left", top: "bottom", bottom: "top" };
+const ARROWS = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"];
+
+// Where the wrapper sits for each dock. The board's page and zoom controls live bottom-right, so a bar docked
+// to the right or along the bottom leaves them free.
+function dockLayout({ edge, align }, mode) {
+  const main = ALIGN_MAIN[align];
+  switch (edge) {
+    case "left":
+      return `left-3 top-3 bottom-3 flex-col items-start ${main}`;
+    case "right":
+      return `right-3 top-3 bottom-44 flex-col items-end ${main} ${mode === "board" ? "md:bottom-28" : "md:bottom-3"}`;
+    case "top":
+      return `left-3 right-3 top-3 flex-row items-start ${main}`;
+    default:
+      return `bottom-2 left-2 right-2 safe-bottom flex-row items-end md:bottom-3 md:left-3 ${mode === "board" ? "md:right-[19rem]" : "md:right-3"} ${main}`;
+  }
+}
+
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+// A thin accent strip on the edge the bar will snap to when released
+function DropHint({ target }) {
+  const vertical = target.edge === "left" || target.edge === "right";
+  const along = { start: "0%", center: "33.333%", end: "66.666%" }[target.align];
+  const style = vertical
+    ? { top: along, height: "33.333%", width: 4, [target.edge]: 3 }
+    : { left: along, width: "33.333%", height: 4, [target.edge]: 3 };
+  return <div aria-hidden="true" className="pointer-events-none absolute rounded-full bg-accent/50" style={style} />;
+}
+
+export default function ToolDock({ mode, tools, inspector, surfaceRef, onCreateGraph, onCreateEquation, onCreateAid, onCreateTable, onUploadMedia, onAddVideoLink, mediaUploading = false, mediaError = "", store }) {
   const [insertDialog, setInsertDialog] = useState(null);
   const [aidDialog, setAidDialog] = useState(false);
   const [videoLinkDialog, setVideoLinkDialog] = useState(false);
+  const [drag, setDrag] = useState(null); // { x, y, target } while the bar is being dragged
+  const [announcement, setAnnouncement] = useState("");
   const mediaInputRef = useRef(null);
-  const { tool, setTool, lastShape, keepTool, setKeepTool, activeStyle } = tools;
+  const wrapRef = useRef(null);
+  const boxRef = useRef(null);
+  const dragRef = useRef(null);
+  const { tool, setTool, lastShape, keepTool, setKeepTool, activeStyle, canGroup, canUngroup } = tools;
+
+  const [savedDock] = useToolbarDock();
+  const dock = resolveDock(savedDock, inspector.desktop);
+  const vertical = isVerticalDock(dock);
+
+  const grip = {
+    onPointerDown: (e) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      const box = boxRef.current;
+      const parent = wrapRef.current?.parentElement;
+      if (!box || !parent) return;
+      const r = box.getBoundingClientRect();
+      const pr = parent.getBoundingClientRect();
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+      dragRef.current = {
+        id: e.pointerId, sx: e.clientX, sy: e.clientY, left: r.left - pr.left, top: r.top - pr.top,
+        w: r.width, h: r.height, pw: pr.width, ph: pr.height, moved: false, target: null,
+      };
+    },
+    onPointerMove: (e) => {
+      const d = dragRef.current;
+      if (!d || d.id !== e.pointerId) return;
+      const dx = e.clientX - d.sx;
+      const dy = e.clientY - d.sy;
+      if (!d.moved && Math.hypot(dx, dy) < 5) return; // a click on the handle is not a drag
+      d.moved = true;
+      const x = clamp(d.left + dx, 0, Math.max(0, d.pw - d.w));
+      const y = clamp(d.top + dy, 0, Math.max(0, d.ph - d.h));
+      d.target = nearestDock({ x: x + d.w / 2, y: y + d.h / 2 }, { w: d.pw, h: d.ph });
+      setDrag({ x, y, target: d.target });
+    },
+    onPointerUp: (e) => endDrag(e, true),
+    onPointerCancel: (e) => endDrag(e, false),
+    onKeyDown: (e) => {
+      if (!ARROWS.includes(e.key)) return;
+      e.preventDefault();
+      const next = stepDock(dock, e.key);
+      setToolbarDock(next);
+      setAnnouncement(describeDock(next));
+    },
+    onReset: () => {
+      setToolbarDock(null);
+      setAnnouncement("Toolbar moved back to its default position");
+    },
+  };
+
+  function endDrag(e, commit) {
+    const d = dragRef.current;
+    if (!d || d.id !== e.pointerId) return;
+    dragRef.current = null;
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+    if (commit && d.moved && d.target) {
+      setToolbarDock(d.target);
+      setAnnouncement(describeDock(d.target));
+    }
+    setDrag(null);
+  }
 
   return (
-    <div className="pointer-events-none absolute bottom-2 left-2 right-2 z-20 safe-bottom md:bottom-auto md:right-auto md:left-3 md:top-3">
+    <div ref={wrapRef} className={`pointer-events-none absolute z-20 flex ${drag ? "inset-0" : dockLayout(dock, mode)}`}>
       <input
         ref={mediaInputRef}
         type="file"
@@ -26,7 +122,11 @@ export default function ToolDock({ mode, tools, inspector, onCreateGraph, onCrea
           event.target.value = "";
         }}
       />
-      <div className="pointer-events-auto relative">
+      <div
+        ref={boxRef}
+        className="pointer-events-auto relative flex max-h-full min-h-0 min-w-0 max-w-full"
+        style={drag ? { position: "absolute", left: drag.x, top: drag.y, opacity: 0.92 } : undefined}
+      >
         <ToolRail
           mode={mode}
           tool={tool}
@@ -50,15 +150,28 @@ export default function ToolDock({ mode, tools, inspector, onCreateGraph, onCrea
           styleLabel={inspector.kind === "graph" ? "Graph" : inspector.kind === "equation" ? "Equation" : "Style"}
           styleOpen={inspector.visible}
           onStyleToggle={inspector.toggle}
+          vertical={vertical}
+          side={FLYOUT_SIDE[dock.edge]}
+          grip={grip}
+          canGroup={canGroup}
+          canUngroup={canUngroup}
+          onGroup={() => surfaceRef?.current?.group()}
+          onUngroup={() => surfaceRef?.current?.ungroup()}
         />
       </div>
+      {drag && <DropHint target={drag.target} />}
+      <span className="sr-only" role="status" aria-live="polite">{announcement}</span>
       {mediaUploading && (
         <div role="status" aria-live="polite" className="pointer-events-auto fixed left-1/2 z-[40] flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-2 rounded-md bg-ink px-3 py-2 text-sm text-paper shadow" style={{ top: "calc(env(safe-area-inset-top) + 3.5rem)" }}>
           <Loader2 size={15} className="animate-spin" />
           Uploading media…
         </div>
       )}
-      {mediaError && <div role="alert" className="pointer-events-auto absolute bottom-full left-0 mb-2 max-w-xs rounded-md bg-danger px-3 py-2 text-sm text-white shadow">{mediaError}</div>}
+      {mediaError && (
+        <div role="alert" className="pointer-events-auto fixed left-1/2 z-[40] max-w-[min(20rem,calc(100vw-2rem))] -translate-x-1/2 rounded-md bg-danger px-3 py-2 text-sm text-white shadow" style={{ top: "calc(env(safe-area-inset-top) + 3.5rem)" }}>
+          {mediaError}
+        </div>
+      )}
       {videoLinkDialog && (
         <VideoLinkDialog
           onClose={() => setVideoLinkDialog(false)}

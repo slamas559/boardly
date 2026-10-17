@@ -1,5 +1,5 @@
 // Canvas rendering for board / PDF-annotation objects.
-import { fontString, getBounds, shapeOutline } from "./geometry.js";
+import { fontString, getBounds, shapeOutline, unionBounds } from "./geometry.js";
 import { LINE_HEIGHT } from "./constants.js";
 import { compileInequalitySystem, graphGeometryPixels, graphSegments, paramConstants, paramKey, sampleInequalityRegion, sampleImplicit } from "./graphMath.js";
 import { findKeyPoints, formatNumber, isExplicitGraph, tracePoint } from "./graphAnalysis.js";
@@ -811,10 +811,17 @@ export function drawSelection(ctx, objects, k, { showHandles = true, mode = "box
   ctx.fillStyle = "#fff";
   const pad = 4 / k;
 
+  const groups = new Map();
   for (const o of objects) {
     if (o.type === "instrument") {
       drawInstrumentSelection(ctx, o, k);
       ctx.lineWidth = 1.25 / k;
+      continue;
+    }
+    // Members of a group share one outline instead of one dashed box each
+    if (o.groupId) {
+      if (!groups.has(o.groupId)) groups.set(o.groupId, []);
+      groups.get(o.groupId).push(getBounds(o));
       continue;
     }
     const b = getBounds(o);
@@ -822,6 +829,10 @@ export function drawSelection(ctx, objects, k, { showHandles = true, mode = "box
     ctx.strokeRect(b.x - pad, b.y - pad, b.w + pad * 2, b.h + pad * 2);
   }
   ctx.setLineDash([]);
+  for (const list of groups.values()) {
+    const b = unionBounds(list);
+    ctx.strokeRect(b.x - pad, b.y - pad, b.w + pad * 2, b.h + pad * 2);
+  }
 
   // An instrument has its own rotate and size handles instead of the box handles
   const ownHandles = objects.length === 1 && objects[0].type === "instrument";

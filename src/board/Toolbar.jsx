@@ -1,11 +1,12 @@
-// Tool rail (desktop) / dock (mobile), plus the contextual style panel.
-import { useEffect, useRef, useState } from "react";
+// Tool bar: related tools share one button with a flyout (Draw, Shapes, Insert), so the bar stays short.
+// It can be dragged to any screen edge (see ToolDock) and lays itself out vertically or horizontally.
+// Also holds the contextual style panel body below.
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  Activity, AlignCenter, AlignLeft, AlignRight, ArrowUpRight, Bold, Brush, Circle, Copy, Crosshair, Diamond, Eraser, Hand, Highlighter, ImagePlus, Link2,
-  Hexagon, Italic, Lock, Minus, MousePointer2, PenLine, Plus, Redo2, Shapes, SlidersHorizontal, Square, Star, Strikethrough, Trash2,
-  RectangleHorizontal, Ruler, Sigma, Table2, Triangle,
-  Type, Underline, Undo2, Unlock,
+  Activity, AlignCenter, AlignLeft, AlignRight, ArrowUpRight, Bold, Brush, Circle, Copy, Crosshair, Diamond, Eraser, Group, GripHorizontal, GripVertical,
+  Hand, Highlighter, ImagePlus, Link2, Hexagon, Italic, Lock, Minus, MousePointer2, PenLine, Plus, Redo2, SlidersHorizontal, Square, Star, Strikethrough, Trash2,
+  RectangleHorizontal, Ruler, Shapes, Sigma, Table2, Triangle, Type, Underline, Undo2, Ungroup, Unlock,
 } from "lucide-react";
 import { FONT_OPTIONS, FONT_STACKS, HIGHLIGHT_PALETTE, PALETTE, SHAPE_KINDS, TEXT_SIZES } from "./constants.js";
 
@@ -17,19 +18,25 @@ const SHAPE_LABELS = {
   rect: "Rectangle", ellipse: "Ellipse", diamond: "Diamond", triangle: "Triangle",
   roundedRect: "Rounded rectangle", hexagon: "Hexagon", star: "Star", line: "Line", arrow: "Arrow",
 };
+const SHAPE_SHORTCUTS = { rect: "R", ellipse: "O", diamond: "D", line: "L", arrow: "A" };
 
 const keepFocus = (e) => e.preventDefault(); // keep a text box focused while clicking toolbar buttons
 
-function ToolButton({ icon: Icon, label, shortcut, active, onClick, disabled, children, className = "" }) {
+function ToolButton({ icon: Icon, label, shortcut, active, onClick, disabled, children, className = "", role, popup, expanded }) {
+  const radio = role === "menuitemradio";
   return (
     <button
       type="button"
+      role={role}
       onPointerDown={keepFocus}
       onClick={onClick}
       disabled={disabled}
       title={shortcut ? `${label} (${shortcut})` : label}
       aria-label={label}
-      aria-pressed={active}
+      aria-pressed={radio ? undefined : active}
+      aria-checked={radio ? Boolean(active) : undefined}
+      aria-haspopup={popup ? "menu" : undefined}
+      aria-expanded={popup ? Boolean(expanded) : undefined}
       className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-md transition-colors md:h-9 md:w-9 ${
         active ? "bg-ink text-paper" : "text-gray-700 hover:bg-sunken"
       } ${disabled ? "opacity-35 hover:bg-transparent" : ""} ${className}`}
@@ -40,163 +47,333 @@ function ToolButton({ icon: Icon, label, shortcut, active, onClick, disabled, ch
   );
 }
 
-const Divider = () => <div className="mx-0.5 h-6 w-px shrink-0 bg-line md:mx-0 md:my-0.5 md:h-px md:w-6" />;
+function Divider({ vertical }) {
+  return <div aria-hidden="true" className={vertical ? "my-0.5 h-px w-6 shrink-0 bg-line" : "mx-0.5 h-6 w-px shrink-0 bg-line"} />;
+}
+
+// A row in a flyout: icon, name and (for tools) the keyboard shortcut
+function MenuItem({ icon: Icon, label, shortcut, active, disabled, onClick, role = "menuitem" }) {
+  const toggled = role === "menuitemradio" || role === "menuitemcheckbox";
+  return (
+    <button
+      type="button"
+      role={role}
+      aria-checked={toggled ? Boolean(active) : undefined}
+      onPointerDown={keepFocus}
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex h-9 w-full min-w-[11rem] items-center gap-2.5 rounded-md px-2.5 text-left text-sm transition-colors ${
+        active ? "bg-ink text-paper" : "text-gray-800 hover:bg-sunken"
+      } ${disabled ? "opacity-35 hover:bg-transparent" : ""}`}
+    >
+      {Icon ? <Icon size={16} strokeWidth={1.8} className="shrink-0" /> : null}
+      <span className="flex-1 truncate">{label}</span>
+      {shortcut && <span className="pl-3 font-mono text-[11px] opacity-60">{shortcut}</span>}
+    </button>
+  );
+}
+
+// A small popover anchored to a toolbar button. It opens towards the board (`side`), stays inside the
+// window, closes on outside click / Esc / scroll / resize and supports arrow-key navigation.
+function Flyout({ anchorRef, open, onClose, side, label, focusFirst, className = "", children }) {
+  const menuRef = useRef(null);
+  const [pos, setPos] = useState(null);
+
+  useLayoutEffect(() => {
+    if (!open) { setPos(null); return; }
+    const a = anchorRef.current?.getBoundingClientRect();
+    const m = menuRef.current?.getBoundingClientRect();
+    if (!a || !m) return;
+    const GAP = 8, EDGE = 8;
+    const left = side === "right" ? a.right + GAP : side === "left" ? a.left - m.width - GAP : a.left;
+    const top = side === "bottom" ? a.bottom + GAP : side === "top" ? a.top - m.height - GAP : a.top;
+    setPos({
+      left: Math.max(EDGE, Math.min(left, window.innerWidth - m.width - EDGE)),
+      top: Math.max(EDGE, Math.min(top, window.innerHeight - m.height - EDGE)),
+    });
+  }, [open, side, anchorRef]);
+
+  useEffect(() => {
+    if (!open || !pos || !focusFirst) return;
+    const items = menuRef.current?.querySelectorAll("button:not(:disabled)");
+    const current = menuRef.current?.querySelector('[aria-checked="true"]:not(:disabled)');
+    (current || items?.[0])?.focus();
+  }, [open, pos, focusFirst]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const outside = (e) => {
+      if (!anchorRef.current?.contains(e.target) && !menuRef.current?.contains(e.target)) onClose(false);
+    };
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation(); // Esc closes the menu only; it must not also clear the selection
+      onClose(true);
+    };
+    const dismiss = (e) => { if (!menuRef.current?.contains(e.target)) onClose(false); };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", onKey, true);
+    window.addEventListener("resize", dismiss);
+    window.addEventListener("scroll", dismiss, true);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("resize", dismiss);
+      window.removeEventListener("scroll", dismiss, true);
+    };
+  }, [open, onClose, anchorRef]);
+
+  if (!open) return null;
+
+  const onMenuKey = (e) => {
+    const keys = ["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End"];
+    if (!keys.includes(e.key)) return;
+    const items = [...menuRef.current.querySelectorAll("button:not(:disabled)")];
+    if (!items.length) return;
+    e.preventDefault();
+    const i = items.indexOf(document.activeElement);
+    const forward = e.key === "ArrowDown" || e.key === "ArrowRight";
+    const next = e.key === "Home" ? 0 : e.key === "End" ? items.length - 1 : (i + (forward ? 1 : -1) + items.length) % items.length;
+    items[next].focus();
+  };
+
+  return createPortal(
+    <div
+      ref={menuRef}
+      role="menu"
+      aria-label={label}
+      onKeyDown={onMenuKey}
+      className={`float-panel fixed z-[100] p-1 ${className}`}
+      style={{ left: pos?.left ?? 0, top: pos?.top ?? 0, visibility: pos ? "visible" : "hidden" }}
+    >
+      {children}
+    </div>,
+    document.body
+  );
+}
+
+const Caret = () => (
+  <span aria-hidden="true" className="absolute bottom-0.5 right-0.5 h-0 w-0 border-b-[4px] border-l-[4px] border-b-current border-l-transparent opacity-60" />
+);
+
+/**
+ * One toolbar button standing for several tools (kind "tools") or several insert actions (kind "actions").
+ * Tool groups show the active / last used tool; clicking an inactive group selects it and opens the flyout,
+ * clicking an active group toggles the flyout.
+ */
+function ToolGroup({ kind = "tools", icon, label, items, activeId, lastId, onPick, side, grid = false, footer, disabled }) {
+  const [open, setOpen] = useState(false);
+  const [byKeyboard, setByKeyboard] = useState(false);
+  const wrapRef = useRef(null);
+  const active = kind === "tools" && items.some((item) => item.id === activeId);
+  const shown = kind === "tools" ? items.find((item) => item.id === (active ? activeId : lastId)) || items[0] : null;
+
+  const close = useCallback((refocus) => {
+    setOpen(false);
+    if (refocus) wrapRef.current?.querySelector("button")?.focus();
+  }, []);
+
+  const onClick = (e) => {
+    setByKeyboard(e.detail === 0);
+    if (kind === "tools" && !active) {
+      onPick(shown.id);
+      setOpen(true);
+    } else {
+      setOpen((v) => !v);
+    }
+  };
+  const choose = (item) => {
+    if (item.onSelect) item.onSelect();
+    else onPick(item.id);
+    close(byKeyboard);
+  };
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <ToolButton
+        icon={shown ? shown.icon : icon}
+        label={shown ? shown.label : label}
+        shortcut={shown?.shortcut}
+        active={active}
+        onClick={onClick}
+        disabled={disabled}
+        popup
+        expanded={open}
+      >
+        <Caret />
+      </ToolButton>
+      <Flyout anchorRef={wrapRef} open={open} onClose={close} side={side} label={label} focusFirst={byKeyboard}>
+        {grid ? (
+          <div className="grid grid-cols-3 gap-0.5">
+            {items.map((item) => (
+              <ToolButton
+                key={item.id}
+                role="menuitemradio"
+                icon={item.icon}
+                label={item.label}
+                shortcut={item.shortcut}
+                active={kind === "tools" && activeId === item.id}
+                disabled={item.disabled}
+                onClick={() => choose(item)}
+              />
+            ))}
+          </div>
+        ) : (
+          items.map((item) => (
+            <MenuItem
+              key={item.id}
+              role={kind === "tools" ? "menuitemradio" : "menuitem"}
+              icon={item.icon}
+              label={item.label}
+              shortcut={item.shortcut}
+              active={kind === "tools" && activeId === item.id}
+              disabled={item.disabled}
+              onClick={() => choose(item)}
+            />
+          ))
+        )}
+        {footer && <div className="mt-1 border-t border-line pt-1">{footer}</div>}
+      </Flyout>
+    </div>
+  );
+}
+
+// The handle that drags the bar to another edge. Arrow keys do the same for keyboard users.
+function Grip({ vertical, grip }) {
+  if (!grip) return null;
+  const Icon = vertical ? GripHorizontal : GripVertical;
+  return (
+    <button
+      type="button"
+      aria-label="Move toolbar"
+      title="Drag to move the toolbar · Arrow keys dock it · Double-click to reset"
+      onPointerDown={(e) => { keepFocus(e); grip.onPointerDown(e); }}
+      onPointerMove={grip.onPointerMove}
+      onPointerUp={grip.onPointerUp}
+      onPointerCancel={grip.onPointerCancel}
+      onKeyDown={grip.onKeyDown}
+      onDoubleClick={grip.onReset}
+      className={`flex shrink-0 cursor-grab touch-none items-center justify-center text-gray-400 hover:text-gray-700 active:cursor-grabbing ${vertical ? "h-5 w-full" : "h-auto w-5"}`}
+    >
+      <Icon size={14} strokeWidth={1.8} />
+    </button>
+  );
+}
 
 export function ToolRail({
   mode, tool, onTool, lastShape, canUndo, canRedo, onUndo, onRedo, keepTool, onKeepTool, onCreateGraph, onCreateEquation, onCreateAid, onCreateTable, onAddVideoLink,
   onStyleToggle, styleSwatch, hasStyle, styleOpen, styleLabel = "Style", onUploadMedia, mediaUploading = false,
+  vertical = true, side = "right", grip, canGroup = false, canUngroup = false, onGroup, onUngroup,
 }) {
-  const [shapesOpen, setShapesOpen] = useState(false);
-  const wrapRef = useRef(null);
-  const shapeMenuRef = useRef(null);
-  const [shapeMenuPosition, setShapeMenuPosition] = useState(null);
+  // Remember which tool of a group was used last, so the button keeps showing it
+  const lastDraw = useRef("pen");
+  if (tool === "pen" || tool === "highlighter") lastDraw.current = tool;
+  const lastMarkup = useRef("highlight");
+  if (["highlight", "underline", "strike"].includes(tool)) lastMarkup.current = tool;
 
-  useEffect(() => {
-    if (!shapesOpen) return undefined;
-    const close = (e) => {
-      if (!wrapRef.current?.contains(e.target) && !shapeMenuRef.current?.contains(e.target)) setShapesOpen(false);
-    };
-    document.addEventListener("pointerdown", close);
-    const closeOnViewportChange = () => setShapesOpen(false);
-    window.addEventListener("resize", closeOnViewportChange);
-    window.addEventListener("scroll", closeOnViewportChange, true);
-    return () => {
-      document.removeEventListener("pointerdown", close);
-      window.removeEventListener("resize", closeOnViewportChange);
-      window.removeEventListener("scroll", closeOnViewportChange, true);
-    };
-  }, [shapesOpen]);
+  const pdf = mode === "pdf";
+  const drawItems = [
+    { id: "pen", icon: PenLine, label: "Pen", shortcut: "P" },
+    { id: "highlighter", icon: pdf ? Brush : Highlighter, label: "Marker", shortcut: "M" },
+  ];
+  const markupItems = [
+    { id: "highlight", icon: Highlighter, label: "Highlight text", shortcut: "H" },
+    { id: "underline", icon: Underline, label: "Underline text", shortcut: "U" },
+    { id: "strike", icon: Strikethrough, label: "Strike through text", shortcut: "S" },
+  ];
+  const shapeItems = SHAPE_KINDS.map((k) => ({ id: k, icon: SHAPE_ICONS[k], label: SHAPE_LABELS[k], shortcut: SHAPE_SHORTCUTS[k] }));
+  const insertItems = [
+    { id: "graph", icon: Activity, label: "Graph", onSelect: onCreateGraph },
+    { id: "equation", icon: Sigma, label: "Equation", onSelect: onCreateEquation },
+    { id: "aids", icon: Ruler, label: "Math aids and tools", onSelect: onCreateAid },
+    { id: "table", icon: Table2, label: "Table", onSelect: onCreateTable },
+    { id: "media", icon: ImagePlus, label: mediaUploading ? "Uploading media…" : "Image or video", onSelect: onUploadMedia, disabled: mediaUploading },
+    { id: "link", icon: Link2, label: "Video link", onSelect: onAddVideoLink },
+  ];
 
-  const isShape = SHAPE_KINDS.includes(tool);
-  const ShapeIcon = isShape ? SHAPE_ICONS[tool] : SHAPE_ICONS[lastShape] || Shapes;
-  const openShapeMenu = () => {
-    const rect = wrapRef.current?.getBoundingClientRect();
-    if (rect) {
-      const menuSize = 140;
-      if (window.matchMedia("(min-width: 768px)").matches) {
-        setShapeMenuPosition({
-          left: Math.min(rect.right + 8, window.innerWidth - menuSize - 8),
-          top: Math.max(8, Math.min(rect.top, window.innerHeight - menuSize - 8)),
-        });
-      } else {
-        const top = rect.top >= menuSize + 8 ? rect.top - menuSize - 8 : rect.bottom + 8;
-        setShapeMenuPosition({
-          left: Math.max(8, Math.min(rect.left, window.innerWidth - menuSize - 8)),
-          top: Math.max(8, Math.min(top, window.innerHeight - menuSize - 8)),
-        });
-      }
-    }
-    setShapesOpen(true);
-  };
-  const toggleShapeMenu = () => {
-    if (shapesOpen) setShapesOpen(false);
-    else openShapeMenu();
-  };
+  // The Group button flips to Ungroup when the selection is a group
+  const ungroupMode = canUngroup && !canGroup;
+  const GroupIcon = ungroupMode ? Ungroup : Group;
 
   return (
-    <div
-      role="toolbar"
-      aria-label="Drawing tools"
-      className="float-panel scroll-thin flex items-center gap-0.5 overflow-x-auto p-1 md:max-h-[calc(100%-1.5rem)] md:flex-col md:overflow-y-auto md:overflow-x-visible"
-    >
-      <ToolButton icon={MousePointer2} label="Select" shortcut="V" active={tool === "select"} onClick={() => onTool("select")} />
-      {mode === "board" && (
-        <ToolButton icon={Hand} label="Pan (drag the board)" shortcut="H" active={tool === "pan"} onClick={() => onTool("pan")} />
-      )}
-      <Divider />
+    <div className={`float-panel flex max-h-full max-w-full items-stretch overflow-hidden ${vertical ? "flex-col" : "flex-row"}`}>
+      <Grip vertical={vertical} grip={grip} />
+      <div
+        role="toolbar"
+        aria-label="Drawing tools"
+        aria-orientation={vertical ? "vertical" : "horizontal"}
+        className={`scroll-thin flex min-h-0 min-w-0 items-center gap-0.5 p-1 ${
+          vertical ? "flex-col overflow-y-auto overflow-x-hidden pt-0" : "overflow-x-auto overflow-y-hidden pl-0"
+        }`}
+      >
+        <ToolButton icon={MousePointer2} label="Select" shortcut="V" active={tool === "select"} onClick={() => onTool("select")} />
+        {mode === "board" && (
+          <ToolButton icon={Hand} label="Pan (drag the board)" shortcut="H" active={tool === "pan"} onClick={() => onTool("pan")} />
+        )}
+        <Divider vertical={vertical} />
 
-      {mode === "pdf" && (
-        <>
-          <ToolButton icon={Highlighter} label="Highlight text" shortcut="H" active={tool === "highlight"} onClick={() => onTool("highlight")} />
-          <ToolButton icon={Underline} label="Underline text" shortcut="U" active={tool === "underline"} onClick={() => onTool("underline")} />
-          <ToolButton icon={Strikethrough} label="Strike through text" shortcut="S" active={tool === "strike"} onClick={() => onTool("strike")} />
-          <Divider />
-        </>
-      )}
+        {pdf && (
+          <ToolGroup label="Text markup" items={markupItems} activeId={tool} lastId={lastMarkup.current} onPick={onTool} side={side} />
+        )}
+        <ToolGroup label="Pen and marker" items={drawItems} activeId={tool} lastId={lastDraw.current} onPick={onTool} side={side} />
+        <ToolButton icon={Eraser} label="Eraser" shortcut="E" active={tool === "eraser"} onClick={() => onTool("eraser")} />
+        <ToolButton icon={Type} label="Text" shortcut="T" active={tool === "text"} onClick={() => onTool("text")} />
+        <ToolGroup
+          label="Shapes"
+          icon={Shapes}
+          items={shapeItems}
+          activeId={tool}
+          lastId={lastShape}
+          onPick={onTool}
+          side={side}
+          grid
+          footer={
+            <MenuItem
+              role="menuitemcheckbox"
+              icon={keepTool ? Lock : Unlock}
+              label="Keep tool active"
+              active={keepTool}
+              onClick={onKeepTool}
+            />
+          }
+        />
+        {mode === "board" && <ToolGroup kind="actions" icon={Plus} label="Insert" items={insertItems} side={side} />}
+        <Divider vertical={vertical} />
 
-      <ToolButton icon={PenLine} label="Pen" shortcut="P" active={tool === "pen"} onClick={() => onTool("pen")} />
-      <ToolButton icon={mode === "pdf" ? Brush : Highlighter} label="Marker" shortcut="M" active={tool === "highlighter"} onClick={() => onTool("highlighter")} />
-      <ToolButton icon={Eraser} label="Eraser" shortcut="E" active={tool === "eraser"} onClick={() => onTool("eraser")} />
-      <Divider />
-
-      <ToolButton icon={Type} label="Text" shortcut="T" active={tool === "text"} onClick={() => onTool("text")} />
-
-      <div ref={wrapRef} className="relative">
+        <ToolButton icon={Crosshair} label="Laser pointer" shortcut="K" active={tool === "laser"} onClick={() => onTool("laser")} />
         <ToolButton
-          icon={ShapeIcon}
-          label={isShape ? SHAPE_LABELS[tool] : "Shapes"}
-          active={isShape}
-          onClick={() => (isShape ? toggleShapeMenu() : (onTool(lastShape), openShapeMenu()))}
-        >
-          <span className="absolute bottom-0.5 right-0.5 h-0 w-0 border-b-[4px] border-l-[4px] border-b-current border-l-transparent opacity-60" />
-        </ToolButton>
-        {shapesOpen && shapeMenuPosition && createPortal(
-          <div
-            ref={shapeMenuRef}
-            className="float-panel fixed z-[100] grid grid-cols-3 gap-0.5 p-1"
-            style={{ left: shapeMenuPosition.left, top: shapeMenuPosition.top }}
-            role="menu"
-            aria-label="Shape tools"
-          >
-            {SHAPE_KINDS.map((k) => (
-              <ToolButton
-                key={k}
-                icon={SHAPE_ICONS[k]}
-                label={SHAPE_LABELS[k]}
-                shortcut={{ rect: "R", ellipse: "O", diamond: "D", line: "L", arrow: "A" }[k]}
-                active={tool === k}
-                onClick={() => { onTool(k); setShapesOpen(false); }}
-              />
-            ))}
-          </div>,
-          document.body
+          icon={GroupIcon}
+          label={ungroupMode ? "Ungroup" : "Group"}
+          shortcut={ungroupMode ? "Ctrl Shift G" : "Ctrl G"}
+          disabled={!canGroup && !canUngroup}
+          onClick={ungroupMode ? onUngroup : onGroup}
+        />
+        <Divider vertical={vertical} />
+
+        <ToolButton icon={Undo2} label="Undo" shortcut="Ctrl Z" disabled={!canUndo} onClick={onUndo} />
+        <ToolButton icon={Redo2} label="Redo" shortcut="Ctrl Shift Z" disabled={!canRedo} onClick={onRedo} />
+
+        {/* Show / hide the properties panel (docked on desktop, a bottom sheet on phones) */}
+        {hasStyle && (
+          <>
+            <Divider vertical={vertical} />
+            <button
+              type="button"
+              onClick={onStyleToggle}
+              aria-label={styleOpen ? "Hide properties panel" : "Show properties panel"}
+              aria-pressed={styleOpen}
+              title={styleOpen ? "Hide properties panel" : "Show properties panel"}
+              className={`flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-md text-sm ${
+                vertical ? "w-10 md:h-9 md:w-9" : "border border-line px-2.5"
+              } ${styleOpen ? "bg-sunken text-ink" : "text-gray-700 hover:bg-sunken"}`}
+            >
+              {styleSwatch && !vertical && <span className="h-4 w-4 rounded-sm border border-line-strong" style={{ background: styleSwatch }} />}
+              <SlidersHorizontal size={vertical ? 18 : 15} strokeWidth={1.8} />
+              {!vertical && <span>{styleLabel}</span>}
+            </button>
+          </>
         )}
       </div>
-
-      {mode === "board" && (
-        <>
-          <Divider />
-          <ToolButton icon={Activity} label="Add graph" onClick={onCreateGraph} />
-          <ToolButton icon={Sigma} label="Add equation" onClick={onCreateEquation} />
-          <ToolButton icon={Ruler} label="Math aids and tools" onClick={onCreateAid} />
-          <ToolButton icon={Table2} label="Add table" onClick={onCreateTable} />
-          <ToolButton icon={ImagePlus} label={mediaUploading ? "Uploading media" : "Add image or video"} disabled={mediaUploading} onClick={onUploadMedia} />
-          <ToolButton icon={Link2} label="Add video link" onClick={onAddVideoLink} />
-        </>
-      )}
-
-      <ToolButton icon={Crosshair} label="Laser pointer" shortcut="K" active={tool === "laser"} onClick={() => onTool("laser")} />
-      <Divider />
-
-      <ToolButton icon={Undo2} label="Undo" shortcut="Ctrl Z" disabled={!canUndo} onClick={onUndo} />
-      <ToolButton icon={Redo2} label="Redo" shortcut="Ctrl Shift Z" disabled={!canRedo} onClick={onRedo} />
-      <ToolButton
-        icon={keepTool ? Lock : Unlock}
-        label={keepTool ? "Tool stays active (click to unlock)" : "Keep tool active after drawing a shape"}
-        active={keepTool}
-        onClick={onKeepTool}
-      />
-
-      {/* Show / hide the properties panel (docked on desktop, a bottom sheet on phones) */}
-      {hasStyle && (
-        <>
-          <Divider />
-          <button
-            type="button"
-            onClick={onStyleToggle}
-            aria-label={styleOpen ? "Hide properties panel" : "Show properties panel"}
-            aria-pressed={styleOpen}
-            title={styleOpen ? "Hide properties panel" : "Show properties panel"}
-            className={`flex h-10 shrink-0 items-center gap-1.5 rounded-md border border-line px-2.5 text-sm md:h-9 md:w-9 md:justify-center md:border-0 md:px-0 ${
-              styleOpen ? "bg-sunken text-ink" : "text-gray-700 hover:bg-sunken"
-            }`}
-          >
-            {styleSwatch && <span className="h-4 w-4 rounded-sm border border-line-strong md:hidden" style={{ background: styleSwatch }} />}
-            <SlidersHorizontal size={15} className="md:size-[18px]" />
-            <span className="md:hidden">{styleLabel}</span>
-          </button>
-        </>
-      )}
     </div>
   );
 }

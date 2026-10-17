@@ -3,7 +3,7 @@
 // object, flips below when there is no room, and hides while the pointer is down so it never
 // gets in the way of dragging, resizing or panning.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Copy, Eye, EyeOff, Pencil, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Copy, Eye, EyeOff, Group, Pencil, SlidersHorizontal, Trash2, Ungroup } from "lucide-react";
 import { HIGHLIGHT_PALETTE, PALETTE } from "./constants.js";
 import { getBounds, unionBounds } from "./geometry.js";
 import { Swatches } from "./Toolbar.jsx";
@@ -126,6 +126,16 @@ export default function QuickBar({ tools, store, surfaceRef, inspector, view, si
           </button>
         )}
         {(colour || inspector.kind) && <div className="mx-0.5 h-5 w-px bg-line" />}
+        {tools.canGroup && (
+          <button type="button" onClick={() => surfaceRef.current?.group()} aria-label="Group" title="Group (Ctrl+G)" className={iconButton}>
+            <Group size={16} />
+          </button>
+        )}
+        {tools.canUngroup && (
+          <button type="button" onClick={() => surfaceRef.current?.ungroup()} aria-label="Ungroup" title="Ungroup (Ctrl+Shift+G)" className={iconButton}>
+            <Ungroup size={16} />
+          </button>
+        )}
         {canDuplicate && (
           <button type="button" onClick={() => surfaceRef.current?.duplicate()} aria-label="Duplicate" title="Duplicate (Ctrl+D)" className={iconButton}>
             <Copy size={15} />

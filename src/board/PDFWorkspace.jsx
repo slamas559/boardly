@@ -497,7 +497,7 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
 
           {/* Style settings dock beside the page on desktop; a bottom sheet on phones */}
           {isHost && <InspectorDock mode="pdf" tools={tools} store={store} surfaceRef={surfaceRef} inspector={inspector} />}
-          {isHost && <ToolDock mode="pdf" tools={tools} store={store} inspector={inspector} />}
+          {isHost && <ToolDock mode="pdf" tools={tools} store={store} inspector={inspector} surfaceRef={surfaceRef} />}
         </div>
       </Document>
 

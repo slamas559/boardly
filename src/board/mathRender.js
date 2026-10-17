@@ -1,6 +1,8 @@
 // Equation blocks: turns LaTeX into sized vector images for the canvas and the editor preview.
 // Light-weight on purpose - the MathJax engine itself (mathEngine.js) is loaded the first time a
 // formula needs drawing, and everything redraws when it arrives ("boardly-math-ready").
+import { markParts, parseParts } from "./latexParts.js";
+
 export const MAX_LATEX_LENGTH = 600;
 export const MATH_READY_EVENT = "boardly-math-ready";
 
@@ -52,6 +54,46 @@ export function renderLatex(latex) {
     if (svgCache.size > 300) svgCache.delete(svgCache.keys().next().value);
   }
   return result;
+}
+
+const leafCache = new Map();
+
+/**
+ * Where each editable part (number, letter, symbol) of a formula is drawn, as fractions of the whole picture:
+ * [{ part, x, y, w, h }] with 0..1 coordinates, or null while the engine loads / if the formula cannot be measured.
+ * Multiply by a formula's box on the board to get its place there.
+ */
+export function leafBoxes(latex) {
+  if (typeof latex !== "string" || !latex.trim() || latex.length > MAX_LATEX_LENGTH) return null;
+  if (!engine) {
+    ensureMath();
+    return null;
+  }
+  if (leafCache.has(latex)) return leafCache.get(latex);
+  let out = null;
+  try {
+    const plain = renderLatex(latex);
+    const parts = parseParts(latex);
+    if (plain && !plain.error && parts.length) {
+      const measured = engine.latexLeafBoxes(markParts(latex, parts), parts.length);
+      // The marked copy must lay out exactly like the real one, or the boxes would be off: otherwise do not offer them
+      if (measured && Math.abs(measured.vb.w - plain.vbW) < 0.5 && Math.abs(measured.vb.h - plain.vbH) < 0.5) {
+        const { vb } = measured;
+        out = parts
+          .map((part, i) => {
+            const b = measured.boxes[i];
+            return b ? { part, x: (b.x - vb.x) / vb.w, y: (b.y - vb.y) / vb.h, w: b.w / vb.w, h: b.h / vb.h } : null;
+          })
+          .filter(Boolean);
+        if (!out.length) out = null;
+      }
+    }
+  } catch {
+    out = null;
+  }
+  leafCache.set(latex, out);
+  if (leafCache.size > 100) leafCache.delete(leafCache.keys().next().value);
+  return out;
 }
 
 const round1 = (value) => Math.round(value * 10) / 10;
