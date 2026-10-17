@@ -27,6 +27,9 @@ export const TEXT_SIZES = [14, 18, 24, 32, 48, 72, 96];
 
 export const LINE_HEIGHT = 1.28;
 
+// Shape fill: false (none), "tint" (light wash) or "solid" (full colour). Older boards stored `true` for the tint.
+export const fillMode = (fill) => (fill === "solid" ? "solid" : fill ? "tint" : null);
+
 export const SHAPE_KINDS = ["rect", "ellipse", "diamond", "triangle", "roundedRect", "hexagon", "star", "line", "arrow"];
 
 // Which tools share remembered settings
@@ -51,8 +54,8 @@ export const STYLE_GROUP = {
 export function defaultStyles(mode) {
   const pdf = mode === "pdf";
   return {
-    pen: { color: "#17181C", width: pdf ? 2.5 : 4, opacity: 1 },
-    highlighter: { color: "#FFE14D", width: pdf ? 14 : 22, opacity: 0.45 },
+    pen: { color: "#17181C", width: pdf ? 2.5 : 4, opacity: 1, texture: "smooth", pattern: "solid" },
+    highlighter: { color: "#FFE14D", width: pdf ? 14 : 22, opacity: 0.45, texture: "smooth", pattern: "solid" },
     shape: { color: "#2540D9", width: pdf ? 2.5 : 4, opacity: 1, fill: false, measure: false, snap: false },
     text: {
       color: "#17181C",

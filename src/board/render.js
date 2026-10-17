@@ -1,6 +1,7 @@
 // Canvas rendering for board / PDF-annotation objects.
 import { fontString, getBounds, shapeOutline, unionBounds } from "./geometry.js";
-import { LINE_HEIGHT } from "./constants.js";
+import { LINE_HEIGHT, fillMode } from "./constants.js";
+import { drawStroke } from "./brushes.js";
 import { compileInequalitySystem, graphGeometryPixels, graphSegments, paramConstants, paramKey, sampleInequalityRegion, sampleImplicit } from "./graphMath.js";
 import { findKeyPoints, formatNumber, isExplicitGraph, tracePoint } from "./graphAnalysis.js";
 import { equationImage } from "./mathRender.js";
@@ -31,57 +32,6 @@ function loadGraph3d() {
   }
 }
 
-function strokePath(ctx, pts) {
-  ctx.beginPath();
-  ctx.moveTo(pts[0][0], pts[0][1]);
-  if (pts.length === 2) {
-    ctx.lineTo(pts[1][0], pts[1][1]);
-  } else {
-    for (let i = 1; i < pts.length - 1; i++) {
-      const mx = (pts[i][0] + pts[i + 1][0]) / 2;
-      const my = (pts[i][1] + pts[i + 1][1]) / 2;
-      ctx.quadraticCurveTo(pts[i][0], pts[i][1], mx, my);
-    }
-    const last = pts[pts.length - 1];
-    ctx.lineTo(last[0], last[1]);
-  }
-  ctx.stroke();
-}
-
-function drawStroke(ctx, o) {
-  const pts = o.points;
-  if (!pts || pts.length === 0) return;
-  const width = o.width || 3;
-  const highlighter = o.tool === "highlighter";
-
-  ctx.save();
-  ctx.strokeStyle = o.color || "#000";
-  ctx.fillStyle = o.color || "#000";
-  ctx.globalAlpha *= o.opacity ?? 1;
-  ctx.lineJoin = "round";
-  ctx.lineCap = highlighter ? "square" : "round";
-  ctx.lineWidth = width;
-
-  if (pts.length === 1) {
-    ctx.beginPath();
-    ctx.arc(pts[0][0], pts[0][1], width / 2, 0, Math.PI * 2);
-    ctx.fill();
-  } else if (o.vp && !highlighter) {
-    // Pen pressure: vary width per segment
-    for (let i = 1; i < pts.length; i++) {
-      const p = ((pts[i - 1][2] ?? 0.5) + (pts[i][2] ?? 0.5)) / 2;
-      ctx.lineWidth = width * (0.35 + 1.1 * p);
-      ctx.beginPath();
-      ctx.moveTo(pts[i - 1][0], pts[i - 1][1]);
-      ctx.lineTo(pts[i][0], pts[i][1]);
-      ctx.stroke();
-    }
-  } else {
-    strokePath(ctx, pts);
-  }
-  ctx.restore();
-}
-
 function drawShape(ctx, o, k = 1) {
   const width = o.width || 3;
   const x = Math.min(o.x1, o.x2), y = Math.min(o.y1, o.y2);
@@ -95,10 +45,11 @@ function drawShape(ctx, o, k = 1) {
   ctx.lineCap = "round";
   ctx.globalAlpha *= o.opacity ?? 1;
 
+  const fill = fillMode(o.fill);
   const fillIfNeeded = () => {
-    if (!o.fill) return;
+    if (!fill) return;
     ctx.save();
-    ctx.globalAlpha *= 0.14;
+    if (fill === "tint") ctx.globalAlpha *= 0.14; // "solid" paints the full colour
     ctx.fill();
     ctx.restore();
   };

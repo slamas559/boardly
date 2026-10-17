@@ -4,8 +4,10 @@ import {
   forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore,
 } from "react";
 import {
-  FONT_STACKS, LINE_HEIGHT, STYLE_GROUP, uid,
+  FONT_STACKS, LINE_HEIGHT, STYLE_GROUP, fillMode, uid,
 } from "./constants.js";
+import { createStabilizer, strokePattern, strokeTexture } from "./brushes.js";
+import { arrangeOps } from "./layers.js";
 import {
   dist, hitGraphGeometry, hitGraphTrace, hitObject, isMovable, measureText, movePatch, objectInRect, q, scalePatch,
 } from "./geometry.js";
@@ -152,7 +154,7 @@ const Surface = forwardRef(function Surface(
     const d = drag.current;
     if (d) {
       if (d.type === "stroke") {
-        drawObject(ctx, { type: "stroke", tool: d.meta.tool, color: d.meta.color, width: d.meta.width, opacity: d.meta.opacity, vp: d.meta.vp, points: d.pts }, { k: v.k });
+        drawObject(ctx, { type: "stroke", tool: d.meta.tool, color: d.meta.color, width: d.meta.width, opacity: d.meta.opacity, vp: d.meta.vp, texture: d.meta.texture, pattern: d.meta.pattern, points: d.pts }, { k: v.k });
       } else if (d.type === "shape") {
         drawObject(ctx, d.obj, { k: v.k });
       } else if (d.type === "markup") {
@@ -411,6 +413,16 @@ const Surface = forwardRef(function Surface(
       api.copy();
       api.paste();
     },
+    /** Move the selection in the stacking order: "front", "forward", "backward" or "back". */
+    arrange(mode) {
+      const { store: st, page: pg } = live.current;
+      const ids = selectedObjects().filter((o) => o.type !== "cover").map((o) => o.id);
+      if (!ids.length) return false;
+      const ops = arrangeOps(st.onPage(pg).filter((o) => o.type !== "cover"), ids, mode);
+      if (!ops.length) return false;
+      st.commit(ops);
+      return true;
+    },
     /** Glue the selected objects into one group (they then select, move and scale together). */
     group() {
       const objs = selectedObjects().filter(isGroupable);
@@ -586,8 +598,11 @@ const Surface = forwardRef(function Surface(
           type: "stroke",
           id: uid(),
           page: pg,
-          meta: { tool: tl, color: g.color, width: g.width, opacity: g.opacity ?? 1, vp: false },
+          meta: { tool: tl, color: g.color, width: g.width, opacity: g.opacity ?? 1, vp: false, texture: strokeTexture(g.texture), pattern: strokePattern(g.pattern), ...(s.topZ(pg) > 0 ? { z: s.topZ(pg) } : {}) },
           pts: [[q(p[0]), q(p[1]), Math.round(pressure * 100) / 100]],
+          // Smooths out hand jitter while drawing (a stylus is steadier, so it gets a lighter touch)
+          stab: createStabilizer(e.pointerType === "pen" ? { minCutoff: 3, beta: 0.05 } : {}),
+          rawLast: [p[0], p[1]],
           sent: 0,
           startT: performance.now(),
           lastSend: 0,
@@ -611,7 +626,7 @@ const Surface = forwardRef(function Surface(
           type: "shape",
           kind: tl,
           start,
-          obj: { id, type: "shape", kind: tl, page: pg, x1: start[0], y1: start[1], x2: start[0], y2: start[1], color: g.color, width: g.width, opacity: g.opacity ?? 1, fill: !!g.fill, ...(g.measure ? { measure: true } : {}) },
+          obj: { id, type: "shape", kind: tl, page: pg, x1: start[0], y1: start[1], x2: start[0], y2: start[1], color: g.color, width: g.width, opacity: g.opacity ?? 1, fill: fillMode(g.fill) || false, ...(g.measure ? { measure: true } : {}) },
         };
         sharePreview(drag.current.obj, true, true);
         break;
@@ -789,9 +804,24 @@ const Surface = forwardRef(function Surface(
     d.lastSend = now;
   };
 
+  // The stabiliser lags a little behind the pointer, so the last point is added exactly where it was released
+  const filterStrokePoint = (d, raw, time, k) => {
+    if (!d.stabStarted) {
+      d.stabStarted = true;
+      d.stab.reset(d.pts[0][0] * k, d.pts[0][1] * k, time - 16);
+    }
+    const [fx, fy] = d.stab.next(raw[0] * k, raw[1] * k, time);
+    return [fx / k, fy / k];
+  };
+
   const finishStroke = () => {
     const d = drag.current;
     if (!d || d.type !== "stroke") return;
+    const end = d.rawLast;
+    const tail = d.pts[d.pts.length - 1];
+    if (end && d.pts.length > 1 && dist(end, tail) > 0.4 / live.current.view.k) {
+      d.pts.push([q(end[0]), q(end[1]), tail[2] ?? 0.5]);
+    }
     flushStroke(true);
     live.current.store.commit([{ op: "add", obj: { id: d.id, type: "stroke", page: d.page, ...d.meta, points: d.pts } }], { emit: !onStrokeChunk });
     drag.current = null;
@@ -851,7 +881,9 @@ const Surface = forwardRef(function Surface(
         const events = e.nativeEvent?.getCoalescedEvents?.() || [];
         const list = events.length ? events : [e.nativeEvent || e];
         for (const ev of list) {
-          const pt = toWorld(ev);
+          const raw = toWorld(ev);
+          d.rawLast = raw;
+          const pt = filterStrokePoint(d, raw, ev.timeStamp, v.k);
           const last = d.pts[d.pts.length - 1];
           if (dist(pt, last) < 0.8 / v.k) continue;
           const pr = d.pointerType === "pen" && ev.pressure > 0 ? ev.pressure : 0.5;
@@ -1765,6 +1797,7 @@ function styleKeyApplies(o, k) {
   // Allow colour changes on any object type; fill only on shapes; text keys only on text
   if (k === "color" || k === "opacity") return true;
   if (k === "width") return o.type === "stroke" || o.type === "shape";
+  if (k === "texture" || k === "pattern") return o.type === "stroke";
   if (k === "fill" || k === "measure") return o.type === "shape";
   if (k === "fontSize") return o.type === "table";
   if (k === "playing") return o.type === "media" && o.mediaType === "video";

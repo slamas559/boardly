@@ -6,8 +6,12 @@ const STORAGE_KEY = "boardly.toolbar.dock";
 export const EDGES = ["left", "right", "top", "bottom"];
 export const ALIGNS = ["start", "center", "end"];
 
-export const defaultDock = (desktop) => (desktop ? { edge: "left", align: "start" } : { edge: "bottom", align: "center" });
-export const resolveDock = (dock, desktop) => dock || defaultDock(desktop);
+// The bar can only be moved on a roomy screen (a laptop, desktop or large tablet). On phones, including a
+// phone held sideways, it stays docked along the bottom and any position saved on a bigger screen is ignored.
+const DOCK_MOVABLE_QUERY = "(min-width: 768px) and (min-height: 500px)";
+
+export const defaultDock = (movable) => (movable ? { edge: "left", align: "start" } : { edge: "bottom", align: "center" });
+export const resolveDock = (dock, movable) => (movable && dock ? dock : defaultDock(movable));
 export const isVerticalDock = (dock) => dock.edge === "left" || dock.edge === "right";
 
 const valid = (d) => d && EDGES.includes(d.edge) && ALIGNS.includes(d.align);
@@ -37,6 +41,19 @@ const subscribe = (fn) => {
   listeners.add(fn);
   return () => listeners.delete(fn);
 };
+
+const subscribeMovable = (fn) => {
+  if (typeof window === "undefined" || !window.matchMedia) return () => {};
+  const mq = window.matchMedia(DOCK_MOVABLE_QUERY);
+  mq.addEventListener("change", fn);
+  return () => mq.removeEventListener("change", fn);
+};
+const readMovable = () => typeof window !== "undefined" && Boolean(window.matchMedia) && window.matchMedia(DOCK_MOVABLE_QUERY).matches;
+
+/** True when the screen is big enough for the tool bar to be dragged to another edge. */
+export function useDockMovable() {
+  return useSyncExternalStore(subscribeMovable, readMovable, () => false);
+}
 
 /** [dock, setDock]: dock is `{ edge, align }` or null for the default. */
 export function useToolbarDock() {

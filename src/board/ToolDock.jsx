@@ -1,12 +1,12 @@
 // Places the tool rail. It sits on a screen edge (left by default on desktop, bottom on phones) and can be
 // dragged to any other edge, where it lays itself out vertically or horizontally. The properties panel
 // (style + graph settings) lives in the separate InspectorDock so it never covers the board.
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { ToolRail } from "./Toolbar.jsx";
 import { validateGraphExpressions } from "./graphValidation.js";
 import AidDialog from "./AidDialog.jsx";
-import { describeDock, isVerticalDock, nearestDock, resolveDock, setToolbarDock, stepDock, useToolbarDock } from "./useToolbarDock.js";
+import { describeDock, isVerticalDock, nearestDock, resolveDock, setToolbarDock, stepDock, useDockMovable, useToolbarDock } from "./useToolbarDock.js";
 
 const ALIGN_MAIN = { start: "justify-start", center: "justify-center", end: "justify-end" };
 const FLYOUT_SIDE = { left: "right", right: "left", top: "bottom", bottom: "top" };
@@ -53,8 +53,16 @@ export default function ToolDock({ mode, tools, inspector, surfaceRef, onCreateG
   const { tool, setTool, lastShape, keepTool, setKeepTool, activeStyle, canGroup, canUngroup } = tools;
 
   const [savedDock] = useToolbarDock();
-  const dock = resolveDock(savedDock, inspector.desktop);
+  const movable = useDockMovable();
+  const dock = resolveDock(savedDock, movable);
   const vertical = isVerticalDock(dock);
+
+  // Rotating a phone or resizing the window while the bar is mid-drag drops the drag
+  useEffect(() => {
+    if (movable) return;
+    dragRef.current = null;
+    setDrag(null);
+  }, [movable]);
 
   const grip = {
     onPointerDown: (e) => {
@@ -152,7 +160,7 @@ export default function ToolDock({ mode, tools, inspector, surfaceRef, onCreateG
           onStyleToggle={inspector.toggle}
           vertical={vertical}
           side={FLYOUT_SIDE[dock.edge]}
-          grip={grip}
+          grip={movable ? grip : null}
           canGroup={canGroup}
           canUngroup={canUngroup}
           onGroup={() => surfaceRef?.current?.group()}

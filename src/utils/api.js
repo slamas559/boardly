@@ -11,8 +11,10 @@ const api = axios.create({
 // Request interceptor to handle Content-Type
 api.interceptors.request.use(
   (config) => {
-    // Don't set Content-Type for FormData - let axios handle it
-    if (!(config.data instanceof FormData)) {
+    // Don't set Content-Type for FormData (axios adds the boundary) or for a file sent as-is, such as a
+    // session recording, which sets its own video type
+    const sendsFile = config.data instanceof FormData || (typeof Blob !== 'undefined' && config.data instanceof Blob);
+    if (!sendsFile) {
       config.headers['Content-Type'] = 'application/json';
     }
     return config;

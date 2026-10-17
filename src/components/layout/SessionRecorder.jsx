@@ -1,8 +1,44 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CircleDot, Download, LoaderCircle, Square } from "lucide-react";
+import { CircleDot, Download, LoaderCircle, Mic, Monitor, Square, Video } from "lucide-react";
 import api from "../../utils/api";
 
 const MAX_RECORDING_BYTES = 500 * 1024 * 1024;
+const SOURCES_KEY = "boardly.recording.sources";
+
+// What goes into a recording besides the screen. Remembered on this browser, so a host who always records
+// with their voice does not have to remember to switch it on.
+function readSources() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(SOURCES_KEY) || "null");
+    return { mic: saved?.mic === true, camera: saved?.camera === true };
+  } catch {
+    return { mic: false, camera: false };
+  }
+}
+function saveSources(sources) {
+  try {
+    window.localStorage.setItem(SOURCES_KEY, JSON.stringify(sources));
+  } catch { /* storage unavailable: the choice still applies for this visit */ }
+}
+
+function describeDeviceError(error, what) {
+  if (error?.name === "NotFoundError" || error?.name === "OverconstrainedError") return `No ${what} found`;
+  if (error?.name === "NotAllowedError" || error?.name === "SecurityError") return `${what[0].toUpperCase()}${what.slice(1)} access was blocked`;
+  if (error?.name === "NotReadableError") return `The ${what} is in use by another app`;
+  return `The ${what} could not be started`;
+}
+
+const stopTracks = (stream) => stream?.getTracks().forEach((track) => track.stop());
+
+// Ask for one device at a time, so a missing camera never stops the screen (or the microphone) from recording
+async function optionalDevice(constraints, what, skipped) {
+  try {
+    return await navigator.mediaDevices.getUserMedia(constraints);
+  } catch (error) {
+    skipped.push(describeDeviceError(error, what));
+    return null;
+  }
+}
 
 function preferredMimeType() {
   if (!window.MediaRecorder) throw new Error("This browser does not support session recording.");
@@ -27,7 +63,35 @@ export default function SessionRecorder({ room, socket }) {
   const [progress, setProgress] = useState(0);
   const [localBlob, setLocalBlob] = useState(null);
   const [localDuration, setLocalDuration] = useState(0);
+  const [sources, setSources] = useState(readSources);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [notice, setNotice] = useState("");
   const recordingRef = useRef(null);
+  const rootRef = useRef(null);
+
+  const toggleSource = (key) => setSources((current) => {
+    const next = { ...current, [key]: !current[key] };
+    saveSources(next);
+    return next;
+  });
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const onDown = (e) => { if (!rootRef.current?.contains(e.target)) setMenuOpen(false); };
+    const onKey = (e) => { if (e.key === "Escape") setMenuOpen(false); };
+    window.addEventListener("pointerdown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
+
+  useEffect(() => {
+    if (!notice) return undefined;
+    const timer = setTimeout(() => setNotice(""), 8000);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   const stopRecording = useCallback(() => {
     const active = recordingRef.current;
@@ -35,9 +99,7 @@ export default function SessionRecorder({ room, socket }) {
     active.stopping = true;
     if (active.recorder?.state === "recording") active.recorder.stop();
     if (active.animationFrame) cancelAnimationFrame(active.animationFrame);
-    active.displayStream.getTracks().forEach((track) => track.stop());
-    active.cameraStream.getTracks().forEach((track) => track.stop());
-    active.outputStream.getTracks().forEach((track) => track.stop());
+    [active.displayStream, active.cameraStream, active.micStream, active.outputStream].forEach(stopTracks);
     active.audioContext?.close().catch(() => {});
     if (active.screenVideo) active.screenVideo.srcObject = null;
     if (active.cameraVideo) active.cameraVideo.srcObject = null;
@@ -81,9 +143,12 @@ export default function SessionRecorder({ room, socket }) {
 
   const startRecording = async () => {
     setError("");
+    setNotice("");
+    setMenuOpen(false);
     setLocalBlob(null);
     let displayStream;
-    let cameraStream;
+    let cameraStream = null;
+    let micStream = null;
     let audioContext;
     let recorder;
     try {
@@ -92,10 +157,15 @@ export default function SessionRecorder({ room, socket }) {
         video: { frameRate: { ideal: 30, max: 30 } },
         audio: true,
       });
-      cameraStream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 640 }, height: { ideal: 360 }, facingMode: "user" },
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
+      // Camera and microphone are optional: if one is missing or blocked, record without it and say so
+      const skipped = [];
+      if (sources.camera) {
+        cameraStream = await optionalDevice({ video: { width: { ideal: 640 }, height: { ideal: 360 }, facingMode: "user" } }, "camera", skipped);
+      }
+      if (sources.mic) {
+        micStream = await optionalDevice({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }, "microphone", skipped);
+      }
+      if (skipped.length) setNotice(`${skipped.join(" and ")}, so the recording has only what is available.`);
 
       const displayTrack = displayStream.getVideoTracks()[0];
       const displaySettings = displayTrack?.getSettings() || {};
@@ -112,22 +182,27 @@ export default function SessionRecorder({ room, socket }) {
       screenVideo.muted = true;
       screenVideo.playsInline = true;
       await waitForVideo(screenVideo);
-      const cameraVideo = document.createElement("video");
-      cameraVideo.srcObject = cameraStream;
-      cameraVideo.muted = true;
-      cameraVideo.playsInline = true;
-      await waitForVideo(cameraVideo);
+      let cameraVideo = null;
+      if (cameraStream) {
+        cameraVideo = document.createElement("video");
+        cameraVideo.srcObject = cameraStream;
+        cameraVideo.muted = true;
+        cameraVideo.playsInline = true;
+        await waitForVideo(cameraVideo);
+      }
 
       const drawFrame = () => {
         context.drawImage(screenVideo, 0, 0, width, height);
-        const insetWidth = Math.round(width * 0.2);
-        const insetHeight = Math.round(insetWidth * 9 / 16);
         const margin = Math.round(width * 0.025);
-        const x = width - insetWidth - margin;
-        const y = height - insetHeight - margin;
-        context.fillStyle = "rgba(17, 24, 39, 0.8)";
-        context.fillRect(x - 3, y - 3, insetWidth + 6, insetHeight + 6);
-        context.drawImage(cameraVideo, x, y, insetWidth, insetHeight);
+        if (cameraVideo) {
+          const insetWidth = Math.round(width * 0.2);
+          const insetHeight = Math.round(insetWidth * 9 / 16);
+          const x = width - insetWidth - margin;
+          const y = height - insetHeight - margin;
+          context.fillStyle = "rgba(17, 24, 39, 0.8)";
+          context.fillRect(x - 3, y - 3, insetWidth + 6, insetHeight + 6);
+          context.drawImage(cameraVideo, x, y, insetWidth, insetHeight);
+        }
         context.fillStyle = "#ef4444";
         context.beginPath();
         context.arc(margin + 12, margin + 12, 8, 0, Math.PI * 2);
@@ -138,20 +213,20 @@ export default function SessionRecorder({ room, socket }) {
         recordingRef.current.animationFrame = requestAnimationFrame(drawFrame);
       };
       const outputStream = canvas.captureStream(30);
-      recordingRef.current = { displayStream, cameraStream, outputStream, recorder: null, animationFrame: 0, audioContext: null, stopping: false, startedAt: Date.now() };
+      recordingRef.current = { displayStream, cameraStream, micStream, outputStream, recorder: null, animationFrame: 0, audioContext: null, stopping: false, startedAt: Date.now() };
       drawFrame();
 
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContextClass) throw new Error("This browser does not support audio recording.");
-      audioContext = new AudioContextClass();
-      await audioContext.resume();
-      const mixedAudio = audioContext.createMediaStreamDestination();
-      for (const sourceStream of [displayStream, cameraStream]) {
-        if (sourceStream.getAudioTracks().length) {
-          audioContext.createMediaStreamSource(sourceStream).connect(mixedAudio);
-        }
+      // Sound from the shared tab and, when chosen, the microphone are mixed into one track
+      const audioSources = [displayStream, micStream].filter((stream) => stream?.getAudioTracks().length);
+      if (audioSources.length) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) throw new Error("This browser does not support audio recording.");
+        audioContext = new AudioContextClass();
+        await audioContext.resume();
+        const mixedAudio = audioContext.createMediaStreamDestination();
+        for (const sourceStream of audioSources) audioContext.createMediaStreamSource(sourceStream).connect(mixedAudio);
+        for (const track of mixedAudio.stream.getAudioTracks()) outputStream.addTrack(track);
       }
-      for (const track of mixedAudio.stream.getAudioTracks()) outputStream.addTrack(track);
       const options = { videoBitsPerSecond: 1_000_000, audioBitsPerSecond: 96_000 };
       if (mimeType) options.mimeType = mimeType;
       recorder = new MediaRecorder(outputStream, options);
@@ -191,15 +266,15 @@ export default function SessionRecorder({ room, socket }) {
         active.recorder.ondataavailable = null;
       }
       if (active?.animationFrame) cancelAnimationFrame(active.animationFrame);
-      displayStream?.getTracks().forEach((track) => track.stop());
-      cameraStream?.getTracks().forEach((track) => track.stop());
-      active?.outputStream.getTracks().forEach((track) => track.stop());
+      [displayStream, cameraStream, micStream, active?.outputStream].forEach(stopTracks);
       if (active?.screenVideo) active.screenVideo.srcObject = null;
       if (active?.cameraVideo) active.cameraVideo.srcObject = null;
       audioContext?.close().catch(() => {});
       recordingRef.current = null;
       setPhase("failed");
-      setError(startError.message || "Could not start recording. Allow screen, camera, and microphone access and try again.");
+      setError(!displayStream && startError.name === "NotAllowedError"
+        ? "Screen sharing was cancelled or blocked. Click Record and choose a tab or screen to share."
+        : startError.message || "Could not start recording. Allow screen sharing and try again.");
     }
   };
 
@@ -207,9 +282,7 @@ export default function SessionRecorder({ room, socket }) {
     const active = recordingRef.current;
     if (!active) return;
     if (active.recorder?.state === "recording") active.recorder.stop();
-    active.displayStream.getTracks().forEach((track) => track.stop());
-    active.cameraStream.getTracks().forEach((track) => track.stop());
-    active.outputStream.getTracks().forEach((track) => track.stop());
+    [active.displayStream, active.cameraStream, active.micStream, active.outputStream].forEach(stopTracks);
     active.audioContext?.close().catch(() => {});
     if (active.animationFrame) cancelAnimationFrame(active.animationFrame);
     socket.emit("recording-state", { room: room._id, active: false });
@@ -226,20 +299,53 @@ export default function SessionRecorder({ room, socket }) {
     URL.revokeObjectURL(url);
   };
 
+  const busy = ["saving", "uploading"].includes(phase);
+  const summary = ["Screen", sources.mic && "microphone", sources.camera && "camera"].filter(Boolean).join(" + ");
+
   return (
-    <>
+    <div ref={rootRef} className="relative">
       <button
         type="button"
-        onClick={phase === "recording" ? stopRecording : startRecording}
-        disabled={["saving", "uploading"].includes(phase)}
-        aria-label={phase === "recording" ? "Stop session recording" : "Start session recording"}
-        title={phase === "recording" ? "Stop recording" : "Choose this browser tab, enable tab audio, and allow camera/microphone access"}
-        className={`flex h-9 items-center gap-1.5 rounded-md px-2 text-sm disabled:opacity-60 ${phase === "recording" ? "bg-danger-soft text-danger" : "text-gray-700 hover:bg-sunken"}`}
+        onClick={phase === "recording" ? stopRecording : () => setMenuOpen((open) => !open)}
+        disabled={busy}
+        aria-label={phase === "recording" ? "Stop session recording" : "Record the session"}
+        aria-haspopup={phase === "recording" ? undefined : "dialog"}
+        aria-expanded={phase === "recording" ? undefined : menuOpen}
+        title={phase === "recording" ? "Stop recording" : "Record the session"}
+        className={`flex h-9 items-center gap-1.5 rounded-md px-2 text-sm disabled:opacity-60 ${phase === "recording" ? "bg-danger-soft text-danger" : menuOpen ? "bg-sunken text-ink" : "text-gray-700 hover:bg-sunken"}`}
       >
-        {["saving", "uploading"].includes(phase) ? <LoaderCircle size={16} className="animate-spin" /> : phase === "recording" ? <Square size={14} fill="currentColor" /> : <CircleDot size={16} className="text-danger" />}
-        <span className="hidden sm:inline">{phase === "recording" ? "Stop" : ["saving", "uploading"].includes(phase) ? `${progress || ""} Saving` : "Record"}</span>
+        {busy ? <LoaderCircle size={16} className="animate-spin" /> : phase === "recording" ? <Square size={14} fill="currentColor" /> : <CircleDot size={16} className="text-danger" />}
+        <span className="hidden sm:inline">{phase === "recording" ? "Stop" : busy ? `${progress || ""} Saving` : "Record"}</span>
       </button>
+      {phase === "recording" && <span role="status" className="sr-only">Recording: {summary}</span>}
+      {menuOpen && phase !== "recording" && (
+        <div role="dialog" aria-label="Recording options" className="float-panel absolute right-0 top-full z-50 mt-2 w-72 max-w-[calc(100vw-1rem)] p-3">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted">What to record</div>
+          <ul className="mt-2 space-y-1">
+            <li className="flex items-center gap-2.5 rounded-md px-2 py-1.5">
+              <Monitor size={16} className="shrink-0 text-gray-700" />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium">Screen or tab</div>
+                <div className="text-xs text-muted">You choose it next. Tick “share tab audio” to include its sound.</div>
+              </div>
+              <span className="text-xs text-muted">Always</span>
+            </li>
+            <SourceToggle icon={Mic} label="Microphone" hint={sources.mic ? "Your voice is recorded." : "Off: your voice is not recorded."} on={sources.mic} onToggle={() => toggleSource("mic")} />
+            <SourceToggle icon={Video} label="Camera" hint={sources.camera ? "Shown in the corner of the recording." : "Off: no camera needed."} on={sources.camera} onToggle={() => toggleSource("camera")} />
+          </ul>
+          <button type="button" onClick={startRecording} className="mt-3 flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-ink text-sm font-medium text-paper hover:opacity-90">
+            <CircleDot size={15} /> Start recording
+          </button>
+          <p className="mt-2 text-center text-[11px] text-muted">{summary} · your choice is remembered</p>
+        </div>
+      )}
       {phase === "uploading" && <span role="status" className="sr-only">Saving recording: {progress}%</span>}
+      {notice && !error && (
+        <div role="status" className="fixed left-1/2 top-14 z-[60] flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-3 rounded-md bg-ink px-4 py-2.5 text-sm text-paper shadow-lg">
+          <span>{notice}</span>
+          <button type="button" onClick={() => setNotice("")} aria-label="Dismiss" className="shrink-0 text-lg leading-none">×</button>
+        </div>
+      )}
       {(error || phase === "saved") && (
         <div role={error ? "alert" : "status"} className={`fixed left-1/2 top-14 z-[60] flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-3 rounded-md px-4 py-2.5 text-sm shadow-lg ${error ? "bg-danger text-white" : "bg-ink text-paper"}`}>
           <span>{error || "Recording saved to your dashboard."}</span>
@@ -252,6 +358,29 @@ export default function SessionRecorder({ room, socket }) {
           <button type="button" onClick={() => { setError(""); if (phase === "saved") setPhase("idle"); }} aria-label="Dismiss" className="shrink-0 text-lg leading-none">×</button>
         </div>
       )}
-    </>
+    </div>
+  );
+}
+
+function SourceToggle({ icon: Icon, label, hint, on, onToggle }) {
+  return (
+    <li>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        onClick={onToggle}
+        className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-sunken"
+      >
+        <Icon size={16} className="shrink-0 text-gray-700" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium">{label}</span>
+          <span className="block text-xs text-muted">{hint}</span>
+        </span>
+        <span aria-hidden="true" className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${on ? "bg-accent" : "bg-line-strong"}`}>
+          <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${on ? "left-[18px]" : "left-0.5"}`} />
+        </span>
+      </button>
+    </li>
   );
 }

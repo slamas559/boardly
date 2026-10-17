@@ -3,6 +3,15 @@
 // - Remote edits are applied silently
 // Mirrors the server's op format: add / update / remove / clear.
 
+import { paintOrder, topLayer } from "./layers.js";
+
+// The server accepts at most 500 ops per message, so big batches (e.g. renumbering layers) are sent in parts
+export const chunkOps = (ops, size = 400) => {
+  const parts = [];
+  for (let i = 0; i < ops.length; i += size) parts.push(ops.slice(i, i + size));
+  return parts;
+};
+
 // Edits tagged with the same `coalesce` key within this window share one undo step
 const COALESCE_WINDOW_MS = 1500;
 
@@ -37,7 +46,11 @@ export class ObjectStore {
     return this.objects.get(id);
   }
   onPage(page) {
-    return this.list().filter((o) => (o.page ?? 0) === page && o.type !== "paper");
+    return paintOrder(this.list().filter((o) => (o.page ?? 0) === page && o.type !== "paper")); // bottom to top
+  }
+  /** The highest layer in use on a page; new objects are stacked at this level, on top of what is there. */
+  topZ(page) {
+    return topLayer(this.onPage(page));
   }
   /** The paper (background pattern) of a page, or undefined for the default dots. */
   paperFor(page) {
@@ -127,6 +140,7 @@ export class ObjectStore {
    */
   commit(ops, { emit = true, coalesce = null } = {}) {
     if (!ops.length) return;
+    ops = this._stackOnTop(ops);
     const inverse = this._inverse(ops);
     ops.forEach((op) => this._applyOp(op));
     const now = Date.now();
@@ -146,6 +160,21 @@ export class ObjectStore {
     this.redoStack = [];
     this._changed();
     if (emit) this.onLocalOps(ops);
+  }
+
+  // Something drawn after another object is meant to sit on top of it, even when that object was raised
+  _stackOnTop(ops) {
+    if (!ops.some((op) => op.op === "add" && op.obj.z === undefined)) return ops;
+    const tops = new Map();
+    const topOf = (page) => {
+      if (!tops.has(page)) tops.set(page, this.topZ(page));
+      return tops.get(page);
+    };
+    return ops.map((op) => {
+      if (op.op !== "add" || op.obj.z !== undefined || op.obj.type === "paper" || op.obj.type === "cover") return op;
+      const z = topOf(op.obj.page ?? 0);
+      return z > 0 ? { ...op, obj: { ...op.obj, z } } : op;
+    });
   }
 
   undo() {
@@ -197,6 +226,9 @@ export class ObjectStore {
         width: meta.width,
         opacity: meta.opacity ?? 1,
         vp: meta.vp,
+        texture: meta.texture,
+        pattern: meta.pattern,
+        ...(meta.z ? { z: meta.z } : {}),
         points: points.slice(),
       });
     } else {
@@ -210,6 +242,7 @@ function pick(obj, keys) {
   const out = {};
   // `undefined` would be dropped when the op is sent as JSON, so a group id that did not exist yet is
   // restored as null; that is what makes undoing "group" reach collaborators too.
-  for (const k of keys) out[k] = obj[k] === undefined && k === "groupId" ? null : obj[k];
+  // (a missing layer is layer 0, so undoing a reorder reaches collaborators too)
+  for (const k of keys) out[k] = obj[k] === undefined && k === "groupId" ? null : obj[k] === undefined && k === "z" ? 0 : obj[k];
   return out;
 }

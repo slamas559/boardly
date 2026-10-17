@@ -8,7 +8,8 @@ import {
   Hand, Highlighter, ImagePlus, Link2, Hexagon, Italic, Lock, Minus, MousePointer2, PenLine, Plus, Redo2, SlidersHorizontal, Square, Star, Strikethrough, Trash2,
   RectangleHorizontal, Ruler, Shapes, Sigma, Table2, Triangle, Type, Underline, Undo2, Ungroup, Unlock,
 } from "lucide-react";
-import { FONT_OPTIONS, FONT_STACKS, HIGHLIGHT_PALETTE, PALETTE, SHAPE_KINDS, TEXT_SIZES } from "./constants.js";
+import { FONT_OPTIONS, FONT_STACKS, HIGHLIGHT_PALETTE, PALETTE, SHAPE_KINDS, TEXT_SIZES, fillMode } from "./constants.js";
+import { STROKE_PATTERNS, STROKE_TEXTURES, drawBrushPreview, strokePattern, strokeTexture } from "./brushes.js";
 
 const SHAPE_ICONS = {
   rect: Square, ellipse: Circle, diamond: Diamond, triangle: Triangle, roundedRect: RectangleHorizontal,
@@ -442,6 +443,28 @@ function SegButton({ active, onClick, label, children, className = "" }) {
   );
 }
 
+// A live sample of a brush texture, drawn by the same code that draws the board
+function BrushSwatch({ texture, color, width, opacity, tool }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth || 96;
+    const h = canvas.clientHeight || 28;
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const pale = String(color).toLowerCase() === "#ffffff"; // a white pen would vanish on the white panel
+    drawBrushPreview(ctx, w, h, {
+      texture, pattern: "solid", color: pale ? "#9A9A94" : color, tool, opacity,
+      width: Math.max(2.5, Math.min(tool === "highlighter" ? 13 : 8, width * (tool === "highlighter" ? 0.5 : 0.9))),
+    });
+  }, [texture, color, width, opacity, tool]);
+  return <canvas ref={ref} aria-hidden="true" className="block h-7 w-full" />;
+}
+
 // The panel body only: the properties dock supplies the frame, header and close button.
 export function StylePanel({ group, style, onChange, selectionCount, onDelete, onDuplicate, mode }) {
   if (!group || !style) return null;
@@ -543,12 +566,48 @@ export function StylePanel({ group, style, onChange, selectionCount, onDelete, o
           </div>
         )}
 
+        {(group === "pen" || group === "highlighter") && (
+          <>
+            <div>
+              <Label>Texture</Label>
+              <div className="grid grid-cols-2 gap-1.5" role="group" aria-label="Brush texture">
+                {STROKE_TEXTURES.map((t) => {
+                  const active = strokeTexture(style.texture) === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onPointerDown={keepFocus}
+                      onClick={() => onChange({ texture: t.id })}
+                      aria-pressed={active}
+                      title={t.label}
+                      className={`flex flex-col gap-0.5 rounded-md border px-2 pb-1 pt-1.5 text-left ${active ? "border-ink bg-sunken" : "border-line hover:bg-sunken"}`}
+                    >
+                      <BrushSwatch texture={t.id} color={style.color} width={style.width} opacity={style.opacity ?? 1} tool={group} />
+                      <span className="text-[11px] text-gray-700">{t.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <Label>Line</Label>
+              <Segmented>
+                {STROKE_PATTERNS.map((pt) => (
+                  <SegButton key={pt.id} active={strokePattern(style.pattern) === pt.id} onClick={() => onChange({ pattern: pt.id })} label={`${pt.label} line`}>{pt.label}</SegButton>
+                ))}
+              </Segmented>
+            </div>
+          </>
+        )}
+
         {group === "shape" && (
           <div>
             <Label>Fill</Label>
             <Segmented>
-              <SegButton active={!style.fill} onClick={() => onChange({ fill: false })} label="No fill">None</SegButton>
-              <SegButton active={!!style.fill} onClick={() => onChange({ fill: true })} label="Tinted fill">Tint</SegButton>
+              <SegButton active={!fillMode(style.fill)} onClick={() => onChange({ fill: false })} label="No fill">None</SegButton>
+              <SegButton active={fillMode(style.fill) === "tint"} onClick={() => onChange({ fill: "tint" })} label="Light tinted fill">Tint</SegButton>
+              <SegButton active={fillMode(style.fill) === "solid"} onClick={() => onChange({ fill: "solid" })} label="Solid fill in the shape colour">Solid</SegButton>
             </Segmented>
           </div>
         )}

@@ -13,7 +13,7 @@ import ToolDock from "./ToolDock.jsx";
 import { InspectorDock } from "./Inspector.jsx";
 import { useInspector } from "./useInspector.js";
 import QuickBar from "./QuickBar.jsx";
-import { ObjectStore } from "./store.js";
+import { ObjectStore, chunkOps } from "./store.js";
 import { PDF_WORLD_WIDTH } from "./constants.js";
 import { useAnnotationTools } from "./useAnnotationTools.js";
 import api from "../utils/api";
@@ -80,7 +80,7 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
   const [confirmClear, setConfirmClear] = useState(false);
 
   const store = useMemo(
-    () => new ObjectStore({ onLocalOps: (ops) => socket?.emit("pdf-op", { room: roomId, ops }) }),
+    () => new ObjectStore({ onLocalOps: (ops) => chunkOps(ops).forEach((part) => socket?.emit("pdf-op", { room: roomId, ops: part })) }),
     [socket, roomId]
   );
   const tools = useAnnotationTools({ mode: "pdf", store, surfaceRef, enabled: isHost && visible });
@@ -213,9 +213,11 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
 
   const pad = avail.width < 640 ? 16 : 48;
   const verticalPad = avail.width < 640 ? 32 : 48;
-  const widthFit = Math.max(240, Math.min(avail.width - pad, 1000));
+  // 100% fills the width of the viewer, so a portrait page opens at a readable size and you scroll down it.
+  // A page that is wider than it is tall (slides) is fitted whole instead, so it is never taller than the screen.
+  const widthFit = Math.max(240, avail.width - pad);
   const heightFit = avail.height > verticalPad ? (avail.height - verticalPad) / aspect : widthFit;
-  const fitWidth = Math.max(1, Math.min(widthFit, heightFit));
+  const fitWidth = Math.max(1, aspect >= 1 ? widthFit : Math.min(widthFit, heightFit));
   const width = Math.round(fitWidth * zoom);
   const height = Math.round(width * aspect);
   const view = useMemo(() => ({ x: 0, y: 0, k: width / PDF_WORLD_WIDTH }), [width]);
@@ -408,9 +410,9 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
           <div className="mx-1 hidden h-5 w-px bg-line sm:block" />
           <div className="hidden items-center sm:flex">
             <button type="button" aria-label="Zoom out" onClick={() => setZoom((z) => clampZoom(z / 1.2))} className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-sunken"><Minus size={15} /></button>
-            <button type="button" onClick={() => setZoom(1)} className="w-12 text-center text-xs tabular-nums text-gray-700 hover:text-ink" aria-label="Fit screen">{Math.round(zoom * 100)}%</button>
+            <button type="button" onClick={() => setZoom(1)} className="w-12 text-center text-xs tabular-nums text-gray-700 hover:text-ink" aria-label="Fit to width">{Math.round(zoom * 100)}%</button>
             <button type="button" aria-label="Zoom in" onClick={() => setZoom((z) => clampZoom(z * 1.2))} className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-sunken"><Plus size={15} /></button>
-            <button type="button" aria-label="Fit screen" title="Fit screen" onClick={() => setZoom(1)} className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-sunken"><Maximize2 size={14} /></button>
+            <button type="button" aria-label="Fit to width" title="Fit to width" onClick={() => setZoom(1)} className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-sunken"><Maximize2 size={14} /></button>
           </div>
           <div className="ml-auto flex items-center gap-1">
             {!isHost && !following && (
@@ -491,7 +493,7 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
 
           <div className="absolute bottom-[calc(env(safe-area-inset-bottom)+6rem)] right-3 z-40 flex items-center rounded-lg border border-line bg-surface p-1 shadow-md sm:hidden">
             <button type="button" aria-label="Zoom out" onClick={() => setZoom((z) => clampZoom(z / 1.2))} className="flex h-9 w-9 items-center justify-center rounded-md hover:bg-sunken"><Minus size={17} /></button>
-            <button type="button" onClick={() => setZoom(1)} className="min-w-12 px-1 text-center text-xs tabular-nums text-gray-700 hover:text-ink" aria-label="Fit screen">{Math.round(zoom * 100)}%</button>
+            <button type="button" onClick={() => setZoom(1)} className="min-w-12 px-1 text-center text-xs tabular-nums text-gray-700 hover:text-ink" aria-label="Fit to width">{Math.round(zoom * 100)}%</button>
             <button type="button" aria-label="Zoom in" onClick={() => setZoom((z) => clampZoom(z * 1.2))} className="flex h-9 w-9 items-center justify-center rounded-md hover:bg-sunken"><Plus size={17} /></button>
           </div>
 

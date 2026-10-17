@@ -1,7 +1,8 @@
 // Shared tool state + keyboard shortcuts for the board and PDF annotation toolbars.
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { SHAPE_KINDS, STYLE_GROUP, defaultStyles } from "./constants.js";
+import { SHAPE_KINDS, STYLE_GROUP, defaultStyles, fillMode } from "./constants.js";
 import { groupState } from "./groups.js";
+import { strokePattern, strokeTexture } from "./brushes.js";
 
 const SHORTCUTS = {
   board: { v: "select", h: "pan", p: "pen", m: "highlighter", e: "eraser", t: "text", r: "rect", o: "ellipse", d: "diamond", l: "line", a: "arrow", k: "laser" },
@@ -76,6 +77,12 @@ export function useAnnotationTools({ mode, store, surfaceRef, enabled }) {
       if (mod && key === "v") { e.preventDefault(); sr.current?.paste(); return; }
       if (mod && key === "d") { e.preventDefault(); sr.current?.duplicate(); return; }
       if (mod && key === "g") { e.preventDefault(); if (e.shiftKey) sr.current?.ungroup(); else sr.current?.group(); return; }
+      if (mod && (e.code === "BracketRight" || e.code === "BracketLeft")) {
+        e.preventDefault();
+        const up = e.code === "BracketRight";
+        sr.current?.arrange(up ? (e.shiftKey ? "front" : "forward") : (e.shiftKey ? "back" : "backward"));
+        return;
+      }
       if (mod || e.altKey) return;
 
       if ((key === "delete" || key === "backspace") && sel.length) {
@@ -132,6 +139,7 @@ function pickStyle(o) {
   const out = { color: o.color };
   if (o.width !== undefined) out.width = o.width;
   if (o.opacity !== undefined) out.opacity = o.opacity;
-  if (o.type === "shape") { out.fill = !!o.fill; out.measure = !!o.measure; }
+  if (o.type === "stroke") { out.texture = strokeTexture(o.texture); out.pattern = strokePattern(o.pattern); }
+  if (o.type === "shape") { out.fill = fillMode(o.fill) || false; out.measure = !!o.measure; }
   return out;
 }

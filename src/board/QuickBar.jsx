@@ -3,7 +3,7 @@
 // object, flips below when there is no room, and hides while the pointer is down so it never
 // gets in the way of dragging, resizing or panning.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Copy, Eye, EyeOff, Group, Pencil, SlidersHorizontal, Trash2, Ungroup } from "lucide-react";
+import { BringToFront, ChevronDown, ChevronUp, Copy, Eye, EyeOff, Group, Layers, Pencil, SendToBack, SlidersHorizontal, Trash2, Ungroup } from "lucide-react";
 import { HIGHLIGHT_PALETTE, PALETTE } from "./constants.js";
 import { getBounds, unionBounds } from "./geometry.js";
 import { Swatches } from "./Toolbar.jsx";
@@ -11,6 +11,13 @@ import { COVER_DEFAULT_COLOR, togglePatch } from "./cover.js";
 
 const GAP = 10;
 const EDGE = 8;
+
+const ARRANGE_ITEMS = [
+  { mode: "front", label: "Bring to front", hint: "Ctrl+Shift+]", Icon: BringToFront },
+  { mode: "forward", label: "Bring forward", hint: "Ctrl+]", Icon: ChevronUp },
+  { mode: "backward", label: "Send backward", hint: "Ctrl+[", Icon: ChevronDown },
+  { mode: "back", label: "Send to back", hint: "Ctrl+Shift+[", Icon: SendToBack },
+];
 
 const iconButton = "flex h-8 w-8 items-center justify-center rounded-md text-gray-700 hover:bg-sunken";
 
@@ -20,6 +27,7 @@ export default function QuickBar({ tools, store, surfaceRef, inspector, view, si
   const [barSize, setBarSize] = useState({ w: 0, h: 0 });
   const [busy, setBusy] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [arrangeOpen, setArrangeOpen] = useState(false);
 
   useEffect(() => {
     const down = (e) => { if (!barRef.current?.contains(e.target)) setBusy(true); };
@@ -35,7 +43,7 @@ export default function QuickBar({ tools, store, surfaceRef, inspector, view, si
   }, []);
 
   const selectionKey = selectedIds.join(",");
-  useEffect(() => { setPaletteOpen(false); }, [selectionKey]);
+  useEffect(() => { setPaletteOpen(false); setArrangeOpen(false); }, [selectionKey]);
 
   // Track the bar's own size (its buttons change with the selection) to place it precisely
   const observer = useRef(null);
@@ -74,6 +82,8 @@ export default function QuickBar({ tools, store, surfaceRef, inspector, view, si
     setPaletteOpen(false);
   };
   const canDuplicate = !objects.some((o) => o.type === "markup");
+  const canArrange = objects.some((o) => o.type !== "cover") && store.onPage(objects[0].page ?? 0).length > 1;
+  const arrange = (mode) => { surfaceRef.current?.arrange(mode); setArrangeOpen(false); };
 
   // Prefer above the object, then below, then tucked inside its top edge when it fills the view
   const barW = barSize.w || 160;
@@ -136,6 +146,19 @@ export default function QuickBar({ tools, store, surfaceRef, inspector, view, si
             <Ungroup size={16} />
           </button>
         )}
+        {canArrange && (
+          <button
+            type="button"
+            onClick={() => { setArrangeOpen((v) => !v); setPaletteOpen(false); }}
+            aria-label="Arrange"
+            aria-expanded={arrangeOpen}
+            aria-haspopup="menu"
+            title="Arrange: bring to front or send to back"
+            className={`${iconButton} ${arrangeOpen ? "bg-sunken" : ""}`}
+          >
+            <Layers size={16} />
+          </button>
+        )}
         {canDuplicate && (
           <button type="button" onClick={() => surfaceRef.current?.duplicate()} aria-label="Duplicate" title="Duplicate (Ctrl+D)" className={iconButton}>
             <Copy size={15} />
@@ -144,6 +167,18 @@ export default function QuickBar({ tools, store, surfaceRef, inspector, view, si
         <button type="button" onClick={() => surfaceRef.current?.deleteSelected()} aria-label="Delete" title="Delete" className={`${iconButton} text-danger hover:bg-danger-soft`}>
           <Trash2 size={15} />
         </button>
+
+        {arrangeOpen && canArrange && (
+          <div role="menu" aria-label="Arrange" className={`float-panel absolute w-56 p-1 ${above ? "bottom-full mb-2" : "top-full mt-2"} ${alignRight ? "right-0" : "left-0"}`}>
+            {ARRANGE_ITEMS.map(({ mode, label, hint, Icon }) => (
+              <button key={mode} type="button" role="menuitem" onClick={() => arrange(mode)} className="flex h-9 w-full items-center gap-2.5 rounded-md px-2 text-left text-sm text-gray-800 hover:bg-sunken">
+                <Icon size={15} />
+                <span className="flex-1">{label}</span>
+                <span className="text-[11px] text-muted">{hint}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {paletteOpen && colour && (
           <div className={`float-panel absolute p-2.5 ${above ? "bottom-full mb-2" : "top-full mt-2"} ${alignRight ? "right-0" : "left-0"}`} style={{ width: 232 }}>

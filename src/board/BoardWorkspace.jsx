@@ -6,9 +6,9 @@ import ToolDock from "./ToolDock.jsx";
 import { InspectorDock } from "./Inspector.jsx";
 import { useInspector } from "./useInspector.js";
 import QuickBar from "./QuickBar.jsx";
-import { resolveDock, useToolbarDock } from "./useToolbarDock.js";
+import { resolveDock, useDockMovable, useToolbarDock } from "./useToolbarDock.js";
 import { requestEquationSection } from "./equationSection.js";
-import { ObjectStore } from "./store.js";
+import { ObjectStore, chunkOps } from "./store.js";
 import { BOARD_HOME, uid } from "./constants.js";
 import { compileExpression, compileImplicitEquation, compileInequalitySystem } from "./graphMath.js";
 import { ensureMath, estimateEquationSize, measureEquation } from "./mathRender.js";
@@ -34,8 +34,21 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible,
   const frameRef = useRef(null);
   const surfaceRef = useRef(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
-  const [view, setView] = useState({ x: 0, y: 0, k: 1 });
   const [page, setPage] = useState(0);
+  // Every page keeps its own place (position and zoom), so moving around one page never moves another.
+  const [views, setViews] = useState({});
+  const defaultView = useMemo(() => (size.w ? fitRect({ x: 0, y: 0, ...BOARD_HOME }, size) : { x: 0, y: 0, k: 1 }), [size]);
+  const defaultViewRef = useRef(defaultView);
+  defaultViewRef.current = defaultView;
+  const pageRef = useRef(page);
+  pageRef.current = page;
+  const view = views[page] || defaultView;
+  const setViewFor = useCallback((p, next) => setViews((all) => {
+    const current = all[p] || defaultViewRef.current;
+    const value = typeof next === "function" ? next(current) : next;
+    return value === current ? all : { ...all, [p]: value };
+  }), []);
+  const setView = useCallback((next) => setViewFor(pageRef.current, next), [setViewFor]);
   const [pageCount, setPageCount] = useState(1);
   const [following, setFollowing] = useState(true);
   const [hostRect, setHostRect] = useState(null);
@@ -45,17 +58,17 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible,
   const [confirmClear, setConfirmClear] = useState(false);
   const [mediaUploading, setMediaUploading] = useState(false);
   const [mediaError, setMediaError] = useState("");
-  const initialised = useRef(false);
   const previewTimers = useRef(new Map());
 
   const store = useMemo(
-    () => new ObjectStore({ onLocalOps: (ops) => socket?.emit("board-op", { room: roomId, ops }) }),
+    () => new ObjectStore({ onLocalOps: (ops) => chunkOps(ops).forEach((part) => socket?.emit("board-op", { room: roomId, ops: part })) }),
     [socket, roomId]
   );
   const tools = useAnnotationTools({ mode: "board", store, surfaceRef, enabled: isHost && visible });
   const inspector = useInspector(tools);
   const [savedDock] = useToolbarDock();
-  const dockEdge = resolveDock(savedDock, inspector.desktop).edge; // keep selections clear of wherever the tool bar sits
+  const dockMovable = useDockMovable();
+  const dockEdge = resolveDock(savedDock, dockMovable).edge; // keep selections clear of wherever the tool bar sits
 
   /* sizing + first framing */
   useEffect(() => {
@@ -67,12 +80,6 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible,
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-
-  useEffect(() => {
-    if (!size.w || initialised.current) return;
-    initialised.current = true;
-    setView(fitRect({ x: 0, y: 0, ...BOARD_HOME }, size));
-  }, [size]);
 
   /* Keep a selected graph clear of the properties panel: the docked panel narrows the canvas on desktop,
      and the bottom sheet covers its lower part on phones. Runs on selection / panel changes, never while panning. */
@@ -215,8 +222,8 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible,
   useEffect(() => {
     if (isHost || !following) return;
     setPage(hostPage);
-    if (hostRect && size.w) setView(fitRect(hostRect, size));
-  }, [isHost, following, hostRect, hostPage, size]);
+    if (hostRect && size.w) setViewFor(hostPage, fitRect(hostRect, size));
+  }, [isHost, following, hostRect, hostPage, size, setViewFor]);
 
   /* viewport gestures */
   const onPan = useCallback((dx, dy) => {
@@ -475,7 +482,7 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible,
             ) : (
               <button
                 type="button"
-                onClick={() => { setFollowing(true); if (hostRect) setView(fitRect(hostRect, size)); setPage(hostPage); }}
+                onClick={() => { setFollowing(true); if (hostRect) setViewFor(hostPage, fitRect(hostRect, size)); setPage(hostPage); }}
                 className="flex items-center gap-2 rounded-md bg-ink px-3 py-1.5 text-xs font-medium text-paper"
               >
                 <Radio size={13} /> Return to presenter
