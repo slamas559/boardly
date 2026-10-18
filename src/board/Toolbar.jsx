@@ -263,7 +263,7 @@ function Grip({ vertical, grip }) {
 
 export function ToolRail({
   mode, tool, onTool, lastShape, canUndo, canRedo, onUndo, onRedo, keepTool, onKeepTool, onCreateGraph, onCreateEquation, onCreateAid, onCreateTable, onAddVideoLink,
-  onStyleToggle, styleSwatch, hasStyle, styleOpen, styleLabel = "Style", onUploadMedia, mediaUploading = false,
+  onStyleToggle, styleSwatch, hasStyle, styleOpen, styleLabel = "Style", onUploadMedia, mediaUploading = false, restricted = false,
   vertical = true, side = "right", grip, canGroup = false, canUngroup = false, onGroup, onUngroup,
 }) {
   // Remember which tool of a group was used last, so the button keeps showing it
@@ -290,7 +290,7 @@ export function ToolRail({
     { id: "table", icon: Table2, label: "Table", onSelect: onCreateTable },
     { id: "media", icon: ImagePlus, label: mediaUploading ? "Uploading media…" : "Image or video", onSelect: onUploadMedia, disabled: mediaUploading },
     { id: "link", icon: Link2, label: "Video link", onSelect: onAddVideoLink },
-  ];
+  ].filter((item) => !(restricted && (item.id === "media" || item.id === "link"))); // uploads and links are for the host
 
   // The Group button flips to Ungroup when the selection is a group
   const ungroupMode = canUngroup && !canGroup;

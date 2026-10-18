@@ -1,0 +1,1751 @@
+diff --git a/package.json b/package.json
+index febbdf4..c013d4e 100644
+--- a/package.json
++++ b/package.json
+@@ -16,6 +16,7 @@
+     "autoprefixer": "^10.4.21",
+     "axios": "^1.10.0",
+     "framer-motion": "^12.23.26",
++    "livekit-client": "^2.23.0",
+     "lucide-react": "^0.546.0",
+     "mathjax-full": "^3.2.2",
+     "pdfjs-dist": "^3.11.174",
+diff --git a/src/board/BoardWorkspace.jsx b/src/board/BoardWorkspace.jsx
+index e4b41f7..33bb38d 100644
+--- a/src/board/BoardWorkspace.jsx
++++ b/src/board/BoardWorkspace.jsx
+@@ -29,7 +29,9 @@ function fitRect(rect, size) {
+   return { k, x: rect.x - (size.w / k - rect.w) / 2, y: rect.y - (size.h / k - rect.h) / 2 };
+ }
+ 
+-export default function BoardWorkspace({ room, socket, isHost, initial, visible, apiRef }) {
++export default function BoardWorkspace({ room, socket, isHost, canDraw = false, participantKey = null, initial, visible, apiRef }) {
++  // The host, or a listener the host has let draw (who can only change their own work)
++  const editing = isHost || canDraw;
+   const roomId = room._id;
+   const frameRef = useRef(null);
+   const surfaceRef = useRef(null);
+@@ -64,7 +66,9 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible,
+     () => new ObjectStore({ onLocalOps: (ops) => chunkOps(ops).forEach((part) => socket?.emit("board-op", { room: roomId, ops: part })) }),
+     [socket, roomId]
+   );
+-  const tools = useAnnotationTools({ mode: "board", store, surfaceRef, enabled: isHost && visible });
++  useEffect(() => { store.setAuthor({ host: isHost, key: participantKey }); }, [store, isHost, participantKey]);
++  const canEdit = useCallback((o) => isHost || Boolean(participantKey && o.by === participantKey), [isHost, participantKey]);
++  const tools = useAnnotationTools({ mode: "board", store, surfaceRef, enabled: editing && visible });
+   const inspector = useInspector(tools);
+   const [savedDock] = useToolbarDock();
+   const dockMovable = useDockMovable();
+@@ -87,7 +91,7 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible,
+   const sheetInset = inspector.insetBottom;
+   const desktopLayout = inspector.desktop;
+   useEffect(() => {
+-    if (!isHost || !size.w || !selectedGraphId) return;
++    if (!editing || !size.w || !selectedGraphId) return;
+     const graph = store.get(selectedGraphId);
+     if (!graph) return;
+     const pad = 24;
+@@ -108,7 +112,7 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible,
+       if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return v;
+       return { ...v, x: v.x + dx / v.k, y: v.y + dy / v.k };
+     });
+-  }, [isHost, size.w, size.h, selectedGraphId, sheetInset, desktopLayout, dockEdge, store]);
++  }, [editing, size.w, size.h, selectedGraphId, sheetInset, desktopLayout, dockEdge, store]);
+ 
+   /* initial state from the server (also covers late joiners and reconnects) */
+   useEffect(() => {
+@@ -438,9 +442,11 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible,
+           store={store}
+           page={page}
+           mode="board"
+-          tool={isHost ? tools.tool : "select"}
++          tool={editing ? tools.tool : "select"}
+           styles={tools.styles}
+-          readOnly={!isHost}
++          readOnly={!editing}
++          asListener={!isHost}
++          canEdit={canEdit}
+           view={view}
+           background="grid"
+           selectedIds={tools.selectedIds}
+@@ -449,17 +455,17 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible,
+           onZoom={onZoom}
+           onLaser={isHost ? onLaser : undefined}
+           remoteLaser={isHost ? null : readOnlyLaser}
+-          remotePreviews={isHost ? null : [...remotePreviews.values()].filter((preview) => preview.page === page).map((preview) => preview.obj)}
+-          onStrokeChunk={isHost ? onStrokeChunk : undefined}
+-          onLivePreview={isHost ? onPreview : undefined}
++          remotePreviews={[...remotePreviews.values()].filter((preview) => preview.page === page).map((preview) => preview.obj)}
++          onStrokeChunk={editing ? onStrokeChunk : undefined}
++          onLivePreview={editing ? onPreview : undefined}
+           onEditingChange={tools.setEditingObj}
+           onEquationEdit={() => inspector.open("half")}
+           onToolChange={tools.setTool}
+           keepTool={tools.keepTool}
+         />
+ 
+-        {isHost && <ToolDock mode="board" tools={tools} store={store} inspector={inspector} surfaceRef={surfaceRef} onCreateGraph={addGraph} onCreateEquation={addEquation} onCreateAid={addAid} onCreateTable={addTable} onUploadMedia={uploadMedia} onAddVideoLink={addVideoLink} mediaUploading={mediaUploading} mediaError={mediaError} />}
+-        {isHost && (
++        {editing && <ToolDock mode="board" restricted={!isHost} tools={tools} store={store} inspector={inspector} surfaceRef={surfaceRef} onCreateGraph={addGraph} onCreateEquation={addEquation} onCreateAid={addAid} onCreateTable={addTable} onUploadMedia={uploadMedia} onAddVideoLink={addVideoLink} mediaUploading={mediaUploading} mediaError={mediaError} />}
++        {editing && (
+           <QuickBar
+             tools={tools}
+             store={store}
+@@ -527,7 +533,7 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible,
+           </div>
+         )}
+       </div>
+-      {isHost && <InspectorDock mode="board" tools={tools} store={store} surfaceRef={surfaceRef} inspector={inspector} />}
++      {editing && <InspectorDock mode="board" tools={tools} store={store} surfaceRef={surfaceRef} inspector={inspector} />}
+     </div>
+   );
+ }
+diff --git a/src/board/PDFWorkspace.jsx b/src/board/PDFWorkspace.jsx
+index 71f2b87..2509271 100644
+--- a/src/board/PDFWorkspace.jsx
++++ b/src/board/PDFWorkspace.jsx
+@@ -51,7 +51,9 @@ const Thumb = memo(function Thumb({ n, active, onClick, annotated }) {
+   );
+ });
+ 
+-export default function PDFWorkspace({ room, socket, isHost, initial, visible }) {
++export default function PDFWorkspace({ room, socket, isHost, canDraw = false, participantKey = null, initial, visible }) {
++  // The host, or a listener the host has let draw (who can only change their own annotations)
++  const editing = isHost || canDraw;
+   const roomId = room._id;
+   const scrollRef = useRef(null);
+   const surfaceRef = useRef(null);
+@@ -83,7 +85,9 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
+     () => new ObjectStore({ onLocalOps: (ops) => chunkOps(ops).forEach((part) => socket?.emit("pdf-op", { room: roomId, ops: part })) }),
+     [socket, roomId]
+   );
+-  const tools = useAnnotationTools({ mode: "pdf", store, surfaceRef, enabled: isHost && visible });
++  useEffect(() => { store.setAuthor({ host: isHost, key: participantKey }); }, [store, isHost, participantKey]);
++  const canEdit = useCallback((o) => isHost || Boolean(participantKey && o.by === participantKey), [isHost, participantKey]);
++  const tools = useAnnotationTools({ mode: "pdf", store, surfaceRef, enabled: editing && visible });
+   const inspector = useInspector(tools);
+ 
+   /* initial / late-join state */
+@@ -464,9 +468,11 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
+                   store={store}
+                   page={page}
+                   mode="pdf"
+-                  tool={isHost ? tools.tool : "select"}
++                  tool={editing ? tools.tool : "select"}
+                   styles={tools.styles}
+-                  readOnly={!isHost}
++                  readOnly={!editing}
++                  asListener={!isHost}
++                  canEdit={canEdit}
+                   view={view}
+                   background="none"
+                   pageSize={pageSize}
+@@ -477,9 +483,9 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
+                   onZoom={onZoom}
+                   onLaser={isHost ? onLaser : undefined}
+                   remoteLaser={isHost ? null : laser && laser.page === page ? laser : null}
+-                  remotePreviews={isHost ? null : [...remotePreviews.values()].filter((preview) => preview.page === page).map((preview) => preview.obj)}
++                  remotePreviews={[...remotePreviews.values()].filter((preview) => preview.page === page).map((preview) => preview.obj)}
+                   onStrokeChunk={onStrokeNoop}
+-                  onLivePreview={isHost ? onPreview : undefined}
++                  onLivePreview={editing ? onPreview : undefined}
+                   onEditingChange={tools.setEditingObj}
+                   onToolChange={tools.setTool}
+                   keepTool={tools.keepTool}
+@@ -498,8 +504,8 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
+           </div>
+ 
+           {/* Style settings dock beside the page on desktop; a bottom sheet on phones */}
+-          {isHost && <InspectorDock mode="pdf" tools={tools} store={store} surfaceRef={surfaceRef} inspector={inspector} />}
+-          {isHost && <ToolDock mode="pdf" tools={tools} store={store} inspector={inspector} surfaceRef={surfaceRef} />}
++          {editing && <InspectorDock mode="pdf" tools={tools} store={store} surfaceRef={surfaceRef} inspector={inspector} />}
++          {editing && <ToolDock mode="pdf" restricted={!isHost} tools={tools} store={store} inspector={inspector} surfaceRef={surfaceRef} />}
+         </div>
+       </Document>
+ 
+diff --git a/src/board/Surface.jsx b/src/board/Surface.jsx
+index 93297d0..614a5f9 100644
+--- a/src/board/Surface.jsx
++++ b/src/board/Surface.jsx
+@@ -26,6 +26,13 @@ import { Pause, Play } from "lucide-react";
+ let clipboard = [];
+ const LASER_COLOR = "#E2492B";
+ 
++// A copy belongs to whoever pastes it, not to the person who drew the original
++const copyWithoutAuthor = (o) => {
++  const copy = JSON.parse(JSON.stringify(o));
++  delete copy.by;
++  return copy;
++};
++
+ const Surface = forwardRef(function Surface(
+   {
+     store,
+@@ -34,6 +41,8 @@ const Surface = forwardRef(function Surface(
+     tool = "select",
+     styles,
+     readOnly = false,
++    canEdit,
++    asListener = false,
+     view,
+     background = "grid",
+     pageSize = null, // PDF only: world size of the page
+@@ -69,7 +78,7 @@ const Surface = forwardRef(function Surface(
+ 
+   // Latest props for event handlers without re-binding
+   const live = useRef({});
+-  live.current = { store, page, mode, tool, styles, readOnly, view, pageSize, pageEl, selectedIds, size, editing, onLaser, onLivePreview, remotePreviews };
++  live.current = { store, page, mode, tool, styles, readOnly, canEdit, asListener, view, pageSize, pageEl, selectedIds, size, editing, onLaser, onLivePreview, remotePreviews };
+ 
+   const drag = useRef(null);
+   const pointers = useRef(new Map());
+@@ -135,7 +144,8 @@ const Surface = forwardRef(function Surface(
+     const selected = [];
+     const previewIds = new Set((previews || []).map((preview) => preview.id));
+     // Covers are painted last, over everything else on the page, so they really hide what is under them
+-    const viewer = live.current.readOnly ? "listener" : "host";
++    // A listener who was let draw still sees covers as every other listener does
++    const viewer = live.current.readOnly || live.current.asListener ? "listener" : "host";
+     const covers = [];
+     for (const base of objs) {
+       if (ed && ed.id === base.id) continue;
+@@ -294,8 +304,10 @@ const Surface = forwardRef(function Surface(
+ 
+   // Newest first, but a cover is always last: you can still pick the content under it, and a click on the
+   // empty part of a cover picks the cover
++  const editable = (o) => live.current.canEdit?.(o) ?? true;
+   const objectsTopFirst = () => {
+-    const all = live.current.store.onPage(live.current.page);
++    // A listener who was let draw can only pick up their own work, so the host's objects are skipped
++    const all = live.current.store.onPage(live.current.page).filter(editable);
+     return [...all.filter((o) => o.type !== "cover").reverse(), ...all.filter((o) => o.type === "cover").reverse()];
+   };
+ 
+@@ -393,15 +405,15 @@ const Surface = forwardRef(function Surface(
+       onSelectedChange?.([]);
+     },
+     selectAll() {
+-      onSelectedChange?.(live.current.store.onPage(live.current.page).map((o) => o.id));
++      onSelectedChange?.(live.current.store.onPage(live.current.page).filter(editable).map((o) => o.id));
+     },
+     copy() {
+-      clipboard = selectedObjects().map((o) => JSON.parse(JSON.stringify(o)));
++      clipboard = selectedObjects().map(copyWithoutAuthor);
+     },
+     paste(offset = 24) {
+       if (!clipboard.length) return;
+       const { page: pg } = live.current;
+-      const copies = clipboard.filter((o) => o.type !== "markup").map((o) => ({ ...JSON.parse(JSON.stringify(o)), id: uid(), page: pg }));
++      const copies = clipboard.filter((o) => o.type !== "markup").map((o) => ({ ...copyWithoutAuthor(o), id: uid(), page: pg }));
+       remapGroupIds(copies, uid); // a pasted group is a new group, not glued to the original
+       const ops = copies.map((copy) => ({ op: "add", obj: { ...copy, ...movePatch(copy, offset, offset) } }));
+       if (!ops.length) return;
+@@ -761,7 +773,7 @@ const Surface = forwardRef(function Surface(
+   const eraseAt = (p) => {
+     const { view: v, store: s, page: pg } = live.current;
+     const tol = 10 / v.k;
+-    for (const o of s.onPage(pg)) {
++    for (const o of s.onPage(pg).filter(editable)) {
+       if (!erasing.current.has(o.id) && o.type !== "highlight" && o.type !== "instrument" && o.type !== "cover" && hitObject(o, p, tol)) {
+         erasing.current.add(o.id);
+         sharePreview({ ...o, previewAlpha: 0.2 });
+@@ -1116,7 +1128,7 @@ const Surface = forwardRef(function Surface(
+         if (e.pointerType !== "mouse") emitLaser(null, false);
+         break;
+       case "marquee": {
+-        const hits = expandToGroups(s, pg, s.onPage(pg).filter((o) => objectInRect(o, d.rect)).map((o) => o.id));
++        const hits = expandToGroups(s, pg, s.onPage(pg).filter((o) => editable(o) && objectInRect(o, d.rect)).map((o) => o.id));
+         onSelectedChange?.([...new Set([...(d.base || []), ...hits])]);
+         break;
+       }
+diff --git a/src/board/ToolDock.jsx b/src/board/ToolDock.jsx
+index 481d599..fb37cda 100644
+--- a/src/board/ToolDock.jsx
++++ b/src/board/ToolDock.jsx
+@@ -40,7 +40,7 @@ function DropHint({ target }) {
+   return <div aria-hidden="true" className="pointer-events-none absolute rounded-full bg-accent/50" style={style} />;
+ }
+ 
+-export default function ToolDock({ mode, tools, inspector, surfaceRef, onCreateGraph, onCreateEquation, onCreateAid, onCreateTable, onUploadMedia, onAddVideoLink, mediaUploading = false, mediaError = "", store }) {
++export default function ToolDock({ mode, restricted = false, tools, inspector, surfaceRef, onCreateGraph, onCreateEquation, onCreateAid, onCreateTable, onUploadMedia, onAddVideoLink, mediaUploading = false, mediaError = "", store }) {
+   const [insertDialog, setInsertDialog] = useState(null);
+   const [aidDialog, setAidDialog] = useState(false);
+   const [videoLinkDialog, setVideoLinkDialog] = useState(false);
+@@ -153,6 +153,7 @@ export default function ToolDock({ mode, tools, inspector, surfaceRef, onCreateG
+           onUploadMedia={() => mediaInputRef.current?.click()}
+           onAddVideoLink={() => setVideoLinkDialog(true)}
+           mediaUploading={mediaUploading}
++          restricted={restricted}
+           hasStyle={inspector.kind !== null}
+           styleSwatch={inspector.kind === "style" ? activeStyle?.color : null}
+           styleLabel={inspector.kind === "graph" ? "Graph" : inspector.kind === "equation" ? "Equation" : "Style"}
+diff --git a/src/board/Toolbar.jsx b/src/board/Toolbar.jsx
+index 3cbc9e9..45c6834 100644
+--- a/src/board/Toolbar.jsx
++++ b/src/board/Toolbar.jsx
+@@ -263,7 +263,7 @@ function Grip({ vertical, grip }) {
+ 
+ export function ToolRail({
+   mode, tool, onTool, lastShape, canUndo, canRedo, onUndo, onRedo, keepTool, onKeepTool, onCreateGraph, onCreateEquation, onCreateAid, onCreateTable, onAddVideoLink,
+-  onStyleToggle, styleSwatch, hasStyle, styleOpen, styleLabel = "Style", onUploadMedia, mediaUploading = false,
++  onStyleToggle, styleSwatch, hasStyle, styleOpen, styleLabel = "Style", onUploadMedia, mediaUploading = false, restricted = false,
+   vertical = true, side = "right", grip, canGroup = false, canUngroup = false, onGroup, onUngroup,
+ }) {
+   // Remember which tool of a group was used last, so the button keeps showing it
+@@ -290,7 +290,7 @@ export function ToolRail({
+     { id: "table", icon: Table2, label: "Table", onSelect: onCreateTable },
+     { id: "media", icon: ImagePlus, label: mediaUploading ? "Uploading media…" : "Image or video", onSelect: onUploadMedia, disabled: mediaUploading },
+     { id: "link", icon: Link2, label: "Video link", onSelect: onAddVideoLink },
+-  ];
++  ].filter((item) => !(restricted && (item.id === "media" || item.id === "link"))); // uploads and links are for the host
+ 
+   // The Group button flips to Ungroup when the selection is a group
+   const ungroupMode = canUngroup && !canGroup;
+diff --git a/src/board/store.js b/src/board/store.js
+index 4e37ad0..77b5f04 100644
+--- a/src/board/store.js
++++ b/src/board/store.js
+@@ -24,6 +24,33 @@ export class ObjectStore {
+     this.redoStack = [];
+     this.onLocalOps = onLocalOps || (() => {});
+     this._cache = null;
++    this.restricted = false; // true for a listener who was let draw
++    this.authorKey = null;
++  }
++
++  /**
++   * Who is drawing here. The host can change anything. A listener the host let draw can add objects (stamped
++   * with their own key) and change or remove only those, mirroring what the server accepts.
++   */
++  setAuthor({ host = true, key = null } = {}) {
++    this.restricted = !host;
++    this.authorKey = host ? null : key;
++  }
++
++  _limitToAuthor(ops) {
++    if (!this.restricted) return ops;
++    const key = this.authorKey;
++    if (!key) return [];
++    const out = [];
++    for (const op of ops) {
++      if (op.op === "add") {
++        if (!op.obj || ["paper", "cover", "media"].includes(op.obj.type)) continue;
++        out.push({ ...op, obj: { ...op.obj, by: key } });
++      } else if (op.op === "update" || op.op === "remove") {
++        if (this.objects.get(op.id)?.by === key) out.push(op);
++      } // clearing a page is for the host
++    }
++    return out;
+   }
+ 
+   /* --- subscription (compatible with useSyncExternalStore) --- */
+@@ -139,6 +166,7 @@ export class ObjectStore {
+    * sent to the network. Pass emit:false for things already streamed (live strokes).
+    */
+   commit(ops, { emit = true, coalesce = null } = {}) {
++    ops = this._limitToAuthor(ops);
+     if (!ops.length) return;
+     ops = this._stackOnTop(ops);
+     const inverse = this._inverse(ops);
+@@ -229,6 +257,7 @@ export class ObjectStore {
+         texture: meta.texture,
+         pattern: meta.pattern,
+         ...(meta.z ? { z: meta.z } : {}),
++        ...(meta.by ? { by: meta.by } : {}),
+         points: points.slice(),
+       });
+     } else {
+diff --git a/src/components/layout/SessionRecorder.jsx b/src/components/layout/SessionRecorder.jsx
+index 9ed5baa..0f49c3d 100644
+--- a/src/components/layout/SessionRecorder.jsx
++++ b/src/components/layout/SessionRecorder.jsx
+@@ -1,5 +1,5 @@
+ import { useCallback, useEffect, useRef, useState } from "react";
+-import { CircleDot, Download, LoaderCircle, Mic, Monitor, Square, Video } from "lucide-react";
++import { CircleDot, Download, LoaderCircle, Mic, Monitor, Video } from "lucide-react";
+ import api from "../../utils/api";
+ 
+ const MAX_RECORDING_BYTES = 500 * 1024 * 1024;
+@@ -312,9 +312,9 @@ export default function SessionRecorder({ room, socket }) {
+         aria-haspopup={phase === "recording" ? undefined : "dialog"}
+         aria-expanded={phase === "recording" ? undefined : menuOpen}
+         title={phase === "recording" ? "Stop recording" : "Record the session"}
+-        className={`flex h-9 items-center gap-1.5 rounded-md px-2 text-sm disabled:opacity-60 ${phase === "recording" ? "bg-danger-soft text-danger" : menuOpen ? "bg-sunken text-ink" : "text-gray-700 hover:bg-sunken"}`}
++        className={`flex h-9 items-center gap-1.5 rounded-md px-2 text-sm disabled:opacity-60 ${phase === "recording" ? "rec-pulse bg-danger-soft text-danger" : menuOpen ? "bg-sunken text-ink" : "text-gray-700 hover:bg-sunken"}`}
+       >
+-        {busy ? <LoaderCircle size={16} className="animate-spin" /> : phase === "recording" ? <Square size={14} fill="currentColor" /> : <CircleDot size={16} className="text-danger" />}
++        {busy ? <LoaderCircle size={16} className="animate-spin" /> : phase === "recording" ? <span className="relative flex h-2.5 w-2.5"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger opacity-60" /><span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-danger" /></span> : <CircleDot size={16} className="text-danger" />}
+         <span className="hidden sm:inline">{phase === "recording" ? "Stop" : busy ? `${progress || ""} Saving` : "Record"}</span>
+       </button>
+       {phase === "recording" && <span role="status" className="sr-only">Recording: {summary}</span>}
+diff --git a/src/components/layout/VoiceBroadcast.jsx b/src/components/layout/VoiceBroadcast.jsx
+index 11f30b9..0abc9eb 100644
+--- a/src/components/layout/VoiceBroadcast.jsx
++++ b/src/components/layout/VoiceBroadcast.jsx
+@@ -1,741 +1,420 @@
+-// VoiceBroadcast.jsx - Enhanced with independent subtitle control
++// VoiceBroadcast.jsx: the room's voice. The host starts a voice session and talks; listeners hear it.
++// A listener the host has allowed to speak gets a microphone button and can mute or unmute themselves.
++//
++// Audio goes through LiveKit (a media server): each speaker sends one stream to the server, which delivers it to
++// every listener. That is what lets a large room have many people speaking at once. The server hands out
++// short-lived passes (socket event "voice-token"); only the host and allowed speakers get one that can publish.
++// Captions still come from the host's microphone, as before.
+ 
+ import { useState, useRef, useEffect, useCallback } from 'react';
+-import { FaMicrophone, FaMicrophoneSlash, FaVolumeUp, FaVolumeDown, FaSpinner, FaVolumeMute, FaClosedCaptioning } from 'react-icons/fa';
+-import { ToastContainer, toast } from 'react-toastify';
+-import 'react-toastify/dist/ReactToastify.css';
++import { FaMicrophone, FaMicrophoneSlash, FaVolumeUp, FaVolumeMute, FaSpinner, FaClosedCaptioning } from 'react-icons/fa';
++import { toast } from 'react-toastify';
+ import "./Audio.css"
+ 
+-const VoiceBroadcast = ({ room, socket, isTutor }) => {
+-  const [isMicOn, setIsMicOn] = useState(false);
+-  const [isConnecting, setIsConnecting] = useState(false);
+-  const [isReceivingAudio, setIsReceivingAudio] = useState(false);
+-  const [volume, setVolume] = useState(0.8);
+-  const [connectionStatus, setConnectionStatus] = useState('disconnected');
+-  
+-  // Subtitle states - now independent per user
++// Ask the server for a pass to the voice session
++const getPass = (socket, roomId) => new Promise((resolve) => {
++  const timer = setTimeout(() => resolve({ ok: false, error: 'The voice server did not answer.' }), 10000);
++  socket.emit('voice-token', { roomId }, (reply) => {
++    clearTimeout(timer);
++    resolve(reply || { ok: false, error: 'The voice server did not answer.' });
++  });
++});
++
++const micError = (error) => {
++  if (error?.name === 'NotAllowedError') return 'Microphone access denied';
++  if (error?.name === 'NotFoundError') return 'No microphone found';
++  return 'Could not use the microphone';
++};
++
++const Captions = ({ subtitles, currentTranscript }) => (
++  <div className="fixed bottom-10 left-0 right-0 px-4 z-40 pointer-events-none">
++    <div className="max-w-2xl mx-auto text-left">
++      {subtitles.slice(-3).map((subtitle) => (
++        <div key={subtitle.id} className="px-2 py-2 inline-block" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)', color: '#ffffff', fontSize: '13px', lineHeight: '1.4' }}>
++          {subtitle.text}
++        </div>
++      ))}
++      {currentTranscript && (
++        <div className="px-2 py-2 inline-block" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)', color: '#ffffff', fontSize: '13px', lineHeight: '1.4' }}>
++          {currentTranscript}
++        </div>
++      )}
++    </div>
++  </div>
++);
++
++const VoiceBroadcast = ({ room, socket, isTutor, canSpeak = false }) => {
++  const roomId = room._id;
++  const [status, setStatus] = useState('idle'); // idle | connecting | live
++  const [micOn, setMicOn] = useState(false); // my microphone is sending
++  const [audioBlocked, setAudioBlocked] = useState(false); // the browser needs a tap before it plays sound
++  const [soundOff, setSoundOff] = useState(false); // I muted the room's sound for myself
++  const [speakers, setSpeakers] = useState([]); // who is talking right now
++
+   const [subtitlesEnabled, setSubtitlesEnabled] = useState(false);
+   const [subtitles, setSubtitles] = useState([]);
+   const [currentTranscript, setCurrentTranscript] = useState('');
+ 
+-  // Refs for WebRTC
+-  const localStreamRef = useRef(null);
+-  const peerConnectionRef = useRef(null);
+-  const studentConnectionsRef = useRef(new Map());
+-  const audioElementRef = useRef(null);
+-  const localAudioRef = useRef(null);
+-  
+-  // Refs for audio processing
++  const lkRoomRef = useRef(null);
++  const lkRef = useRef(null); // the livekit-client module, loaded the first time voice starts
++  const audioBoxRef = useRef(null);
++  const joiningRef = useRef(false);
++  const soundOffRef = useRef(false);
++
++  // Host-only: captions are made from the host's microphone
+   const audioContextRef = useRef(null);
+   const processorRef = useRef(null);
+   const isTranscribingRef = useRef(false);
+ 
+-  // ICE servers configuration
+-  const iceServers = {
+-    iceServers: [
+-      { urls: 'stun:stun.l.google.com:19302' },
+-      { urls: 'stun:stun1.l.google.com:19302' },
+-      {
+-        urls: "stun:stun.relay.metered.ca:80",
+-      },
+-      {
+-        urls: "turn:global.relay.metered.ca:80",
+-        username: "2cfa1595142a47dbb11045c5",
+-        credential: "ERtjygb2qEQukVHt",
+-      },
+-      {
+-        urls: "turn:global.relay.metered.ca:80?transport=tcp",
+-        username: "2cfa1595142a47dbb11045c5",
+-        credential: "ERtjygb2qEQukVHt",
+-      },
+-      {
+-        urls: "turn:global.relay.metered.ca:443",
+-        username: "2cfa1595142a47dbb11045c5",
+-        credential: "ERtjygb2qEQukVHt",
+-      },
+-      {
+-        urls: "turns:global.relay.metered.ca:443?transport=tcp",
+-        username: "2cfa1595142a47dbb11045c5",
+-        credential: "ERtjygb2qEQukVHt",
+-      },
+-    ]
+-  };
+-
+   const setupAudioProcessing = useCallback((stream) => {
+     if (!isTutor) return;
+     try {
+-      const audioContext = new (window.AudioContext || window.webkitAudioContext)({
+-        sampleRate: 16000
+-      });
+-      
+-      console.log('Audio context created with sample rate:', audioContext.sampleRate);
+-      
++      const audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+       const source = audioContext.createMediaStreamSource(stream);
+       const processor = audioContext.createScriptProcessor(4096, 1, 1);
+ 
+       processor.onaudioprocess = (e) => {
+         if (!isTranscribingRef.current) return;
+-        
+         const inputData = e.inputBuffer.getChannelData(0);
+         const int16Data = new Int16Array(inputData.length);
+         for (let i = 0; i < inputData.length; i++) {
+           const s = Math.max(-1, Math.min(1, inputData[i]));
+           int16Data[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+         }
+-        
+-        const hasAudio = int16Data.some(sample => Math.abs(sample) > 100);
+-        
+-        if (hasAudio) {
+-          socket.emit('audio-data', {
+-            roomId: room._id,
+-            audioData: int16Data.buffer
+-          });
++        if (int16Data.some((sample) => Math.abs(sample) > 100)) {
++          socket.emit('audio-data', { roomId, audioData: int16Data.buffer });
+         }
+       };
+-      
++
+       source.connect(processor);
+       processor.connect(audioContext.destination);
+-      
+       audioContextRef.current = audioContext;
+       processorRef.current = processor;
+-      
+-      console.log('✓ Audio processing setup complete');
+-      
+     } catch (error) {
+       console.error('Error setting up audio processing:', error);
+       toast.error('Failed to setup audio processing');
+     }
+-  }, [socket, room._id, isTutor]);
++  }, [socket, roomId, isTutor]);
++
++  const stopAudioProcessing = useCallback(() => {
++    isTranscribingRef.current = false;
++    processorRef.current?.disconnect();
++    processorRef.current = null;
++    audioContextRef.current?.close().catch(() => {});
++    audioContextRef.current = null;
++  }, []);
+ 
+-  // Toggle subtitles - now only controls local display
+   const toggleSubtitles = () => {
+-    const newState = !subtitlesEnabled;
+-    setSubtitlesEnabled(newState);
+-    
+-    if (newState) {
++    const next = !subtitlesEnabled;
++    setSubtitlesEnabled(next);
++    if (next) {
+       toast.success('Caption enabled for you');
+     } else {
+       toast.info('Caption disabled for you');
+-      // Only clear local display, don't emit clear event
+       setSubtitles([]);
+       setCurrentTranscript('');
+     }
+   };
+ 
+-  // Create peer connection for a specific student (tutor side)
+-  const createStudentConnection = useCallback(async (studentSocketId) => {
+-    if (!isTutor || !localStreamRef.current) return null;
+-
+-    console.log(`Creating connection for student: ${studentSocketId}`);
+-
+-    const peerConnection = new RTCPeerConnection(iceServers);
+-
+-    peerConnection.onicecandidate = (event) => {
+-      if (event.candidate) {
+-        socket.emit('voice-ice-candidate', {
+-          roomId: room._id,
+-          candidate: event.candidate,
+-          targetStudentId: studentSocketId
+-        });
+-      }
+-    };
+-
+-    peerConnection.onconnectionstatechange = () => {
+-      const state = peerConnection.connectionState;
+-      console.log(`Connection state with student ${studentSocketId}: ${state}`);
+-      
+-      if (state === 'connected') {
+-        console.log(`Successfully connected to student: ${studentSocketId}`);
+-      } else if (state === 'failed' || state === 'disconnected') {
+-        console.log(`Connection failed/disconnected with student: ${studentSocketId}`);
+-        studentConnectionsRef.current.delete(studentSocketId);
+-      }
+-    };
+-
+-    localStreamRef.current.getTracks().forEach(track => {
+-      peerConnection.addTrack(track, localStreamRef.current);
+-    });
+-
+-    studentConnectionsRef.current.set(studentSocketId, peerConnection);
+-
+-    const offer = await peerConnection.createOffer();
+-    await peerConnection.setLocalDescription(offer);
+-
+-    socket.emit('voice-offer', {
+-      roomId: room._id,
+-      offer: offer,
+-      targetStudentId: studentSocketId
+-    });
+-
+-    console.log(`Sent offer to student: ${studentSocketId}`);
+-    return peerConnection;
+-  }, [socket, room._id, isTutor]);
+-
+-  // Create peer connection for student side
+-  const createStudentPeerConnection = useCallback(() => {
+-    if (isTutor) return null;
+-
+-    console.log('Creating peer connection for student');
++  /* ---------------------------- the voice session ---------------------------- */
++
++  const leaveSession = useCallback(async () => {
++    const lkRoom = lkRoomRef.current;
++    lkRoomRef.current = null;
++    audioBoxRef.current?.replaceChildren();
++    setStatus('idle');
++    setMicOn(false);
++    setSpeakers([]);
++    setAudioBlocked(false);
++    if (lkRoom) await lkRoom.disconnect().catch(() => {});
++  }, []);
+ 
+-    const peerConnection = new RTCPeerConnection(iceServers);
++  const joinSession = useCallback(async () => {
++    if (lkRoomRef.current || joiningRef.current) return lkRoomRef.current;
++    joiningRef.current = true;
++    setStatus('connecting');
++    try {
++      const pass = await getPass(socket, roomId);
++      if (!pass.ok) throw new Error(pass.error);
++      const lk = lkRef.current || (lkRef.current = await import('livekit-client'));
++      const lkRoom = new lk.Room({
++        dynacast: true,
++        audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
++      });
+ 
+-    peerConnection.onicecandidate = (event) => {
+-      if (event.candidate) {
+-        socket.emit('voice-ice-candidate', {
+-          roomId: room._id,
+-          candidate: event.candidate
++      lkRoom
++        .on(lk.RoomEvent.TrackSubscribed, (track) => {
++          if (track.kind !== lk.Track.Kind.Audio) return;
++          const element = track.attach();
++          element.muted = soundOffRef.current;
++          audioBoxRef.current?.appendChild(element);
++        })
++        .on(lk.RoomEvent.TrackUnsubscribed, (track) => {
++          track.detach().forEach((element) => element.remove());
++        })
++        .on(lk.RoomEvent.AudioPlaybackStatusChanged, () => setAudioBlocked(!lkRoom.canPlaybackAudio))
++        .on(lk.RoomEvent.ActiveSpeakersChanged, (active) => {
++          setSpeakers(active.filter((p) => !p.isLocal).map((p) => p.name || 'Guest').slice(0, 3));
++        })
++        // The host can switch off my microphone at any time
++        .on(lk.RoomEvent.LocalTrackUnpublished, () => setMicOn(false))
++        .on(lk.RoomEvent.Disconnected, () => {
++          if (lkRoomRef.current === lkRoom) {
++            lkRoomRef.current = null;
++            audioBoxRef.current?.replaceChildren();
++            setStatus('idle');
++            setMicOn(false);
++            setSpeakers([]);
++          }
+         });
+-      }
+-    };
+-
+-    peerConnection.ontrack = (event) => {
+-      console.log('Received remote stream from tutor');
+-      const [remoteStream] = event.streams;
+-      
+-      if (audioElementRef.current) {
+-        audioElementRef.current.srcObject = remoteStream;
+-        audioElementRef.current.volume = volume;
+-        setIsReceivingAudio(true);
+-        setIsConnecting(false);
+-        setConnectionStatus('connected');
+-        console.log('Audio element updated with tutor stream');
+-      }
+-    };
+ 
+-    peerConnection.onconnectionstatechange = () => {
+-      const state = peerConnection.connectionState;
+-      console.log(`Student connection state: ${state}`);
+-      setConnectionStatus(state);
+-      
+-      if (state === 'connected') {
+-        setIsConnecting(false);
+-        toast.success('Connected to tutor\'s audio');
+-      } else if (state === 'failed' || state === 'disconnected') {
+-        setIsConnecting(false);
+-        setIsReceivingAudio(false);
+-        if (state === 'failed') {
+-          toast.error('Failed to connect to voice broadcast');
+-        }
+-      }
+-    };
++      await lkRoom.connect(pass.url, pass.token);
++      lkRoomRef.current = lkRoom;
++      setStatus('live');
++      setAudioBlocked(!lkRoom.canPlaybackAudio);
++      lkRoom.startAudio().catch(() => {});
++      return lkRoom;
++    } catch (error) {
++      console.error('Voice error:', error);
++      setStatus('idle');
++      toast.error(error.message || 'Could not join the voice session');
++      return null;
++    } finally {
++      joiningRef.current = false;
++    }
++  }, [socket, roomId]);
+ 
+-    peerConnectionRef.current = peerConnection;
+-    return peerConnection;
+-  }, [socket, room._id, volume]);
++  /* ------------------------------- host controls ------------------------------ */
+ 
+-  // Start voice broadcast (tutor only)
+   const startBroadcast = async () => {
+     if (!isTutor) return;
+-    
+-    setIsConnecting(true);
++    setStatus('connecting');
++    socket.emit('voice-broadcast-started', { roomId });
++    const lkRoom = await joinSession();
++    if (!lkRoom) {
++      socket.emit('voice-broadcast-ended', { roomId });
++      return;
++    }
+     try {
+-      const stream = await navigator.mediaDevices.getUserMedia({ 
+-        audio: {
+-          echoCancellation: true,
+-          noiseSuppression: true,
+-          autoGainControl: true,
+-          sampleRate: 16000
+-        } 
+-      });
+-      
+-      localStreamRef.current = stream;
+-      console.log('Got local stream, starting broadcast...');
+-      
+-      // Setup audio processing for transcription
+-      setupAudioProcessing(stream);
+-      
+-      // Auto-start transcription when mic is enabled
+-      isTranscribingRef.current = true;
+-      socket.emit('start-transcription', { roomId: room._id });
+-      
+-      socket.emit('voice-broadcast-started', {
+-        roomId: room._id
+-      });
+-
+-      setIsMicOn(true);
+-      setIsConnecting(false);
+-      setConnectionStatus('connected');
+-      
+-      if (localAudioRef.current) {
+-        localAudioRef.current.srcObject = stream;
+-        localAudioRef.current.muted = true;
+-      }
+-
+-      toast.success('Voice broadcast started');
+-      console.log('Voice broadcast and transcription started');
+-
++      await lkRoom.localParticipant.setMicrophoneEnabled(true);
+     } catch (error) {
+-      console.error('Error starting voice broadcast:', error);
+-      setIsConnecting(false);
+-      
+-      if (error.name === 'NotAllowedError') {
+-        toast.error('Microphone access denied');
+-      } else if (error.name === 'NotFoundError') {
+-        toast.error('No microphone found');
+-      } else {
+-        toast.error('Failed to start voice broadcast');
+-      }
++      toast.error(micError(error));
++      await leaveSession();
++      socket.emit('voice-broadcast-ended', { roomId });
++      return;
++    }
++    setMicOn(true);
++
++    // Captions: feed the same microphone to the transcription service
++    const publication = lkRoom.localParticipant.getTrackPublication(lkRef.current.Track.Source.Microphone);
++    const track = publication?.audioTrack?.mediaStreamTrack;
++    if (track) {
++      setupAudioProcessing(new MediaStream([track]));
++      isTranscribingRef.current = true;
++      socket.emit('start-transcription', { roomId });
+     }
++    toast.success('Voice broadcast started');
+   };
+ 
+-  // Stop voice broadcast (tutor only)
+-  const stopBroadcast = () => {
++  const stopBroadcast = async () => {
+     if (!isTutor) return;
++    socket.emit('stop-transcription', { roomId });
++    stopAudioProcessing();
++    await leaveSession();
++    socket.emit('voice-broadcast-ended', { roomId });
++    toast.success('Voice broadcast stopped');
++  };
+ 
+-    console.log('Stopping voice broadcast...');
+-
+-    // Stop transcription
+-    isTranscribingRef.current = false;
+-    socket.emit('stop-transcription', { roomId: room._id });
+-
+-    // Clean up audio processing
+-    if (processorRef.current) {
+-      processorRef.current.disconnect();
+-      processorRef.current = null;
+-    }
+-    
+-    if (audioContextRef.current) {
+-      audioContextRef.current.close();
+-      audioContextRef.current = null;
+-    }
++  /* ---------------------- listener controls (when allowed) ---------------------- */
+ 
+-    if (localStreamRef.current) {
+-      localStreamRef.current.getTracks().forEach(track => track.stop());
+-      localStreamRef.current = null;
++  const toggleMyMic = async () => {
++    const lkRoom = lkRoomRef.current;
++    if (!lkRoom) return;
++    try {
++      await lkRoom.localParticipant.setMicrophoneEnabled(!micOn);
++      setMicOn(!micOn);
++    } catch (error) {
++      toast.error(error?.name ? micError(error) : 'The host has not let you speak.');
+     }
++  };
+ 
+-    studentConnectionsRef.current.forEach((peerConnection, studentId) => {
+-      console.log(`Closing connection to student: ${studentId}`);
+-      peerConnection.close();
+-    });
+-    studentConnectionsRef.current.clear();
+-
+-    socket.emit('voice-broadcast-ended', { roomId: room._id });
+-
+-    setIsMicOn(false);
+-    setIsConnecting(false);
+-    setConnectionStatus('disconnected');
+-    toast.success('Voice broadcast stopped');
++  const toggleSound = () => {
++    const next = !soundOff;
++    soundOffRef.current = next;
++    setSoundOff(next);
++    audioBoxRef.current?.querySelectorAll('audio').forEach((element) => { element.muted = next; });
+   };
+ 
+-  const handleVolumeChange = (newVolume) => {
+-    setVolume(newVolume);
+-    if (audioElementRef.current) {
+-      audioElementRef.current.volume = newVolume;
+-    }
++  const enableSound = () => {
++    lkRoomRef.current?.startAudio().then(() => setAudioBlocked(false)).catch(() => {});
+   };
+ 
+-  // Socket event handlers
++  // The host turned my microphone off
+   useEffect(() => {
+-    if (!socket) return;
++    if (isTutor || canSpeak || !micOn) return;
++    lkRoomRef.current?.localParticipant.setMicrophoneEnabled(false).catch(() => {});
++    setMicOn(false);
++    toast.info('The host turned off your microphone');
++  }, [canSpeak, micOn, isTutor]);
++
++  /* ---------------------------------- events ---------------------------------- */
+ 
+-    // Subtitle events - now received by all users but only displayed if enabled
+-    const handleSubtitleReceived = (data) => {
++  useEffect(() => {
++    if (!socket) return undefined;
++
++    const onSubtitle = (data) => {
+       if (data.isFinal) {
+-        setSubtitles(prev => {
+-          const newSubtitles = [...prev, {
+-            id: data.timestamp,
+-            text: data.text,
+-            timestamp: data.timestamp,
+-            confidence: data.confidence
+-          }];
+-          return newSubtitles.slice(-50);
+-        });
+-        console.log('Final subtitle received:', data.text);
++        setSubtitles((prev) => [...prev, { id: data.timestamp, text: data.text, timestamp: data.timestamp, confidence: data.confidence }].slice(-50));
+         setCurrentTranscript('');
+       } else {
+         setCurrentTranscript(data.text);
+       }
+     };
+-
+-    const handleTranscriptionStarted = () => {
+-      console.log('Transcription started successfully');
+-    };
+-
+-    const handleTranscriptionError = (data) => {
+-      console.error('Transcription error:', data.error);
++    const onTranscriptionError = (data) => {
+       toast.error('Transcription error: ' + data.error);
+       isTranscribingRef.current = false;
+     };
+-
+-    // Existing voice events
+-    const handleBroadcastStarted = (data) => {
+-      if (isTutor || data.roomId !== room._id) return;
+-      
+-      console.log('Tutor started broadcast, connecting...');
+-      setIsConnecting(true);
+-      
+-      socket.emit('student-join-broadcast', { 
+-        roomId: room._id,
+-        studentSocketId: socket.id 
+-      });
+-    };
+-
+-    const handleStudentJoinBroadcast = async (data) => {
+-      if (!isTutor || data.roomId !== room._id || !isMicOn) return;
+-      
+-      console.log('Student requesting to join broadcast:', data.studentSocketId);
+-      await createStudentConnection(data.studentSocketId);
+-    };
+-
+-    const handleVoiceOffer = async (data) => {
+-      if (isTutor || data.roomId !== room._id) return;
+-      
+-      console.log('Received voice offer from tutor');
+-      
+-      try {
+-        if (peerConnectionRef.current) {
+-          peerConnectionRef.current.close();
+-        }
+-        
+-        const peerConnection = createStudentPeerConnection();
+-        
+-        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+-        
+-        const answer = await peerConnection.createAnswer();
+-        await peerConnection.setLocalDescription(answer);
+-        
+-        socket.emit('voice-answer', {
+-          roomId: room._id,
+-          answer: answer,
+-          socketId: socket.id
+-        });
+-        
+-        console.log('Sent answer to tutor');
+-      } catch (error) {
+-        console.error('Error handling voice offer:', error);
+-        setIsConnecting(false);
+-        toast.error('Failed to connect to voice broadcast');
+-      }
+-    };
+-
+-    const handleVoiceAnswer = async (data) => {
+-      if (!isTutor || data.roomId !== room._id) return;
+-      
+-      console.log('Received answer from student:', data.studentSocketId);
+-      
+-      try {
+-        const peerConnection = studentConnectionsRef.current.get(data.studentSocketId);
+-        if (peerConnection) {
+-          await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+-          console.log(`Connected to student: ${data.studentSocketId}`);
+-        }
+-      } catch (error) {
+-        console.error('Error handling voice answer:', error);
+-      }
+-    };
+-
+-    const handleIceCandidate = async (data) => {
+-      if (data.roomId !== room._id) return;
+-      
+-      try {
+-        if (isTutor) {
+-          if (data.targetStudentId) {
+-            const peerConnection = studentConnectionsRef.current.get(data.targetStudentId);
+-            if (peerConnection) {
+-              await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+-            }
+-          } else {
+-            studentConnectionsRef.current.forEach(async (peerConnection) => {
+-              try {
+-                await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+-              } catch (err) {
+-                // Ignore
+-              }
+-            });
+-          }
+-        } else {
+-          if (peerConnectionRef.current) {
+-            await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+-          }
+-        }
+-      } catch (error) {
+-        console.error('Error adding ICE candidate:', error);
+-      }
++    // The host started a session: listeners join it
++    const onStarted = (data) => {
++      if (isTutor || data.roomId !== roomId) return;
++      joinSession();
+     };
+-
+-    const handleBroadcastEnded = (data) => {
+-      if (data.roomId !== room._id) return;
+-      
+-      console.log('Voice broadcast ended');
+-      
+-      if (isTutor) {
+-        studentConnectionsRef.current.forEach((peerConnection) => {
+-          peerConnection.close();
+-        });
+-        studentConnectionsRef.current.clear();
+-        setIsMicOn(false);
+-      } else {
+-        if (peerConnectionRef.current) {
+-          peerConnectionRef.current.close();
+-          peerConnectionRef.current = null;
+-        }
+-        
+-        if (audioElementRef.current) {
+-          audioElementRef.current.srcObject = null;
+-        }
+-        
+-        setIsReceivingAudio(false);
+-      }
+-      
+-      setConnectionStatus('disconnected');
+-      setIsConnecting(false);
+-      
+-      if (data.reason === 'tutor_disconnected') {
+-        toast.info('Tutor disconnected - voice broadcast ended');
+-      } else {
+-        toast.info('Voice broadcast ended');
+-      }
++    const onEnded = (data) => {
++      if (isTutor || data.roomId !== roomId) return; // the host ended it themselves
++      leaveSession();
++      toast.info(data.reason === 'tutor_disconnected' ? 'Host disconnected - voice ended' : 'Voice broadcast ended');
+     };
+ 
+-    socket.on('subtitle-received', handleSubtitleReceived);
+-    socket.on('transcription-started', handleTranscriptionStarted);
+-    socket.on('transcription-error', handleTranscriptionError);
+-    socket.on('voice-broadcast-started', handleBroadcastStarted);
+-    socket.on('student-join-broadcast', handleStudentJoinBroadcast);
+-    socket.on('voice-offer', handleVoiceOffer);
+-    socket.on('voice-answer', handleVoiceAnswer);
+-    socket.on('voice-ice-candidate', handleIceCandidate);
+-    socket.on('voice-broadcast-ended', handleBroadcastEnded);
+-
++    socket.on('subtitle-received', onSubtitle);
++    socket.on('transcription-error', onTranscriptionError);
++    socket.on('voice-broadcast-started', onStarted);
++    socket.on('voice-broadcast-ended', onEnded);
+     return () => {
+-      socket.off('subtitle-received', handleSubtitleReceived);
+-      socket.off('transcription-started', handleTranscriptionStarted);
+-      socket.off('transcription-error', handleTranscriptionError);
+-      socket.off('voice-broadcast-started', handleBroadcastStarted);
+-      socket.off('student-join-broadcast', handleStudentJoinBroadcast);
+-      socket.off('voice-offer', handleVoiceOffer);
+-      socket.off('voice-answer', handleVoiceAnswer);
+-      socket.off('voice-ice-candidate', handleIceCandidate);
+-      socket.off('voice-broadcast-ended', handleBroadcastEnded);
++      socket.off('subtitle-received', onSubtitle);
++      socket.off('transcription-error', onTranscriptionError);
++      socket.off('voice-broadcast-started', onStarted);
++      socket.off('voice-broadcast-ended', onEnded);
+     };
+-  }, [socket, room._id, isTutor, createStudentConnection, createStudentPeerConnection, volume, isMicOn]);
++  }, [socket, roomId, isTutor, joinSession, leaveSession]);
+ 
+-  // Auto-request broadcast status for students
+-  useEffect(() => {
+-    if (!isTutor && socket && room._id) {
+-      const timer = setTimeout(() => {
+-        socket.emit('request-broadcast-status', { 
+-          roomId: room._id,
+-          studentSocketId: socket.id 
+-        });
+-      }, 1000);
+-      
+-      return () => clearTimeout(timer);
+-    }
+-  }, [socket, room._id, isTutor]);
+-
+-  // Cleanup on unmount
++  // A listener who arrives late (or reconnects) asks whether a session is already running
+   useEffect(() => {
++    if (isTutor || !socket || !roomId) return undefined;
++    const ask = () => socket.emit('request-broadcast-status', { roomId });
++    const timer = setTimeout(ask, 1000);
++    socket.on('connect', ask);
+     return () => {
+-      if (isTutor && isMicOn) {
+-        stopBroadcast();
+-      }
+-      
+-      if (peerConnectionRef.current) {
+-        peerConnectionRef.current.close();
+-      }
+-      
+-      studentConnectionsRef.current.forEach((peerConnection) => {
+-        peerConnection.close();
+-      });
+-      studentConnectionsRef.current.clear();
+-      
+-      if (localStreamRef.current) {
+-        localStreamRef.current.getTracks().forEach(track => track.stop());
+-      }
+-
+-      if (processorRef.current) {
+-        processorRef.current.disconnect();
+-      }
+-      
+-      if (audioContextRef.current) {
+-        audioContextRef.current.close();
+-      }
++      clearTimeout(timer);
++      socket.off('connect', ask);
+     };
+-  }, []);
++  }, [socket, roomId, isTutor]);
++
++  // Leaving the page ends my side of the call
++  useEffect(() => () => {
++    stopAudioProcessing();
++    const lkRoom = lkRoomRef.current;
++    lkRoomRef.current = null;
++    lkRoom?.disconnect().catch(() => {});
++  }, [stopAudioProcessing]);
+ 
+-  // Auto-cleanup old subtitles
+   useEffect(() => {
+     const interval = setInterval(() => {
+       const now = Date.now();
+-      setSubtitles(prev => 
+-        prev.filter(sub => now - sub.timestamp < 30000)
+-      );
++      setSubtitles((prev) => prev.filter((sub) => now - sub.timestamp < 30000));
+     }, 5000);
+-
+     return () => clearInterval(interval);
+   }, []);
+ 
+-  // Render tutor controls
++  const live = status === 'live';
++  const connecting = status === 'connecting';
++  const audioBox = <div ref={audioBoxRef} style={{ display: 'none' }} aria-hidden="true" />;
++
++  /* ----------------------------------- host ----------------------------------- */
++
+   if (isTutor) {
+     return (
+       <div className="flex items-center gap-2 ml-3 mr-3 border-gray-200">
+-        {/* Microphone button */}
+         <button
+-          onClick={isMicOn ? stopBroadcast : startBroadcast}
+-          disabled={isConnecting}
++          onClick={micOn ? stopBroadcast : startBroadcast}
++          disabled={connecting}
+           className={`relative flex items-center justify-center w-10 h-10 rounded-full transition-all ${
+-            isConnecting
+-              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+-              : isMicOn
+-              ? 'bg-red-100 text-red-600 hover:bg-red-200'
+-              : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
++            connecting ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : micOn ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
+           }`}
+-          title={isMicOn ? "Stop Broadcast" : "Start Broadcast"}
++          title={micOn ? 'Stop Broadcast' : 'Start Broadcast'}
+         >
+-          {isConnecting ? (
+-            <FaSpinner className="animate-spin" />
+-          ) : isMicOn ? (
+-            <FaMicrophone />
+-          ) : (
+-            <FaMicrophoneSlash />
+-          )}
++          {connecting ? <FaSpinner className="animate-spin" /> : micOn ? <FaMicrophone /> : <FaMicrophoneSlash />}
+         </button>
+-        
+-        {/* Connection indicator */}
+-        <div className={`absolute ml-[33px] mt-7 w-2 h-2 rounded-full ${
+-          isMicOn && connectionStatus === 'connected'
+-            ? 'bg-green-500 animate-pulse' 
+-            : isConnecting
+-            ? 'bg-yellow-500'
+-            : 'bg-gray-400'
+-        }`} />
+-
+-        {/* Subtitle toggle button - always available when mic is on */}
+-        {isMicOn && (
++
++        <div className={`absolute ml-[33px] mt-7 w-2 h-2 rounded-full ${micOn && live ? 'bg-green-500 animate-pulse' : connecting ? 'bg-yellow-500' : 'bg-gray-400'}`} />
++
++        {micOn && (
+           <button
+             onClick={toggleSubtitles}
+-            className={`flex items-center cursor-pointer justify-center w-5 h-5 transition-all ${
+-              subtitlesEnabled
+-                ? 'bg-green-100 text-green-600 hover:bg-green-200'
+-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+-            }`}
+-            title={subtitlesEnabled ? "Hide Captions" : "Show Captions"}
++            className={`flex items-center cursor-pointer justify-center w-5 h-5 transition-all ${subtitlesEnabled ? 'bg-green-100 text-green-600 hover:bg-green-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
++            title={subtitlesEnabled ? 'Hide Captions' : 'Show Captions'}
+           >
+             <FaClosedCaptioning />
+           </button>
+         )}
+ 
+-        {/* Subtitle display for tutor - only shown if enabled */}
+-        {subtitlesEnabled && isMicOn && (
+-          <div className="fixed bottom-10 left-0 right-0 px-4 z-40 pointer-events-none">
+-            <div className="max-w-2xl mx-auto text-left">
+-              {subtitles.slice(-3).map((subtitle) => (
+-                <div
+-                  key={subtitle.id}
+-                  className="px-2 py-2 inline-block"
+-                  style={{
+-                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+-                    color: '#ffffff',
+-                    fontSize: '13px',
+-                    lineHeight: '1.4'
+-                  }}
+-                >
+-                  {subtitle.text}
+-                </div>
+-              ))}
+-              {currentTranscript && (
+-                <div
+-                  className="px-2 py-2 inline-block"
+-                  style={{
+-                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+-                    color: '#ffffff',
+-                    fontSize: '13px',
+-                    lineHeight: '1.4'
+-                  }}
+-                >
+-                  {currentTranscript}
+-                </div>
+-              )}
+-            </div>
+-          </div>
+-        )}
+-        
+-        <audio ref={localAudioRef} style={{ display: 'none' }} />
++        {subtitlesEnabled && micOn && <Captions subtitles={subtitles} currentTranscript={currentTranscript} />}
++        {audioBox}
+       </div>
+     );
+   }
+ 
+-  // Render student controls
++  /* --------------------------------- listener --------------------------------- */
++
+   return (
+     <div className="flex items-center gap-2 ml-2 mr-2 border-gray-200">
+-      {/* Audio status indicator */}
+-      <div className={`relative flex items-center justify-center w-10 h-10 rounded-full transition-all ${
+-        isReceivingAudio 
+-          ? 'bg-green-400 animate-pulse' 
+-          : isConnecting
+-          ? 'bg-yellow-500'
+-          : 'bg-gray-400'
+-      }`}>
+-        {isConnecting ? (
+-          <FaSpinner className="animate-spin" />
+-        ) : isReceivingAudio ? (
+-          <FaVolumeUp />
+-        ) : (
+-          <FaVolumeMute />
+-        )}
++      <div
++        title={speakers.length ? `${speakers.join(', ')} speaking` : live ? 'Connected to the voice session' : 'No voice session'}
++        className={`relative flex items-center justify-center w-10 h-10 rounded-full transition-all ${live && speakers.length ? 'bg-green-400 animate-pulse' : live ? 'bg-green-300' : connecting ? 'bg-yellow-500' : 'bg-gray-400'}`}
++      >
++        {connecting ? <FaSpinner className="animate-spin" /> : live && !soundOff ? <FaVolumeUp /> : <FaVolumeMute />}
+       </div>
+ 
+-      {/* Subtitle toggle for students - available when receiving audio */}
+-      {isReceivingAudio && (
++      {live && audioBlocked && (
++        <button onClick={enableSound} className="h-8 rounded-md bg-ink px-2.5 text-xs font-medium text-paper">Tap to hear</button>
++      )}
++
++      {live && (
++        <button
++          onClick={toggleSound}
++          className={`flex items-center justify-center w-5 h-5 cursor-pointer transition-all ${soundOff ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
++          title={soundOff ? 'Unmute the room' : 'Mute the room for me'}
++          aria-pressed={soundOff}
++        >
++          {soundOff ? <FaVolumeMute /> : <FaVolumeUp />}
++        </button>
++      )}
++
++      {/* Only when the host has allowed me to speak. It starts muted; I choose when to unmute. */}
++      {live && canSpeak && (
++        <button
++          onClick={toggleMyMic}
++          aria-pressed={micOn}
++          className={`flex items-center justify-center w-10 h-10 rounded-full transition-all ${micOn ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-blue-100 text-blue-600 hover:bg-blue-200'}`}
++          title={micOn ? 'Mute my microphone' : 'Unmute my microphone'}
++        >
++          {micOn ? <FaMicrophone /> : <FaMicrophoneSlash />}
++        </button>
++      )}
++
++      {live && (
+         <button
+           onClick={toggleSubtitles}
+-          className={`flex items-center justify-center w-5 h-5 cursor-pointer transition-all ${
+-            subtitlesEnabled
+-              ? 'bg-green-100 text-green-600 hover:bg-green-200'
+-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+-          }`}
+-          title={subtitlesEnabled ? "Hide Captions" : "Show Captions"}
++          className={`flex items-center justify-center w-5 h-5 cursor-pointer transition-all ${subtitlesEnabled ? 'bg-green-100 text-green-600 hover:bg-green-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
++          title={subtitlesEnabled ? 'Hide Captions' : 'Show Captions'}
+         >
+           <FaClosedCaptioning />
+         </button>
+       )}
+ 
+-      {/* Subtitle display for students - only shown if enabled */}
+-      {subtitlesEnabled && isReceivingAudio && (
+-        <div className="fixed bottom-10 left-0 right-0 px-4 z-40 pointer-events-none">
+-          <div className="max-w-2xl mx-auto text-left">
+-            {subtitles.slice(-3).map((subtitle) => (
+-              <div
+-                key={subtitle.id}
+-                className="px-2 py-2 inline-block"
+-                style={{
+-                  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+-                  color: '#ffffff',
+-                  fontSize: '13px',
+-                  lineHeight: '1.4'
+-                }}
+-              >
+-                {subtitle.text}
+-              </div>
+-            ))}
+-
+-            {currentTranscript && (
+-              <div
+-                className="px-2 py-2 inline-block"
+-                style={{
+-                  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+-                  color: '#ffffff',
+-                  fontSize: '13px',
+-                  lineHeight: '1.4'
+-                }}
+-              >
+-                {currentTranscript}
+-              </div>
+-            )}
+-          </div>
+-        </div>
+-      )}
+-      
+-      <audio 
+-        ref={audioElementRef} 
+-        autoPlay 
+-        playsInline
+-        style={{ display: 'none' }}
+-      />
++      {subtitlesEnabled && live && <Captions subtitles={subtitles} currentTranscript={currentTranscript} />}
++      {audioBox}
+     </div>
+   );
+ };
+ 
+-export default VoiceBroadcast;
+\ No newline at end of file
++export default VoiceBroadcast;
+diff --git a/src/index.css b/src/index.css
+index 065fd8d..ee63a10 100644
+--- a/src/index.css
++++ b/src/index.css
+@@ -207,3 +207,12 @@
+     transition-duration: 0.01ms !important;
+   }
+ }
++
++/* The Stop button pulses softly while a session is being recorded */
++@keyframes rec-pulse {
++  0% { box-shadow: 0 0 0 0 rgb(220 38 38 / 0.45); }
++  70% { box-shadow: 0 0 0 8px rgb(220 38 38 / 0); }
++  100% { box-shadow: 0 0 0 0 rgb(220 38 38 / 0); }
++}
++.rec-pulse { animation: rec-pulse 1.6s ease-out infinite; }
++@media (prefers-reduced-motion: reduce) { .rec-pulse { animation: none; } }
+diff --git a/src/room/ParticipantsPanel.jsx b/src/room/ParticipantsPanel.jsx
+new file mode 100644
+index 0000000..6b4fc27
+--- /dev/null
++++ b/src/room/ParticipantsPanel.jsx
+@@ -0,0 +1,105 @@
++// The people in the room. The host also decides here who may draw and who may speak: one switch for everyone,
++// or one per person. Built to stay light in a big room: it searches, and draws at most MAX_ROWS people at a time.
++import { useMemo, useState } from "react";
++import { Mic, PenLine, Search } from "lucide-react";
++
++const MAX_ROWS = 100;
++
++function Switch({ on, onClick, label }) {
++  return (
++    <button
++      type="button"
++      role="switch"
++      aria-checked={on}
++      aria-label={label}
++      onClick={onClick}
++      className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${on ? "bg-accent" : "bg-line-strong"}`}
++    >
++      <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${on ? "left-[18px]" : "left-0.5"}`} />
++    </button>
++  );
++}
++
++function PersonToggle({ icon: Icon, on, inherited, label, onClick }) {
++  return (
++    <button
++      type="button"
++      aria-pressed={on || inherited}
++      aria-label={label}
++      title={inherited ? `${label} (everyone is allowed)` : label}
++      onClick={onClick}
++      disabled={inherited}
++      className={`flex h-8 w-8 items-center justify-center rounded-md ${on || inherited ? "bg-accent-soft text-accent" : "text-gray-500 hover:bg-sunken"} ${inherited ? "opacity-60" : ""}`}
++    >
++      <Icon size={15} />
++    </button>
++  );
++}
++
++export default function ParticipantsPanel({ isHost, users, total, flags, access, myKey, onSet }) {
++  const [query, setQuery] = useState("");
++  const draw = useMemo(() => new Set(access.draw), [access.draw]);
++  const speak = useMemo(() => new Set(access.speak), [access.speak]);
++
++  const shown = useMemo(() => {
++    const q = query.trim().toLowerCase();
++    const list = q ? users.filter((u) => (u.name || "Guest").toLowerCase().includes(q)) : users;
++    return { rows: list.slice(0, MAX_ROWS), more: Math.max(0, list.length - MAX_ROWS) };
++  }, [users, query]);
++
++  return (
++    <div className="float-panel absolute right-0 top-full z-40 mt-1.5 w-[min(20rem,calc(100vw-1rem))] p-2">
++      <div className="px-2 pb-1.5 pt-1 text-[11px] font-medium uppercase tracking-wider text-muted">In this room · {total}</div>
++
++      {isHost && (
++        <div className="mb-1.5 space-y-0.5 border-b border-line px-1 pb-2">
++          <label className="flex items-center gap-2.5 rounded-md px-1 py-1.5 text-sm">
++            <PenLine size={15} className="shrink-0 text-gray-700" />
++            <span className="flex-1">Everyone can draw</span>
++            <Switch on={flags.drawAll} label="Let everyone draw" onClick={() => onSet("draw", undefined, !flags.drawAll)} />
++          </label>
++          <label className="flex items-center gap-2.5 rounded-md px-1 py-1.5 text-sm">
++            <Mic size={15} className="shrink-0 text-gray-700" />
++            <span className="flex-1">Everyone can speak</span>
++            <Switch on={flags.speakAll} label="Let everyone speak" onClick={() => onSet("speak", undefined, !flags.speakAll)} />
++          </label>
++        </div>
++      )}
++
++      {users.length > 8 && (
++        <div className="relative mb-1 px-1">
++          <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
++          <input
++            type="search"
++            value={query}
++            onChange={(e) => setQuery(e.target.value)}
++            placeholder="Find someone"
++            aria-label="Find someone in the room"
++            className="h-8 w-full rounded-md border border-line bg-surface pl-8 pr-2 text-sm outline-none focus:border-ink"
++          />
++        </div>
++      )}
++
++      <ul className="scroll-thin max-h-72 overflow-y-auto">
++        {users.length === 0 && <li className="px-2 py-2 text-sm text-muted">{total > 1 ? "The list is only shown to the host in a large room." : "Just you for now."}</li>}
++        {shown.rows.map((u, i) => (
++          <li key={u.key || i} className="flex items-center justify-between gap-1 rounded-md px-2 py-1 text-sm hover:bg-sunken">
++            <span className="min-w-0 flex-1 truncate">
++              {u.name || "Guest"}{u.key && u.key === myKey ? " (you)" : ""}
++            </span>
++            {u.isTutor ? (
++              <span className="ml-2 rounded-sm bg-accent-soft px-1.5 py-0.5 text-[10px] font-medium text-accent">Host</span>
++            ) : isHost && u.key ? (
++              <span className="flex shrink-0 items-center">
++                <PersonToggle icon={PenLine} on={draw.has(u.key)} inherited={flags.drawAll} label={`Let ${u.name || "Guest"} draw`} onClick={() => onSet("draw", u.key, !draw.has(u.key))} />
++                <PersonToggle icon={Mic} on={speak.has(u.key)} inherited={flags.speakAll} label={`Let ${u.name || "Guest"} speak`} onClick={() => onSet("speak", u.key, !speak.has(u.key))} />
++              </span>
++            ) : null}
++          </li>
++        ))}
++        {shown.more > 0 && <li className="px-2 py-2 text-xs text-muted">{shown.more} more. Search to find someone.</li>}
++        {query && shown.rows.length === 0 && <li className="px-2 py-2 text-sm text-muted">No one matches.</li>}
++      </ul>
++    </div>
++  );
++}
+diff --git a/src/room/RoomShell.jsx b/src/room/RoomShell.jsx
+index 2fe4c67..eaf634d 100644
+--- a/src/room/RoomShell.jsx
++++ b/src/room/RoomShell.jsx
+@@ -11,6 +11,7 @@ import { useSocket } from "../context/SocketContext";
+ import api from "../utils/api";
+ import BoardWorkspace from "../board/BoardWorkspace.jsx";
+ import PDFWorkspace from "../board/PDFWorkspace.jsx";
++import ParticipantsPanel from "./ParticipantsPanel.jsx";
+ import { QaPanel, useQaManager } from "../components/layout/QaManager";
+ import VoiceBroadcast from "../components/layout/VoiceBroadcast";
+ import SessionRecorder from "../components/layout/SessionRecorder.jsx";
+@@ -68,7 +69,11 @@ export default function RoomShell({ room, isTutor }) {
+   const [menuOpen, setMenuOpen] = useState(false);
+   const [confirmEnd, setConfirmEnd] = useState(false);
+   const [connected, setConnected] = useState(true);
+-  const [isRecording, setIsRecording] = useState(false);
++  const [myKey, setMyKey] = useState(null);
++  const [roster, setRoster] = useState(null); // the host's full list of people (big rooms only send it to the host)
++  const [flags, setFlags] = useState({ drawAll: false, speakAll: false }); // room-wide switches
++  const [me, setMe] = useState({ draw: false, speak: false }); // what the host allowed me personally
++  const [access, setAccess] = useState({ draw: [], speak: [] }); // the host's view of every individual grant
+ 
+   const fullscreen = useFullscreen();
+   const qa = useQaManager(room, socket, isTutor);
+@@ -88,19 +93,25 @@ export default function RoomShell({ room, isTutor }) {
+     const join = () => {
+       socket.emit("join-room", { roomId: room._id, user: { id: profile._id || "", name: profile.name || "Guest", isTutor, clientId: getClientId() } });
+     };
+-    const onState = (s) => { setRoomState(s); setIsHost(Boolean(s.isHost)); setIsRecording(Boolean(s.isRecording)); };
++    const onState = (s) => { setRoomState(s); setIsHost(Boolean(s.isHost)); setMyKey(s.participantKey || null); };
+     const onConnect = () => { setConnected(true); join(); };
+     const onDisconnect = () => setConnected(false);
+     const onView = (v) => setView(v);
+     const onStats = (s) => setStats(s);
+-    const onRecording = ({ active }) => setIsRecording(Boolean(active));
++    const onRoster = ({ userList }) => setRoster(userList);
++    const onFlags = (f) => setFlags(f);
++    const onMe = (m) => setMe(m);
++    const onAccess = (a) => setAccess(a);
+ 
+     socket.on("room-state", onState);
+     socket.on("connect", onConnect);
+     socket.on("disconnect", onDisconnect);
+     socket.on("change-view", onView);
+     socket.on("room-stats-update", onStats);
+-    socket.on("recording-state", onRecording);
++    socket.on("room-roster", onRoster);
++    socket.on("access-flags", onFlags);
++    socket.on("access-me", onMe);
++    socket.on("access-state", onAccess);
+     if (socket.connected) join();
+     return () => {
+       socket.off("room-state", onState);
+@@ -108,10 +119,17 @@ export default function RoomShell({ room, isTutor }) {
+       socket.off("disconnect", onDisconnect);
+       socket.off("change-view", onView);
+       socket.off("room-stats-update", onStats);
+-      socket.off("recording-state", onRecording);
++      socket.off("room-roster", onRoster);
++      socket.off("access-flags", onFlags);
++      socket.off("access-me", onMe);
++      socket.off("access-state", onAccess);
+     };
+   }, [socket, room._id, isRoomActive, profile, isTutor]);
+ 
++  const setAccessFor = (kind, key, allowed) => socket.emit("access-set", { room: room._id, kind, key, allowed });
++  const canDraw = isHost || flags.drawAll || me.draw;
++  const canSpeak = isHost || flags.speakAll || me.speak;
++
+   const changeView = (v) => {
+     if (!isHost) return;
+     setView(v);
+@@ -142,7 +160,7 @@ export default function RoomShell({ room, isTutor }) {
+     return <InactiveRoom room={room} isTutor={isTutor} onNavigateToLobby={() => navigate("/lobby")} onActivateRoom={() => setStatus("active")} />;
+   }
+ 
+-  const listeners = stats.userList || [];
++  const listeners = (isHost && roster) || stats.userList || [];
+   const leave = () => navigate(isTutor ? "/lobby" : "/dashboard");
+ 
+   return (
+@@ -182,7 +200,7 @@ export default function RoomShell({ room, isTutor }) {
+         <div className="ml-auto flex items-center gap-0.5">
+           {!connected && <span role="status" className="mr-1 rounded-sm bg-danger-soft px-2 py-1 text-xs text-danger">Reconnecting…</span>}
+ 
+-          <VoiceBroadcast socket={socket} room={room} isTutor={isHost} />
++          <VoiceBroadcast socket={socket} room={room} isTutor={isHost} canSpeak={canSpeak} />
+           {isHost && <SessionRecorder room={room} socket={socket} />}
+ 
+           <div ref={peopleRef} className="relative">
+@@ -193,18 +211,7 @@ export default function RoomShell({ room, isTutor }) {
+               <Users size={17} strokeWidth={1.8} /> <span className="tabular-nums">{stats.totalUsers ?? listeners.length}</span>
+             </button>
+             {peopleOpen && (
+-              <div className="float-panel absolute right-0 top-full z-40 mt-1.5 w-64 p-2">
+-                <div className="px-2 pb-1.5 pt-1 text-[11px] font-medium uppercase tracking-wider text-muted">In this room · {stats.totalUsers ?? listeners.length}</div>
+-                <ul className="scroll-thin max-h-72 overflow-y-auto">
+-                  {listeners.length === 0 && <li className="px-2 py-2 text-sm text-muted">Just you for now.</li>}
+-                  {listeners.map((u, i) => (
+-                    <li key={u.socketId || i} className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-sunken">
+-                      <span className="truncate">{u.name || "Guest"}</span>
+-                      {u.isTutor && <span className="ml-2 rounded-sm bg-accent-soft px-1.5 py-0.5 text-[10px] font-medium text-accent">Host</span>}
+-                    </li>
+-                  ))}
+-                </ul>
+-              </div>
++              <ParticipantsPanel isHost={isHost} users={listeners} total={stats.totalUsers ?? listeners.length} flags={flags} access={access} myKey={myKey} onSet={setAccessFor} />
+             )}
+           </div>
+ 
+@@ -273,19 +280,12 @@ export default function RoomShell({ room, isTutor }) {
+         </div>
+       </header>
+ 
+-      {isRecording && (
+-        <div role="status" className="z-20 flex h-8 shrink-0 items-center justify-center gap-2 bg-danger px-3 text-xs font-medium text-white">
+-          <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
+-          This session is being recorded by the host.
+-        </div>
+-      )}
+-
+       <main className="relative min-h-0 flex-1">
+         <div className={`absolute inset-0 ${view === "whiteboard" ? "" : "invisible pointer-events-none"}`} aria-hidden={view !== "whiteboard"}>
+-          <BoardWorkspace room={room} socket={socket} isHost={isHost} initial={roomState} visible={view === "whiteboard"} apiRef={boardApiRef} />
++          <BoardWorkspace room={room} socket={socket} isHost={isHost} canDraw={canDraw} participantKey={myKey} initial={roomState} visible={view === "whiteboard"} apiRef={boardApiRef} />
+         </div>
+         <div className={`absolute inset-0 ${view === "pdf" ? "" : "invisible pointer-events-none"}`} aria-hidden={view !== "pdf"}>
+-          <PDFWorkspace room={room} socket={socket} isHost={isHost} initial={roomState} visible={view === "pdf"} />
++          <PDFWorkspace room={room} socket={socket} isHost={isHost} canDraw={canDraw} participantKey={myKey} initial={roomState} visible={view === "pdf"} />
+         </div>
+       </main>
+ 
+diff --git a/tests/access.test.mjs b/tests/access.test.mjs
+new file mode 100644
+index 0000000..a4bc6d4
+--- /dev/null
++++ b/tests/access.test.mjs
+@@ -0,0 +1,67 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { ObjectStore } from '../src/board/store.js';
++
++const box = (id, extra = {}) => ({ id, type: 'shape', kind: 'rect', page: 0, x1: 0, y1: 0, x2: 50, y2: 50, color: '#000', width: 2, ...extra });
++
++function listenerStore() {
++  const sent = [];
++  const store = new ObjectStore({ onLocalOps: (ops) => sent.push(ops) });
++  store.commit([{ op: 'add', obj: box('host-1') }]); // drawn by the host
++  sent.length = 0;
++  store.setAuthor({ host: false, key: 'ana' });
++  return { store, sent };
++}
++
++test('a listener who was let draw stamps their own objects', () => {
++  const { store, sent } = listenerStore();
++  store.commit([{ op: 'add', obj: box('a1') }]);
++  assert.equal(store.get('a1').by, 'ana');
++  assert.equal(sent[0][0].obj.by, 'ana');
++});
++
++test('they can change and remove only their own objects', () => {
++  const { store, sent } = listenerStore();
++  store.commit([{ op: 'add', obj: box('a1') }]);
++  sent.length = 0;
++  store.commit([{ op: 'update', id: 'host-1', patch: { color: '#f00' } }, { op: 'remove', id: 'host-1' }]);
++  assert.equal(store.get('host-1').color, '#000');
++  assert.equal(sent.length, 0); // nothing the server would reject is ever sent
++  store.commit([{ op: 'update', id: 'a1', patch: { color: '#0f0' } }]);
++  assert.equal(store.get('a1').color, '#0f0');
++  store.commit([{ op: 'remove', id: 'a1' }]);
++  assert.equal(store.get('a1'), undefined);
++});
++
++test('they cannot clear a page or add paper, covers or uploads', () => {
++  const { store } = listenerStore();
++  store.commit([{ op: 'clear', page: 0 }]);
++  assert.ok(store.get('host-1'));
++  store.commit([{ op: 'add', obj: { id: 'c1', type: 'cover', page: 0, x: 0, y: 0, w: 10, h: 10 } }, { op: 'add', obj: { id: 'p1', type: 'paper', page: 0 } }]);
++  assert.equal(store.get('c1'), undefined);
++  assert.equal(store.get('p1'), undefined);
++});
++
++test('the host is not restricted, and their objects carry no author', () => {
++  const store = new ObjectStore();
++  store.setAuthor({ host: true, key: 'host' });
++  store.commit([{ op: 'add', obj: box('h1') }, { op: 'clear', page: 0 }]);
++  assert.equal(store.get('h1'), undefined);
++  store.commit([{ op: 'add', obj: box('h2') }]);
++  assert.equal(store.get('h2').by, undefined);
++});
++
++test('undo works for a listener on their own work', () => {
++  const { store } = listenerStore();
++  store.commit([{ op: 'add', obj: box('a1') }]);
++  store.undo();
++  assert.equal(store.get('a1'), undefined);
++  store.redo();
++  assert.equal(store.get('a1').by, 'ana');
++});
++
++test('a live stroke from someone else keeps its author', () => {
++  const store = new ObjectStore();
++  store.applyRemoteStroke({ id: 's', page: 0, meta: { tool: 'pen', color: '#000', width: 3, by: 'ben' }, points: [[0, 0, 0.5]] });
++  assert.equal(store.get('s').by, 'ben');
++});

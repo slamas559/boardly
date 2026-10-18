@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CircleDot, Download, LoaderCircle, Mic, Monitor, Square, Video } from "lucide-react";
+import { CircleDot, Download, LoaderCircle, Mic, Monitor, Video } from "lucide-react";
 import api from "../../utils/api";
 
 const MAX_RECORDING_BYTES = 500 * 1024 * 1024;
@@ -312,9 +312,9 @@ export default function SessionRecorder({ room, socket }) {
         aria-haspopup={phase === "recording" ? undefined : "dialog"}
         aria-expanded={phase === "recording" ? undefined : menuOpen}
         title={phase === "recording" ? "Stop recording" : "Record the session"}
-        className={`flex h-9 items-center gap-1.5 rounded-md px-2 text-sm disabled:opacity-60 ${phase === "recording" ? "bg-danger-soft text-danger" : menuOpen ? "bg-sunken text-ink" : "text-gray-700 hover:bg-sunken"}`}
+        className={`flex h-9 items-center gap-1.5 rounded-md px-2 text-sm disabled:opacity-60 ${phase === "recording" ? "rec-pulse bg-danger-soft text-danger" : menuOpen ? "bg-sunken text-ink" : "text-gray-700 hover:bg-sunken"}`}
       >
-        {busy ? <LoaderCircle size={16} className="animate-spin" /> : phase === "recording" ? <Square size={14} fill="currentColor" /> : <CircleDot size={16} className="text-danger" />}
+        {busy ? <LoaderCircle size={16} className="animate-spin" /> : phase === "recording" ? <span className="relative flex h-2.5 w-2.5"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger opacity-60" /><span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-danger" /></span> : <CircleDot size={16} className="text-danger" />}
         <span className="hidden sm:inline">{phase === "recording" ? "Stop" : busy ? `${progress || ""} Saving` : "Record"}</span>
       </button>
       {phase === "recording" && <span role="status" className="sr-only">Recording: {summary}</span>}

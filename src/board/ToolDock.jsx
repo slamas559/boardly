@@ -40,7 +40,7 @@ function DropHint({ target }) {
   return <div aria-hidden="true" className="pointer-events-none absolute rounded-full bg-accent/50" style={style} />;
 }
 
-export default function ToolDock({ mode, tools, inspector, surfaceRef, onCreateGraph, onCreateEquation, onCreateAid, onCreateTable, onUploadMedia, onAddVideoLink, mediaUploading = false, mediaError = "", store }) {
+export default function ToolDock({ mode, restricted = false, tools, inspector, surfaceRef, onCreateGraph, onCreateEquation, onCreateAid, onCreateTable, onUploadMedia, onAddVideoLink, mediaUploading = false, mediaError = "", store }) {
   const [insertDialog, setInsertDialog] = useState(null);
   const [aidDialog, setAidDialog] = useState(false);
   const [videoLinkDialog, setVideoLinkDialog] = useState(false);
@@ -153,6 +153,7 @@ export default function ToolDock({ mode, tools, inspector, surfaceRef, onCreateG
           onUploadMedia={() => mediaInputRef.current?.click()}
           onAddVideoLink={() => setVideoLinkDialog(true)}
           mediaUploading={mediaUploading}
+          restricted={restricted}
           hasStyle={inspector.kind !== null}
           styleSwatch={inspector.kind === "style" ? activeStyle?.color : null}
           styleLabel={inspector.kind === "graph" ? "Graph" : inspector.kind === "equation" ? "Equation" : "Style"}

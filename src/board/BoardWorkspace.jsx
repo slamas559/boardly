@@ -29,7 +29,9 @@ function fitRect(rect, size) {
   return { k, x: rect.x - (size.w / k - rect.w) / 2, y: rect.y - (size.h / k - rect.h) / 2 };
 }
 
-export default function BoardWorkspace({ room, socket, isHost, initial, visible, apiRef }) {
+export default function BoardWorkspace({ room, socket, isHost, canDraw = false, participantKey = null, initial, visible, apiRef }) {
+  // The host, or a listener the host has let draw (who can only change their own work)
+  const editing = isHost || canDraw;
   const roomId = room._id;
   const frameRef = useRef(null);
   const surfaceRef = useRef(null);
@@ -64,7 +66,9 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible,
     () => new ObjectStore({ onLocalOps: (ops) => chunkOps(ops).forEach((part) => socket?.emit("board-op", { room: roomId, ops: part })) }),
     [socket, roomId]
   );
-  const tools = useAnnotationTools({ mode: "board", store, surfaceRef, enabled: isHost && visible });
+  useEffect(() => { store.setAuthor({ host: isHost, key: participantKey }); }, [store, isHost, participantKey]);
+  const canEdit = useCallback((o) => isHost || Boolean(participantKey && o.by === participantKey), [isHost, participantKey]);
+  const tools = useAnnotationTools({ mode: "board", store, surfaceRef, enabled: editing && visible });
   const inspector = useInspector(tools);
   const [savedDock] = useToolbarDock();
   const dockMovable = useDockMovable();
@@ -87,7 +91,7 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible,
   const sheetInset = inspector.insetBottom;
   const desktopLayout = inspector.desktop;
   useEffect(() => {
-    if (!isHost || !size.w || !selectedGraphId) return;
+    if (!editing || !size.w || !selectedGraphId) return;
     const graph = store.get(selectedGraphId);
     if (!graph) return;
     const pad = 24;
@@ -108,7 +112,7 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible,
       if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return v;
       return { ...v, x: v.x + dx / v.k, y: v.y + dy / v.k };
     });
-  }, [isHost, size.w, size.h, selectedGraphId, sheetInset, desktopLayout, dockEdge, store]);
+  }, [editing, size.w, size.h, selectedGraphId, sheetInset, desktopLayout, dockEdge, store]);
 
   /* initial state from the server (also covers late joiners and reconnects) */
   useEffect(() => {
@@ -438,9 +442,11 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible,
           store={store}
           page={page}
           mode="board"
-          tool={isHost ? tools.tool : "select"}
+          tool={editing ? tools.tool : "select"}
           styles={tools.styles}
-          readOnly={!isHost}
+          readOnly={!editing}
+          asListener={!isHost}
+          canEdit={canEdit}
           view={view}
           background="grid"
           selectedIds={tools.selectedIds}
@@ -449,17 +455,17 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible,
           onZoom={onZoom}
           onLaser={isHost ? onLaser : undefined}
           remoteLaser={isHost ? null : readOnlyLaser}
-          remotePreviews={isHost ? null : [...remotePreviews.values()].filter((preview) => preview.page === page).map((preview) => preview.obj)}
-          onStrokeChunk={isHost ? onStrokeChunk : undefined}
-          onLivePreview={isHost ? onPreview : undefined}
+          remotePreviews={[...remotePreviews.values()].filter((preview) => preview.page === page).map((preview) => preview.obj)}
+          onStrokeChunk={editing ? onStrokeChunk : undefined}
+          onLivePreview={editing ? onPreview : undefined}
           onEditingChange={tools.setEditingObj}
           onEquationEdit={() => inspector.open("half")}
           onToolChange={tools.setTool}
           keepTool={tools.keepTool}
         />
 
-        {isHost && <ToolDock mode="board" tools={tools} store={store} inspector={inspector} surfaceRef={surfaceRef} onCreateGraph={addGraph} onCreateEquation={addEquation} onCreateAid={addAid} onCreateTable={addTable} onUploadMedia={uploadMedia} onAddVideoLink={addVideoLink} mediaUploading={mediaUploading} mediaError={mediaError} />}
-        {isHost && (
+        {editing && <ToolDock mode="board" restricted={!isHost} tools={tools} store={store} inspector={inspector} surfaceRef={surfaceRef} onCreateGraph={addGraph} onCreateEquation={addEquation} onCreateAid={addAid} onCreateTable={addTable} onUploadMedia={uploadMedia} onAddVideoLink={addVideoLink} mediaUploading={mediaUploading} mediaError={mediaError} />}
+        {editing && (
           <QuickBar
             tools={tools}
             store={store}
@@ -527,7 +533,7 @@ export default function BoardWorkspace({ room, socket, isHost, initial, visible,
           </div>
         )}
       </div>
-      {isHost && <InspectorDock mode="board" tools={tools} store={store} surfaceRef={surfaceRef} inspector={inspector} />}
+      {editing && <InspectorDock mode="board" tools={tools} store={store} surfaceRef={surfaceRef} inspector={inspector} />}
     </div>
   );
 }

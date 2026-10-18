@@ -24,6 +24,33 @@ export class ObjectStore {
     this.redoStack = [];
     this.onLocalOps = onLocalOps || (() => {});
     this._cache = null;
+    this.restricted = false; // true for a listener who was let draw
+    this.authorKey = null;
+  }
+
+  /**
+   * Who is drawing here. The host can change anything. A listener the host let draw can add objects (stamped
+   * with their own key) and change or remove only those, mirroring what the server accepts.
+   */
+  setAuthor({ host = true, key = null } = {}) {
+    this.restricted = !host;
+    this.authorKey = host ? null : key;
+  }
+
+  _limitToAuthor(ops) {
+    if (!this.restricted) return ops;
+    const key = this.authorKey;
+    if (!key) return [];
+    const out = [];
+    for (const op of ops) {
+      if (op.op === "add") {
+        if (!op.obj || ["paper", "cover", "media"].includes(op.obj.type)) continue;
+        out.push({ ...op, obj: { ...op.obj, by: key } });
+      } else if (op.op === "update" || op.op === "remove") {
+        if (this.objects.get(op.id)?.by === key) out.push(op);
+      } // clearing a page is for the host
+    }
+    return out;
   }
 
   /* --- subscription (compatible with useSyncExternalStore) --- */
@@ -139,6 +166,7 @@ export class ObjectStore {
    * sent to the network. Pass emit:false for things already streamed (live strokes).
    */
   commit(ops, { emit = true, coalesce = null } = {}) {
+    ops = this._limitToAuthor(ops);
     if (!ops.length) return;
     ops = this._stackOnTop(ops);
     const inverse = this._inverse(ops);
@@ -229,6 +257,7 @@ export class ObjectStore {
         texture: meta.texture,
         pattern: meta.pattern,
         ...(meta.z ? { z: meta.z } : {}),
+        ...(meta.by ? { by: meta.by } : {}),
         points: points.slice(),
       });
     } else {

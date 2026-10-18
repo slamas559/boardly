@@ -1,739 +1,418 @@
-// VoiceBroadcast.jsx - Enhanced with independent subtitle control
+// VoiceBroadcast.jsx: the room's voice. The host starts a voice session and talks; listeners hear it.
+// A listener the host has allowed to speak gets a microphone button and can mute or unmute themselves.
+//
+// Audio goes through LiveKit (a media server): each speaker sends one stream to the server, which delivers it to
+// every listener. That is what lets a large room have many people speaking at once. The server hands out
+// short-lived passes (socket event "voice-token"); only the host and allowed speakers get one that can publish.
+// Captions still come from the host's microphone, as before.
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { FaMicrophone, FaMicrophoneSlash, FaVolumeUp, FaVolumeDown, FaSpinner, FaVolumeMute, FaClosedCaptioning } from 'react-icons/fa';
-import { ToastContainer, toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { FaMicrophone, FaMicrophoneSlash, FaVolumeUp, FaVolumeMute, FaSpinner, FaClosedCaptioning } from 'react-icons/fa';
+import { toast } from 'react-toastify';
 import "./Audio.css"
 
-const VoiceBroadcast = ({ room, socket, isTutor }) => {
-  const [isMicOn, setIsMicOn] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [isReceivingAudio, setIsReceivingAudio] = useState(false);
-  const [volume, setVolume] = useState(0.8);
-  const [connectionStatus, setConnectionStatus] = useState('disconnected');
-  
-  // Subtitle states - now independent per user
+// Ask the server for a pass to the voice session
+const getPass = (socket, roomId) => new Promise((resolve) => {
+  const timer = setTimeout(() => resolve({ ok: false, error: 'The voice server did not answer.' }), 10000);
+  socket.emit('voice-token', { roomId }, (reply) => {
+    clearTimeout(timer);
+    resolve(reply || { ok: false, error: 'The voice server did not answer.' });
+  });
+});
+
+const micError = (error) => {
+  if (error?.name === 'NotAllowedError') return 'Microphone access denied';
+  if (error?.name === 'NotFoundError') return 'No microphone found';
+  return 'Could not use the microphone';
+};
+
+const Captions = ({ subtitles, currentTranscript }) => (
+  <div className="fixed bottom-10 left-0 right-0 px-4 z-40 pointer-events-none">
+    <div className="max-w-2xl mx-auto text-left">
+      {subtitles.slice(-3).map((subtitle) => (
+        <div key={subtitle.id} className="px-2 py-2 inline-block" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)', color: '#ffffff', fontSize: '13px', lineHeight: '1.4' }}>
+          {subtitle.text}
+        </div>
+      ))}
+      {currentTranscript && (
+        <div className="px-2 py-2 inline-block" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)', color: '#ffffff', fontSize: '13px', lineHeight: '1.4' }}>
+          {currentTranscript}
+        </div>
+      )}
+    </div>
+  </div>
+);
+
+const VoiceBroadcast = ({ room, socket, isTutor, canSpeak = false }) => {
+  const roomId = room._id;
+  const [status, setStatus] = useState('idle'); // idle | connecting | live
+  const [micOn, setMicOn] = useState(false); // my microphone is sending
+  const [audioBlocked, setAudioBlocked] = useState(false); // the browser needs a tap before it plays sound
+  const [soundOff, setSoundOff] = useState(false); // I muted the room's sound for myself
+  const [speakers, setSpeakers] = useState([]); // who is talking right now
+
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(false);
   const [subtitles, setSubtitles] = useState([]);
   const [currentTranscript, setCurrentTranscript] = useState('');
 
-  // Refs for WebRTC
-  const localStreamRef = useRef(null);
-  const peerConnectionRef = useRef(null);
-  const studentConnectionsRef = useRef(new Map());
-  const audioElementRef = useRef(null);
-  const localAudioRef = useRef(null);
-  
-  // Refs for audio processing
+  const lkRoomRef = useRef(null);
+  const lkRef = useRef(null); // the livekit-client module, loaded the first time voice starts
+  const audioBoxRef = useRef(null);
+  const joiningRef = useRef(false);
+  const soundOffRef = useRef(false);
+
+  // Host-only: captions are made from the host's microphone
   const audioContextRef = useRef(null);
   const processorRef = useRef(null);
   const isTranscribingRef = useRef(false);
 
-  // ICE servers configuration
-  const iceServers = {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      {
-        urls: "stun:stun.relay.metered.ca:80",
-      },
-      {
-        urls: "turn:global.relay.metered.ca:80",
-        username: "2cfa1595142a47dbb11045c5",
-        credential: "ERtjygb2qEQukVHt",
-      },
-      {
-        urls: "turn:global.relay.metered.ca:80?transport=tcp",
-        username: "2cfa1595142a47dbb11045c5",
-        credential: "ERtjygb2qEQukVHt",
-      },
-      {
-        urls: "turn:global.relay.metered.ca:443",
-        username: "2cfa1595142a47dbb11045c5",
-        credential: "ERtjygb2qEQukVHt",
-      },
-      {
-        urls: "turns:global.relay.metered.ca:443?transport=tcp",
-        username: "2cfa1595142a47dbb11045c5",
-        credential: "ERtjygb2qEQukVHt",
-      },
-    ]
-  };
-
   const setupAudioProcessing = useCallback((stream) => {
     if (!isTutor) return;
     try {
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)({
-        sampleRate: 16000
-      });
-      
-      console.log('Audio context created with sample rate:', audioContext.sampleRate);
-      
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
       const source = audioContext.createMediaStreamSource(stream);
       const processor = audioContext.createScriptProcessor(4096, 1, 1);
 
       processor.onaudioprocess = (e) => {
         if (!isTranscribingRef.current) return;
-        
         const inputData = e.inputBuffer.getChannelData(0);
         const int16Data = new Int16Array(inputData.length);
         for (let i = 0; i < inputData.length; i++) {
           const s = Math.max(-1, Math.min(1, inputData[i]));
           int16Data[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
         }
-        
-        const hasAudio = int16Data.some(sample => Math.abs(sample) > 100);
-        
-        if (hasAudio) {
-          socket.emit('audio-data', {
-            roomId: room._id,
-            audioData: int16Data.buffer
-          });
+        if (int16Data.some((sample) => Math.abs(sample) > 100)) {
+          socket.emit('audio-data', { roomId, audioData: int16Data.buffer });
         }
       };
-      
+
       source.connect(processor);
       processor.connect(audioContext.destination);
-      
       audioContextRef.current = audioContext;
       processorRef.current = processor;
-      
-      console.log('✓ Audio processing setup complete');
-      
     } catch (error) {
       console.error('Error setting up audio processing:', error);
       toast.error('Failed to setup audio processing');
     }
-  }, [socket, room._id, isTutor]);
+  }, [socket, roomId, isTutor]);
 
-  // Toggle subtitles - now only controls local display
+  const stopAudioProcessing = useCallback(() => {
+    isTranscribingRef.current = false;
+    processorRef.current?.disconnect();
+    processorRef.current = null;
+    audioContextRef.current?.close().catch(() => {});
+    audioContextRef.current = null;
+  }, []);
+
   const toggleSubtitles = () => {
-    const newState = !subtitlesEnabled;
-    setSubtitlesEnabled(newState);
-    
-    if (newState) {
+    const next = !subtitlesEnabled;
+    setSubtitlesEnabled(next);
+    if (next) {
       toast.success('Caption enabled for you');
     } else {
       toast.info('Caption disabled for you');
-      // Only clear local display, don't emit clear event
       setSubtitles([]);
       setCurrentTranscript('');
     }
   };
 
-  // Create peer connection for a specific student (tutor side)
-  const createStudentConnection = useCallback(async (studentSocketId) => {
-    if (!isTutor || !localStreamRef.current) return null;
+  /* ---------------------------- the voice session ---------------------------- */
 
-    console.log(`Creating connection for student: ${studentSocketId}`);
+  const leaveSession = useCallback(async () => {
+    const lkRoom = lkRoomRef.current;
+    lkRoomRef.current = null;
+    audioBoxRef.current?.replaceChildren();
+    setStatus('idle');
+    setMicOn(false);
+    setSpeakers([]);
+    setAudioBlocked(false);
+    if (lkRoom) await lkRoom.disconnect().catch(() => {});
+  }, []);
 
-    const peerConnection = new RTCPeerConnection(iceServers);
+  const joinSession = useCallback(async () => {
+    if (lkRoomRef.current || joiningRef.current) return lkRoomRef.current;
+    joiningRef.current = true;
+    setStatus('connecting');
+    try {
+      const pass = await getPass(socket, roomId);
+      if (!pass.ok) throw new Error(pass.error);
+      const lk = lkRef.current || (lkRef.current = await import('livekit-client'));
+      const lkRoom = new lk.Room({
+        dynacast: true,
+        audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
 
-    peerConnection.onicecandidate = (event) => {
-      if (event.candidate) {
-        socket.emit('voice-ice-candidate', {
-          roomId: room._id,
-          candidate: event.candidate,
-          targetStudentId: studentSocketId
+      lkRoom
+        .on(lk.RoomEvent.TrackSubscribed, (track) => {
+          if (track.kind !== lk.Track.Kind.Audio) return;
+          const element = track.attach();
+          element.muted = soundOffRef.current;
+          audioBoxRef.current?.appendChild(element);
+        })
+        .on(lk.RoomEvent.TrackUnsubscribed, (track) => {
+          track.detach().forEach((element) => element.remove());
+        })
+        .on(lk.RoomEvent.AudioPlaybackStatusChanged, () => setAudioBlocked(!lkRoom.canPlaybackAudio))
+        .on(lk.RoomEvent.ActiveSpeakersChanged, (active) => {
+          setSpeakers(active.filter((p) => !p.isLocal).map((p) => p.name || 'Guest').slice(0, 3));
+        })
+        // The host can switch off my microphone at any time
+        .on(lk.RoomEvent.LocalTrackUnpublished, () => setMicOn(false))
+        .on(lk.RoomEvent.Disconnected, () => {
+          if (lkRoomRef.current === lkRoom) {
+            lkRoomRef.current = null;
+            audioBoxRef.current?.replaceChildren();
+            setStatus('idle');
+            setMicOn(false);
+            setSpeakers([]);
+          }
         });
-      }
-    };
 
-    peerConnection.onconnectionstatechange = () => {
-      const state = peerConnection.connectionState;
-      console.log(`Connection state with student ${studentSocketId}: ${state}`);
-      
-      if (state === 'connected') {
-        console.log(`Successfully connected to student: ${studentSocketId}`);
-      } else if (state === 'failed' || state === 'disconnected') {
-        console.log(`Connection failed/disconnected with student: ${studentSocketId}`);
-        studentConnectionsRef.current.delete(studentSocketId);
-      }
-    };
+      await lkRoom.connect(pass.url, pass.token);
+      lkRoomRef.current = lkRoom;
+      setStatus('live');
+      setAudioBlocked(!lkRoom.canPlaybackAudio);
+      lkRoom.startAudio().catch(() => {});
+      return lkRoom;
+    } catch (error) {
+      console.error('Voice error:', error);
+      setStatus('idle');
+      toast.error(error.message || 'Could not join the voice session');
+      return null;
+    } finally {
+      joiningRef.current = false;
+    }
+  }, [socket, roomId]);
 
-    localStreamRef.current.getTracks().forEach(track => {
-      peerConnection.addTrack(track, localStreamRef.current);
-    });
+  /* ------------------------------- host controls ------------------------------ */
 
-    studentConnectionsRef.current.set(studentSocketId, peerConnection);
-
-    const offer = await peerConnection.createOffer();
-    await peerConnection.setLocalDescription(offer);
-
-    socket.emit('voice-offer', {
-      roomId: room._id,
-      offer: offer,
-      targetStudentId: studentSocketId
-    });
-
-    console.log(`Sent offer to student: ${studentSocketId}`);
-    return peerConnection;
-  }, [socket, room._id, isTutor]);
-
-  // Create peer connection for student side
-  const createStudentPeerConnection = useCallback(() => {
-    if (isTutor) return null;
-
-    console.log('Creating peer connection for student');
-
-    const peerConnection = new RTCPeerConnection(iceServers);
-
-    peerConnection.onicecandidate = (event) => {
-      if (event.candidate) {
-        socket.emit('voice-ice-candidate', {
-          roomId: room._id,
-          candidate: event.candidate
-        });
-      }
-    };
-
-    peerConnection.ontrack = (event) => {
-      console.log('Received remote stream from tutor');
-      const [remoteStream] = event.streams;
-      
-      if (audioElementRef.current) {
-        audioElementRef.current.srcObject = remoteStream;
-        audioElementRef.current.volume = volume;
-        setIsReceivingAudio(true);
-        setIsConnecting(false);
-        setConnectionStatus('connected');
-        console.log('Audio element updated with tutor stream');
-      }
-    };
-
-    peerConnection.onconnectionstatechange = () => {
-      const state = peerConnection.connectionState;
-      console.log(`Student connection state: ${state}`);
-      setConnectionStatus(state);
-      
-      if (state === 'connected') {
-        setIsConnecting(false);
-        toast.success('Connected to tutor\'s audio');
-      } else if (state === 'failed' || state === 'disconnected') {
-        setIsConnecting(false);
-        setIsReceivingAudio(false);
-        if (state === 'failed') {
-          toast.error('Failed to connect to voice broadcast');
-        }
-      }
-    };
-
-    peerConnectionRef.current = peerConnection;
-    return peerConnection;
-  }, [socket, room._id, volume]);
-
-  // Start voice broadcast (tutor only)
   const startBroadcast = async () => {
     if (!isTutor) return;
-    
-    setIsConnecting(true);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          sampleRate: 16000
-        } 
-      });
-      
-      localStreamRef.current = stream;
-      console.log('Got local stream, starting broadcast...');
-      
-      // Setup audio processing for transcription
-      setupAudioProcessing(stream);
-      
-      // Auto-start transcription when mic is enabled
-      isTranscribingRef.current = true;
-      socket.emit('start-transcription', { roomId: room._id });
-      
-      socket.emit('voice-broadcast-started', {
-        roomId: room._id
-      });
-
-      setIsMicOn(true);
-      setIsConnecting(false);
-      setConnectionStatus('connected');
-      
-      if (localAudioRef.current) {
-        localAudioRef.current.srcObject = stream;
-        localAudioRef.current.muted = true;
-      }
-
-      toast.success('Voice broadcast started');
-      console.log('Voice broadcast and transcription started');
-
-    } catch (error) {
-      console.error('Error starting voice broadcast:', error);
-      setIsConnecting(false);
-      
-      if (error.name === 'NotAllowedError') {
-        toast.error('Microphone access denied');
-      } else if (error.name === 'NotFoundError') {
-        toast.error('No microphone found');
-      } else {
-        toast.error('Failed to start voice broadcast');
-      }
+    setStatus('connecting');
+    socket.emit('voice-broadcast-started', { roomId });
+    const lkRoom = await joinSession();
+    if (!lkRoom) {
+      socket.emit('voice-broadcast-ended', { roomId });
+      return;
     }
+    try {
+      await lkRoom.localParticipant.setMicrophoneEnabled(true);
+    } catch (error) {
+      toast.error(micError(error));
+      await leaveSession();
+      socket.emit('voice-broadcast-ended', { roomId });
+      return;
+    }
+    setMicOn(true);
+
+    // Captions: feed the same microphone to the transcription service
+    const publication = lkRoom.localParticipant.getTrackPublication(lkRef.current.Track.Source.Microphone);
+    const track = publication?.audioTrack?.mediaStreamTrack;
+    if (track) {
+      setupAudioProcessing(new MediaStream([track]));
+      isTranscribingRef.current = true;
+      socket.emit('start-transcription', { roomId });
+    }
+    toast.success('Voice broadcast started');
   };
 
-  // Stop voice broadcast (tutor only)
-  const stopBroadcast = () => {
+  const stopBroadcast = async () => {
     if (!isTutor) return;
-
-    console.log('Stopping voice broadcast...');
-
-    // Stop transcription
-    isTranscribingRef.current = false;
-    socket.emit('stop-transcription', { roomId: room._id });
-
-    // Clean up audio processing
-    if (processorRef.current) {
-      processorRef.current.disconnect();
-      processorRef.current = null;
-    }
-    
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
-
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => track.stop());
-      localStreamRef.current = null;
-    }
-
-    studentConnectionsRef.current.forEach((peerConnection, studentId) => {
-      console.log(`Closing connection to student: ${studentId}`);
-      peerConnection.close();
-    });
-    studentConnectionsRef.current.clear();
-
-    socket.emit('voice-broadcast-ended', { roomId: room._id });
-
-    setIsMicOn(false);
-    setIsConnecting(false);
-    setConnectionStatus('disconnected');
+    socket.emit('stop-transcription', { roomId });
+    stopAudioProcessing();
+    await leaveSession();
+    socket.emit('voice-broadcast-ended', { roomId });
     toast.success('Voice broadcast stopped');
   };
 
-  const handleVolumeChange = (newVolume) => {
-    setVolume(newVolume);
-    if (audioElementRef.current) {
-      audioElementRef.current.volume = newVolume;
+  /* ---------------------- listener controls (when allowed) ---------------------- */
+
+  const toggleMyMic = async () => {
+    const lkRoom = lkRoomRef.current;
+    if (!lkRoom) return;
+    try {
+      await lkRoom.localParticipant.setMicrophoneEnabled(!micOn);
+      setMicOn(!micOn);
+    } catch (error) {
+      toast.error(error?.name ? micError(error) : 'The host has not let you speak.');
     }
   };
 
-  // Socket event handlers
-  useEffect(() => {
-    if (!socket) return;
+  const toggleSound = () => {
+    const next = !soundOff;
+    soundOffRef.current = next;
+    setSoundOff(next);
+    audioBoxRef.current?.querySelectorAll('audio').forEach((element) => { element.muted = next; });
+  };
 
-    // Subtitle events - now received by all users but only displayed if enabled
-    const handleSubtitleReceived = (data) => {
+  const enableSound = () => {
+    lkRoomRef.current?.startAudio().then(() => setAudioBlocked(false)).catch(() => {});
+  };
+
+  // The host turned my microphone off
+  useEffect(() => {
+    if (isTutor || canSpeak || !micOn) return;
+    lkRoomRef.current?.localParticipant.setMicrophoneEnabled(false).catch(() => {});
+    setMicOn(false);
+    toast.info('The host turned off your microphone');
+  }, [canSpeak, micOn, isTutor]);
+
+  /* ---------------------------------- events ---------------------------------- */
+
+  useEffect(() => {
+    if (!socket) return undefined;
+
+    const onSubtitle = (data) => {
       if (data.isFinal) {
-        setSubtitles(prev => {
-          const newSubtitles = [...prev, {
-            id: data.timestamp,
-            text: data.text,
-            timestamp: data.timestamp,
-            confidence: data.confidence
-          }];
-          return newSubtitles.slice(-50);
-        });
-        console.log('Final subtitle received:', data.text);
+        setSubtitles((prev) => [...prev, { id: data.timestamp, text: data.text, timestamp: data.timestamp, confidence: data.confidence }].slice(-50));
         setCurrentTranscript('');
       } else {
         setCurrentTranscript(data.text);
       }
     };
-
-    const handleTranscriptionStarted = () => {
-      console.log('Transcription started successfully');
-    };
-
-    const handleTranscriptionError = (data) => {
-      console.error('Transcription error:', data.error);
+    const onTranscriptionError = (data) => {
       toast.error('Transcription error: ' + data.error);
       isTranscribingRef.current = false;
     };
-
-    // Existing voice events
-    const handleBroadcastStarted = (data) => {
-      if (isTutor || data.roomId !== room._id) return;
-      
-      console.log('Tutor started broadcast, connecting...');
-      setIsConnecting(true);
-      
-      socket.emit('student-join-broadcast', { 
-        roomId: room._id,
-        studentSocketId: socket.id 
-      });
+    // The host started a session: listeners join it
+    const onStarted = (data) => {
+      if (isTutor || data.roomId !== roomId) return;
+      joinSession();
+    };
+    const onEnded = (data) => {
+      if (isTutor || data.roomId !== roomId) return; // the host ended it themselves
+      leaveSession();
+      toast.info(data.reason === 'tutor_disconnected' ? 'Host disconnected - voice ended' : 'Voice broadcast ended');
     };
 
-    const handleStudentJoinBroadcast = async (data) => {
-      if (!isTutor || data.roomId !== room._id || !isMicOn) return;
-      
-      console.log('Student requesting to join broadcast:', data.studentSocketId);
-      await createStudentConnection(data.studentSocketId);
-    };
-
-    const handleVoiceOffer = async (data) => {
-      if (isTutor || data.roomId !== room._id) return;
-      
-      console.log('Received voice offer from tutor');
-      
-      try {
-        if (peerConnectionRef.current) {
-          peerConnectionRef.current.close();
-        }
-        
-        const peerConnection = createStudentPeerConnection();
-        
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-        
-        const answer = await peerConnection.createAnswer();
-        await peerConnection.setLocalDescription(answer);
-        
-        socket.emit('voice-answer', {
-          roomId: room._id,
-          answer: answer,
-          socketId: socket.id
-        });
-        
-        console.log('Sent answer to tutor');
-      } catch (error) {
-        console.error('Error handling voice offer:', error);
-        setIsConnecting(false);
-        toast.error('Failed to connect to voice broadcast');
-      }
-    };
-
-    const handleVoiceAnswer = async (data) => {
-      if (!isTutor || data.roomId !== room._id) return;
-      
-      console.log('Received answer from student:', data.studentSocketId);
-      
-      try {
-        const peerConnection = studentConnectionsRef.current.get(data.studentSocketId);
-        if (peerConnection) {
-          await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-          console.log(`Connected to student: ${data.studentSocketId}`);
-        }
-      } catch (error) {
-        console.error('Error handling voice answer:', error);
-      }
-    };
-
-    const handleIceCandidate = async (data) => {
-      if (data.roomId !== room._id) return;
-      
-      try {
-        if (isTutor) {
-          if (data.targetStudentId) {
-            const peerConnection = studentConnectionsRef.current.get(data.targetStudentId);
-            if (peerConnection) {
-              await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-            }
-          } else {
-            studentConnectionsRef.current.forEach(async (peerConnection) => {
-              try {
-                await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-              } catch (err) {
-                // Ignore
-              }
-            });
-          }
-        } else {
-          if (peerConnectionRef.current) {
-            await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
-          }
-        }
-      } catch (error) {
-        console.error('Error adding ICE candidate:', error);
-      }
-    };
-
-    const handleBroadcastEnded = (data) => {
-      if (data.roomId !== room._id) return;
-      
-      console.log('Voice broadcast ended');
-      
-      if (isTutor) {
-        studentConnectionsRef.current.forEach((peerConnection) => {
-          peerConnection.close();
-        });
-        studentConnectionsRef.current.clear();
-        setIsMicOn(false);
-      } else {
-        if (peerConnectionRef.current) {
-          peerConnectionRef.current.close();
-          peerConnectionRef.current = null;
-        }
-        
-        if (audioElementRef.current) {
-          audioElementRef.current.srcObject = null;
-        }
-        
-        setIsReceivingAudio(false);
-      }
-      
-      setConnectionStatus('disconnected');
-      setIsConnecting(false);
-      
-      if (data.reason === 'tutor_disconnected') {
-        toast.info('Tutor disconnected - voice broadcast ended');
-      } else {
-        toast.info('Voice broadcast ended');
-      }
-    };
-
-    socket.on('subtitle-received', handleSubtitleReceived);
-    socket.on('transcription-started', handleTranscriptionStarted);
-    socket.on('transcription-error', handleTranscriptionError);
-    socket.on('voice-broadcast-started', handleBroadcastStarted);
-    socket.on('student-join-broadcast', handleStudentJoinBroadcast);
-    socket.on('voice-offer', handleVoiceOffer);
-    socket.on('voice-answer', handleVoiceAnswer);
-    socket.on('voice-ice-candidate', handleIceCandidate);
-    socket.on('voice-broadcast-ended', handleBroadcastEnded);
-
+    socket.on('subtitle-received', onSubtitle);
+    socket.on('transcription-error', onTranscriptionError);
+    socket.on('voice-broadcast-started', onStarted);
+    socket.on('voice-broadcast-ended', onEnded);
     return () => {
-      socket.off('subtitle-received', handleSubtitleReceived);
-      socket.off('transcription-started', handleTranscriptionStarted);
-      socket.off('transcription-error', handleTranscriptionError);
-      socket.off('voice-broadcast-started', handleBroadcastStarted);
-      socket.off('student-join-broadcast', handleStudentJoinBroadcast);
-      socket.off('voice-offer', handleVoiceOffer);
-      socket.off('voice-answer', handleVoiceAnswer);
-      socket.off('voice-ice-candidate', handleIceCandidate);
-      socket.off('voice-broadcast-ended', handleBroadcastEnded);
+      socket.off('subtitle-received', onSubtitle);
+      socket.off('transcription-error', onTranscriptionError);
+      socket.off('voice-broadcast-started', onStarted);
+      socket.off('voice-broadcast-ended', onEnded);
     };
-  }, [socket, room._id, isTutor, createStudentConnection, createStudentPeerConnection, volume, isMicOn]);
+  }, [socket, roomId, isTutor, joinSession, leaveSession]);
 
-  // Auto-request broadcast status for students
+  // A listener who arrives late (or reconnects) asks whether a session is already running
   useEffect(() => {
-    if (!isTutor && socket && room._id) {
-      const timer = setTimeout(() => {
-        socket.emit('request-broadcast-status', { 
-          roomId: room._id,
-          studentSocketId: socket.id 
-        });
-      }, 1000);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [socket, room._id, isTutor]);
-
-  // Cleanup on unmount
-  useEffect(() => {
+    if (isTutor || !socket || !roomId) return undefined;
+    const ask = () => socket.emit('request-broadcast-status', { roomId });
+    const timer = setTimeout(ask, 1000);
+    socket.on('connect', ask);
     return () => {
-      if (isTutor && isMicOn) {
-        stopBroadcast();
-      }
-      
-      if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
-      }
-      
-      studentConnectionsRef.current.forEach((peerConnection) => {
-        peerConnection.close();
-      });
-      studentConnectionsRef.current.clear();
-      
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => track.stop());
-      }
-
-      if (processorRef.current) {
-        processorRef.current.disconnect();
-      }
-      
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
-      }
+      clearTimeout(timer);
+      socket.off('connect', ask);
     };
-  }, []);
+  }, [socket, roomId, isTutor]);
 
-  // Auto-cleanup old subtitles
+  // Leaving the page ends my side of the call
+  useEffect(() => () => {
+    stopAudioProcessing();
+    const lkRoom = lkRoomRef.current;
+    lkRoomRef.current = null;
+    lkRoom?.disconnect().catch(() => {});
+  }, [stopAudioProcessing]);
+
   useEffect(() => {
     const interval = setInterval(() => {
       const now = Date.now();
-      setSubtitles(prev => 
-        prev.filter(sub => now - sub.timestamp < 30000)
-      );
+      setSubtitles((prev) => prev.filter((sub) => now - sub.timestamp < 30000));
     }, 5000);
-
     return () => clearInterval(interval);
   }, []);
 
-  // Render tutor controls
+  const live = status === 'live';
+  const connecting = status === 'connecting';
+  const audioBox = <div ref={audioBoxRef} style={{ display: 'none' }} aria-hidden="true" />;
+
+  /* ----------------------------------- host ----------------------------------- */
+
   if (isTutor) {
     return (
       <div className="flex items-center gap-2 ml-3 mr-3 border-gray-200">
-        {/* Microphone button */}
         <button
-          onClick={isMicOn ? stopBroadcast : startBroadcast}
-          disabled={isConnecting}
+          onClick={micOn ? stopBroadcast : startBroadcast}
+          disabled={connecting}
           className={`relative flex items-center justify-center w-10 h-10 rounded-full transition-all ${
-            isConnecting
-              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-              : isMicOn
-              ? 'bg-red-100 text-red-600 hover:bg-red-200'
-              : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
+            connecting ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : micOn ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
           }`}
-          title={isMicOn ? "Stop Broadcast" : "Start Broadcast"}
+          title={micOn ? 'Stop Broadcast' : 'Start Broadcast'}
         >
-          {isConnecting ? (
-            <FaSpinner className="animate-spin" />
-          ) : isMicOn ? (
-            <FaMicrophone />
-          ) : (
-            <FaMicrophoneSlash />
-          )}
+          {connecting ? <FaSpinner className="animate-spin" /> : micOn ? <FaMicrophone /> : <FaMicrophoneSlash />}
         </button>
-        
-        {/* Connection indicator */}
-        <div className={`absolute ml-[33px] mt-7 w-2 h-2 rounded-full ${
-          isMicOn && connectionStatus === 'connected'
-            ? 'bg-green-500 animate-pulse' 
-            : isConnecting
-            ? 'bg-yellow-500'
-            : 'bg-gray-400'
-        }`} />
 
-        {/* Subtitle toggle button - always available when mic is on */}
-        {isMicOn && (
+        <div className={`absolute ml-[33px] mt-7 w-2 h-2 rounded-full ${micOn && live ? 'bg-green-500 animate-pulse' : connecting ? 'bg-yellow-500' : 'bg-gray-400'}`} />
+
+        {micOn && (
           <button
             onClick={toggleSubtitles}
-            className={`flex items-center cursor-pointer justify-center w-5 h-5 transition-all ${
-              subtitlesEnabled
-                ? 'bg-green-100 text-green-600 hover:bg-green-200'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-            title={subtitlesEnabled ? "Hide Captions" : "Show Captions"}
+            className={`flex items-center cursor-pointer justify-center w-5 h-5 transition-all ${subtitlesEnabled ? 'bg-green-100 text-green-600 hover:bg-green-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            title={subtitlesEnabled ? 'Hide Captions' : 'Show Captions'}
           >
             <FaClosedCaptioning />
           </button>
         )}
 
-        {/* Subtitle display for tutor - only shown if enabled */}
-        {subtitlesEnabled && isMicOn && (
-          <div className="fixed bottom-10 left-0 right-0 px-4 z-40 pointer-events-none">
-            <div className="max-w-2xl mx-auto text-left">
-              {subtitles.slice(-3).map((subtitle) => (
-                <div
-                  key={subtitle.id}
-                  className="px-2 py-2 inline-block"
-                  style={{
-                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                    color: '#ffffff',
-                    fontSize: '13px',
-                    lineHeight: '1.4'
-                  }}
-                >
-                  {subtitle.text}
-                </div>
-              ))}
-              {currentTranscript && (
-                <div
-                  className="px-2 py-2 inline-block"
-                  style={{
-                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                    color: '#ffffff',
-                    fontSize: '13px',
-                    lineHeight: '1.4'
-                  }}
-                >
-                  {currentTranscript}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-        
-        <audio ref={localAudioRef} style={{ display: 'none' }} />
+        {subtitlesEnabled && micOn && <Captions subtitles={subtitles} currentTranscript={currentTranscript} />}
+        {audioBox}
       </div>
     );
   }
 
-  // Render student controls
+  /* --------------------------------- listener --------------------------------- */
+
   return (
     <div className="flex items-center gap-2 ml-2 mr-2 border-gray-200">
-      {/* Audio status indicator */}
-      <div className={`relative flex items-center justify-center w-10 h-10 rounded-full transition-all ${
-        isReceivingAudio 
-          ? 'bg-green-400 animate-pulse' 
-          : isConnecting
-          ? 'bg-yellow-500'
-          : 'bg-gray-400'
-      }`}>
-        {isConnecting ? (
-          <FaSpinner className="animate-spin" />
-        ) : isReceivingAudio ? (
-          <FaVolumeUp />
-        ) : (
-          <FaVolumeMute />
-        )}
+      <div
+        title={speakers.length ? `${speakers.join(', ')} speaking` : live ? 'Connected to the voice session' : 'No voice session'}
+        className={`relative flex items-center justify-center w-10 h-10 rounded-full transition-all ${live && speakers.length ? 'bg-green-400 animate-pulse' : live ? 'bg-green-300' : connecting ? 'bg-yellow-500' : 'bg-gray-400'}`}
+      >
+        {connecting ? <FaSpinner className="animate-spin" /> : live && !soundOff ? <FaVolumeUp /> : <FaVolumeMute />}
       </div>
 
-      {/* Subtitle toggle for students - available when receiving audio */}
-      {isReceivingAudio && (
+      {live && audioBlocked && (
+        <button onClick={enableSound} className="h-8 rounded-md bg-ink px-2.5 text-xs font-medium text-paper">Tap to hear</button>
+      )}
+
+      {live && (
+        <button
+          onClick={toggleSound}
+          className={`flex items-center justify-center w-5 h-5 cursor-pointer transition-all ${soundOff ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+          title={soundOff ? 'Unmute the room' : 'Mute the room for me'}
+          aria-pressed={soundOff}
+        >
+          {soundOff ? <FaVolumeMute /> : <FaVolumeUp />}
+        </button>
+      )}
+
+      {/* Only when the host has allowed me to speak. It starts muted; I choose when to unmute. */}
+      {live && canSpeak && (
+        <button
+          onClick={toggleMyMic}
+          aria-pressed={micOn}
+          className={`flex items-center justify-center w-10 h-10 rounded-full transition-all ${micOn ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-blue-100 text-blue-600 hover:bg-blue-200'}`}
+          title={micOn ? 'Mute my microphone' : 'Unmute my microphone'}
+        >
+          {micOn ? <FaMicrophone /> : <FaMicrophoneSlash />}
+        </button>
+      )}
+
+      {live && (
         <button
           onClick={toggleSubtitles}
-          className={`flex items-center justify-center w-5 h-5 cursor-pointer transition-all ${
-            subtitlesEnabled
-              ? 'bg-green-100 text-green-600 hover:bg-green-200'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          }`}
-          title={subtitlesEnabled ? "Hide Captions" : "Show Captions"}
+          className={`flex items-center justify-center w-5 h-5 cursor-pointer transition-all ${subtitlesEnabled ? 'bg-green-100 text-green-600 hover:bg-green-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+          title={subtitlesEnabled ? 'Hide Captions' : 'Show Captions'}
         >
           <FaClosedCaptioning />
         </button>
       )}
 
-      {/* Subtitle display for students - only shown if enabled */}
-      {subtitlesEnabled && isReceivingAudio && (
-        <div className="fixed bottom-10 left-0 right-0 px-4 z-40 pointer-events-none">
-          <div className="max-w-2xl mx-auto text-left">
-            {subtitles.slice(-3).map((subtitle) => (
-              <div
-                key={subtitle.id}
-                className="px-2 py-2 inline-block"
-                style={{
-                  backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                  color: '#ffffff',
-                  fontSize: '13px',
-                  lineHeight: '1.4'
-                }}
-              >
-                {subtitle.text}
-              </div>
-            ))}
-
-            {currentTranscript && (
-              <div
-                className="px-2 py-2 inline-block"
-                style={{
-                  backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                  color: '#ffffff',
-                  fontSize: '13px',
-                  lineHeight: '1.4'
-                }}
-              >
-                {currentTranscript}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-      
-      <audio 
-        ref={audioElementRef} 
-        autoPlay 
-        playsInline
-        style={{ display: 'none' }}
-      />
+      {subtitlesEnabled && live && <Captions subtitles={subtitles} currentTranscript={currentTranscript} />}
+      {audioBox}
     </div>
   );
 };

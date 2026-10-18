@@ -207,3 +207,12 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* The Stop button pulses softly while a session is being recorded */
+@keyframes rec-pulse {
+  0% { box-shadow: 0 0 0 0 rgb(220 38 38 / 0.45); }
+  70% { box-shadow: 0 0 0 8px rgb(220 38 38 / 0); }
+  100% { box-shadow: 0 0 0 0 rgb(220 38 38 / 0); }
+}
+.rec-pulse { animation: rec-pulse 1.6s ease-out infinite; }
+@media (prefers-reduced-motion: reduce) { .rec-pulse { animation: none; } }

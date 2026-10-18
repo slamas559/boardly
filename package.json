@@ -16,6 +16,7 @@
     "autoprefixer": "^10.4.21",
     "axios": "^1.10.0",
     "framer-motion": "^12.23.26",
+    "livekit-client": "^2.23.0",
     "lucide-react": "^0.546.0",
     "mathjax-full": "^3.2.2",
     "pdfjs-dist": "^3.11.174",

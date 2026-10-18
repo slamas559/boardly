@@ -51,7 +51,9 @@ const Thumb = memo(function Thumb({ n, active, onClick, annotated }) {
   );
 });
 
-export default function PDFWorkspace({ room, socket, isHost, initial, visible }) {
+export default function PDFWorkspace({ room, socket, isHost, canDraw = false, participantKey = null, initial, visible }) {
+  // The host, or a listener the host has let draw (who can only change their own annotations)
+  const editing = isHost || canDraw;
   const roomId = room._id;
   const scrollRef = useRef(null);
   const surfaceRef = useRef(null);
@@ -83,7 +85,9 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
     () => new ObjectStore({ onLocalOps: (ops) => chunkOps(ops).forEach((part) => socket?.emit("pdf-op", { room: roomId, ops: part })) }),
     [socket, roomId]
   );
-  const tools = useAnnotationTools({ mode: "pdf", store, surfaceRef, enabled: isHost && visible });
+  useEffect(() => { store.setAuthor({ host: isHost, key: participantKey }); }, [store, isHost, participantKey]);
+  const canEdit = useCallback((o) => isHost || Boolean(participantKey && o.by === participantKey), [isHost, participantKey]);
+  const tools = useAnnotationTools({ mode: "pdf", store, surfaceRef, enabled: editing && visible });
   const inspector = useInspector(tools);
 
   /* initial / late-join state */
@@ -464,9 +468,11 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
                   store={store}
                   page={page}
                   mode="pdf"
-                  tool={isHost ? tools.tool : "select"}
+                  tool={editing ? tools.tool : "select"}
                   styles={tools.styles}
-                  readOnly={!isHost}
+                  readOnly={!editing}
+                  asListener={!isHost}
+                  canEdit={canEdit}
                   view={view}
                   background="none"
                   pageSize={pageSize}
@@ -477,9 +483,9 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
                   onZoom={onZoom}
                   onLaser={isHost ? onLaser : undefined}
                   remoteLaser={isHost ? null : laser && laser.page === page ? laser : null}
-                  remotePreviews={isHost ? null : [...remotePreviews.values()].filter((preview) => preview.page === page).map((preview) => preview.obj)}
+                  remotePreviews={[...remotePreviews.values()].filter((preview) => preview.page === page).map((preview) => preview.obj)}
                   onStrokeChunk={onStrokeNoop}
-                  onLivePreview={isHost ? onPreview : undefined}
+                  onLivePreview={editing ? onPreview : undefined}
                   onEditingChange={tools.setEditingObj}
                   onToolChange={tools.setTool}
                   keepTool={tools.keepTool}
@@ -498,8 +504,8 @@ export default function PDFWorkspace({ room, socket, isHost, initial, visible })
           </div>
 
           {/* Style settings dock beside the page on desktop; a bottom sheet on phones */}
-          {isHost && <InspectorDock mode="pdf" tools={tools} store={store} surfaceRef={surfaceRef} inspector={inspector} />}
-          {isHost && <ToolDock mode="pdf" tools={tools} store={store} inspector={inspector} surfaceRef={surfaceRef} />}
+          {editing && <InspectorDock mode="pdf" tools={tools} store={store} surfaceRef={surfaceRef} inspector={inspector} />}
+          {editing && <ToolDock mode="pdf" restricted={!isHost} tools={tools} store={store} inspector={inspector} surfaceRef={surfaceRef} />}
         </div>
       </Document>
 

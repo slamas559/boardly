@@ -11,6 +11,7 @@ import { useSocket } from "../context/SocketContext";
 import api from "../utils/api";
 import BoardWorkspace from "../board/BoardWorkspace.jsx";
 import PDFWorkspace from "../board/PDFWorkspace.jsx";
+import ParticipantsPanel from "./ParticipantsPanel.jsx";
 import { QaPanel, useQaManager } from "../components/layout/QaManager";
 import VoiceBroadcast from "../components/layout/VoiceBroadcast";
 import SessionRecorder from "../components/layout/SessionRecorder.jsx";
@@ -68,7 +69,11 @@ export default function RoomShell({ room, isTutor }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [connected, setConnected] = useState(true);
-  const [isRecording, setIsRecording] = useState(false);
+  const [myKey, setMyKey] = useState(null);
+  const [roster, setRoster] = useState(null); // the host's full list of people (big rooms only send it to the host)
+  const [flags, setFlags] = useState({ drawAll: false, speakAll: false }); // room-wide switches
+  const [me, setMe] = useState({ draw: false, speak: false }); // what the host allowed me personally
+  const [access, setAccess] = useState({ draw: [], speak: [] }); // the host's view of every individual grant
 
   const fullscreen = useFullscreen();
   const qa = useQaManager(room, socket, isTutor);
@@ -88,19 +93,25 @@ export default function RoomShell({ room, isTutor }) {
     const join = () => {
       socket.emit("join-room", { roomId: room._id, user: { id: profile._id || "", name: profile.name || "Guest", isTutor, clientId: getClientId() } });
     };
-    const onState = (s) => { setRoomState(s); setIsHost(Boolean(s.isHost)); setIsRecording(Boolean(s.isRecording)); };
+    const onState = (s) => { setRoomState(s); setIsHost(Boolean(s.isHost)); setMyKey(s.participantKey || null); };
     const onConnect = () => { setConnected(true); join(); };
     const onDisconnect = () => setConnected(false);
     const onView = (v) => setView(v);
     const onStats = (s) => setStats(s);
-    const onRecording = ({ active }) => setIsRecording(Boolean(active));
+    const onRoster = ({ userList }) => setRoster(userList);
+    const onFlags = (f) => setFlags(f);
+    const onMe = (m) => setMe(m);
+    const onAccess = (a) => setAccess(a);
 
     socket.on("room-state", onState);
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
     socket.on("change-view", onView);
     socket.on("room-stats-update", onStats);
-    socket.on("recording-state", onRecording);
+    socket.on("room-roster", onRoster);
+    socket.on("access-flags", onFlags);
+    socket.on("access-me", onMe);
+    socket.on("access-state", onAccess);
     if (socket.connected) join();
     return () => {
       socket.off("room-state", onState);
@@ -108,9 +119,16 @@ export default function RoomShell({ room, isTutor }) {
       socket.off("disconnect", onDisconnect);
       socket.off("change-view", onView);
       socket.off("room-stats-update", onStats);
-      socket.off("recording-state", onRecording);
+      socket.off("room-roster", onRoster);
+      socket.off("access-flags", onFlags);
+      socket.off("access-me", onMe);
+      socket.off("access-state", onAccess);
     };
   }, [socket, room._id, isRoomActive, profile, isTutor]);
+
+  const setAccessFor = (kind, key, allowed) => socket.emit("access-set", { room: room._id, kind, key, allowed });
+  const canDraw = isHost || flags.drawAll || me.draw;
+  const canSpeak = isHost || flags.speakAll || me.speak;
 
   const changeView = (v) => {
     if (!isHost) return;
@@ -142,7 +160,7 @@ export default function RoomShell({ room, isTutor }) {
     return <InactiveRoom room={room} isTutor={isTutor} onNavigateToLobby={() => navigate("/lobby")} onActivateRoom={() => setStatus("active")} />;
   }
 
-  const listeners = stats.userList || [];
+  const listeners = (isHost && roster) || stats.userList || [];
   const leave = () => navigate(isTutor ? "/lobby" : "/dashboard");
 
   return (
@@ -182,7 +200,7 @@ export default function RoomShell({ room, isTutor }) {
         <div className="ml-auto flex items-center gap-0.5">
           {!connected && <span role="status" className="mr-1 rounded-sm bg-danger-soft px-2 py-1 text-xs text-danger">Reconnecting…</span>}
 
-          <VoiceBroadcast socket={socket} room={room} isTutor={isHost} />
+          <VoiceBroadcast socket={socket} room={room} isTutor={isHost} canSpeak={canSpeak} />
           {isHost && <SessionRecorder room={room} socket={socket} />}
 
           <div ref={peopleRef} className="relative">
@@ -193,18 +211,7 @@ export default function RoomShell({ room, isTutor }) {
               <Users size={17} strokeWidth={1.8} /> <span className="tabular-nums">{stats.totalUsers ?? listeners.length}</span>
             </button>
             {peopleOpen && (
-              <div className="float-panel absolute right-0 top-full z-40 mt-1.5 w-64 p-2">
-                <div className="px-2 pb-1.5 pt-1 text-[11px] font-medium uppercase tracking-wider text-muted">In this room · {stats.totalUsers ?? listeners.length}</div>
-                <ul className="scroll-thin max-h-72 overflow-y-auto">
-                  {listeners.length === 0 && <li className="px-2 py-2 text-sm text-muted">Just you for now.</li>}
-                  {listeners.map((u, i) => (
-                    <li key={u.socketId || i} className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-sunken">
-                      <span className="truncate">{u.name || "Guest"}</span>
-                      {u.isTutor && <span className="ml-2 rounded-sm bg-accent-soft px-1.5 py-0.5 text-[10px] font-medium text-accent">Host</span>}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              <ParticipantsPanel isHost={isHost} users={listeners} total={stats.totalUsers ?? listeners.length} flags={flags} access={access} myKey={myKey} onSet={setAccessFor} />
             )}
           </div>
 
@@ -273,19 +280,12 @@ export default function RoomShell({ room, isTutor }) {
         </div>
       </header>
 
-      {isRecording && (
-        <div role="status" className="z-20 flex h-8 shrink-0 items-center justify-center gap-2 bg-danger px-3 text-xs font-medium text-white">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
-          This session is being recorded by the host.
-        </div>
-      )}
-
       <main className="relative min-h-0 flex-1">
         <div className={`absolute inset-0 ${view === "whiteboard" ? "" : "invisible pointer-events-none"}`} aria-hidden={view !== "whiteboard"}>
-          <BoardWorkspace room={room} socket={socket} isHost={isHost} initial={roomState} visible={view === "whiteboard"} apiRef={boardApiRef} />
+          <BoardWorkspace room={room} socket={socket} isHost={isHost} canDraw={canDraw} participantKey={myKey} initial={roomState} visible={view === "whiteboard"} apiRef={boardApiRef} />
         </div>
         <div className={`absolute inset-0 ${view === "pdf" ? "" : "invisible pointer-events-none"}`} aria-hidden={view !== "pdf"}>
-          <PDFWorkspace room={room} socket={socket} isHost={isHost} initial={roomState} visible={view === "pdf"} />
+          <PDFWorkspace room={room} socket={socket} isHost={isHost} canDraw={canDraw} participantKey={myKey} initial={roomState} visible={view === "pdf"} />
         </div>
       </main>
 

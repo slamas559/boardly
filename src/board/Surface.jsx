@@ -26,6 +26,13 @@ import { Pause, Play } from "lucide-react";
 let clipboard = [];
 const LASER_COLOR = "#E2492B";
 
+// A copy belongs to whoever pastes it, not to the person who drew the original
+const copyWithoutAuthor = (o) => {
+  const copy = JSON.parse(JSON.stringify(o));
+  delete copy.by;
+  return copy;
+};
+
 const Surface = forwardRef(function Surface(
   {
     store,
@@ -34,6 +41,8 @@ const Surface = forwardRef(function Surface(
     tool = "select",
     styles,
     readOnly = false,
+    canEdit,
+    asListener = false,
     view,
     background = "grid",
     pageSize = null, // PDF only: world size of the page
@@ -69,7 +78,7 @@ const Surface = forwardRef(function Surface(
 
   // Latest props for event handlers without re-binding
   const live = useRef({});
-  live.current = { store, page, mode, tool, styles, readOnly, view, pageSize, pageEl, selectedIds, size, editing, onLaser, onLivePreview, remotePreviews };
+  live.current = { store, page, mode, tool, styles, readOnly, canEdit, asListener, view, pageSize, pageEl, selectedIds, size, editing, onLaser, onLivePreview, remotePreviews };
 
   const drag = useRef(null);
   const pointers = useRef(new Map());
@@ -135,7 +144,8 @@ const Surface = forwardRef(function Surface(
     const selected = [];
     const previewIds = new Set((previews || []).map((preview) => preview.id));
     // Covers are painted last, over everything else on the page, so they really hide what is under them
-    const viewer = live.current.readOnly ? "listener" : "host";
+    // A listener who was let draw still sees covers as every other listener does
+    const viewer = live.current.readOnly || live.current.asListener ? "listener" : "host";
     const covers = [];
     for (const base of objs) {
       if (ed && ed.id === base.id) continue;
@@ -294,8 +304,10 @@ const Surface = forwardRef(function Surface(
 
   // Newest first, but a cover is always last: you can still pick the content under it, and a click on the
   // empty part of a cover picks the cover
+  const editable = (o) => live.current.canEdit?.(o) ?? true;
   const objectsTopFirst = () => {
-    const all = live.current.store.onPage(live.current.page);
+    // A listener who was let draw can only pick up their own work, so the host's objects are skipped
+    const all = live.current.store.onPage(live.current.page).filter(editable);
     return [...all.filter((o) => o.type !== "cover").reverse(), ...all.filter((o) => o.type === "cover").reverse()];
   };
 
@@ -393,15 +405,15 @@ const Surface = forwardRef(function Surface(
       onSelectedChange?.([]);
     },
     selectAll() {
-      onSelectedChange?.(live.current.store.onPage(live.current.page).map((o) => o.id));
+      onSelectedChange?.(live.current.store.onPage(live.current.page).filter(editable).map((o) => o.id));
     },
     copy() {
-      clipboard = selectedObjects().map((o) => JSON.parse(JSON.stringify(o)));
+      clipboard = selectedObjects().map(copyWithoutAuthor);
     },
     paste(offset = 24) {
       if (!clipboard.length) return;
       const { page: pg } = live.current;
-      const copies = clipboard.filter((o) => o.type !== "markup").map((o) => ({ ...JSON.parse(JSON.stringify(o)), id: uid(), page: pg }));
+      const copies = clipboard.filter((o) => o.type !== "markup").map((o) => ({ ...copyWithoutAuthor(o), id: uid(), page: pg }));
       remapGroupIds(copies, uid); // a pasted group is a new group, not glued to the original
       const ops = copies.map((copy) => ({ op: "add", obj: { ...copy, ...movePatch(copy, offset, offset) } }));
       if (!ops.length) return;
@@ -761,7 +773,7 @@ const Surface = forwardRef(function Surface(
   const eraseAt = (p) => {
     const { view: v, store: s, page: pg } = live.current;
     const tol = 10 / v.k;
-    for (const o of s.onPage(pg)) {
+    for (const o of s.onPage(pg).filter(editable)) {
       if (!erasing.current.has(o.id) && o.type !== "highlight" && o.type !== "instrument" && o.type !== "cover" && hitObject(o, p, tol)) {
         erasing.current.add(o.id);
         sharePreview({ ...o, previewAlpha: 0.2 });
@@ -1116,7 +1128,7 @@ const Surface = forwardRef(function Surface(
         if (e.pointerType !== "mouse") emitLaser(null, false);
         break;
       case "marquee": {
-        const hits = expandToGroups(s, pg, s.onPage(pg).filter((o) => objectInRect(o, d.rect)).map((o) => o.id));
+        const hits = expandToGroups(s, pg, s.onPage(pg).filter((o) => editable(o) && objectInRect(o, d.rect)).map((o) => o.id));
         onSelectedChange?.([...new Set([...(d.base || []), ...hits])]);
         break;
       }
