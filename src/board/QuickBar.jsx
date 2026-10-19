@@ -3,6 +3,7 @@
 // object, flips below when there is no room, and hides while the pointer is down so it never
 // gets in the way of dragging, resizing or panning.
 import { useCallback, useEffect, useRef, useState } from "react";
+import FloatingPanel from "../components/FloatingPanel.jsx";
 import { BringToFront, ChevronDown, ChevronUp, Copy, Eye, EyeOff, Group, Layers, Pencil, SendToBack, SlidersHorizontal, Trash2, Ungroup } from "lucide-react";
 import { HIGHLIGHT_PALETTE, PALETTE } from "./constants.js";
 import { getBounds, unionBounds } from "./geometry.js";
@@ -73,11 +74,12 @@ export default function QuickBar({ tools, store, surfaceRef, inspector, view, si
   const aid = objects.length === 1 && objects[0].type === "aid" ? objects[0] : null;
   const chart = objects.length === 1 && objects[0].type === "stats" ? objects[0] : null;
   const cover = objects.length === 1 && objects[0].type === "cover" ? objects[0] : null;
-  const own = graph || formula || aid || chart || cover; // these keep their colour on the object itself
-  const colour = graph ? graph.color || "#2540D9" : formula ? formula.color || "#17181C" : aid || chart ? (aid || chart).color || "#2540D9" : cover ? cover.color || COVER_DEFAULT_COLOR : group && activeStyle ? activeStyle.color : null;
+  const solid = objects.length === 1 && objects[0].type === "solid" ? objects[0] : null;
+  const own = graph || formula || aid || chart || cover || solid; // these keep their colour on the object itself
+  const colour = graph ? graph.color || "#2540D9" : formula ? formula.color || "#17181C" : aid || chart || solid ? (aid || chart || solid).color || "#2540D9" : cover ? cover.color || COVER_DEFAULT_COLOR : group && activeStyle ? activeStyle.color : null;
   const palette = own ? PALETTE.filter((c) => c !== "#FFFFFF") : group === "highlighter" || group === "markup" ? HIGHLIGHT_PALETTE : PALETTE;
   const pickColour = (c) => {
-    if (own) store.commit([{ op: "update", id: own.id, patch: { color: c } }], { coalesce: `${graph ? "graph" : formula ? "equation" : aid ? "aid" : cover ? "cover" : "stats"}-color:${own.id}` });
+    if (own) store.commit([{ op: "update", id: own.id, patch: { color: c } }], { coalesce: `${graph ? "graph" : formula ? "equation" : aid ? "aid" : cover ? "cover" : solid ? "solid" : "stats"}-color:${own.id}` });
     else tools.setStyle({ color: c });
     setPaletteOpen(false);
   };
@@ -125,8 +127,8 @@ export default function QuickBar({ tools, store, surfaceRef, inspector, view, si
             {cover.open ? <EyeOff size={15} /> : <Eye size={15} />} {cover.open ? "Hide again" : "Reveal"}
           </button>
         )}
-        {!inspector.visible && (inspector.kind === "graph" || inspector.kind === "equation" || inspector.kind === "aid" || inspector.kind === "stats") && (
-          <button type="button" onClick={() => inspector.open()} title={inspector.kind === "graph" ? "Edit graph" : inspector.kind === "equation" ? "Edit equation" : inspector.kind === "stats" ? "Edit chart" : "Edit math aid"} className="flex h-8 items-center gap-1.5 rounded-md px-2 text-sm text-gray-700 hover:bg-sunken">
+        {!inspector.visible && (inspector.kind === "graph" || inspector.kind === "equation" || inspector.kind === "aid" || inspector.kind === "stats" || inspector.kind === "solid") && (
+          <button type="button" onClick={() => inspector.open()} title={inspector.kind === "graph" ? "Edit graph" : inspector.kind === "equation" ? "Edit equation" : inspector.kind === "stats" ? "Edit chart" : inspector.kind === "solid" ? "Edit solid" : "Edit math aid"} className="flex h-8 items-center gap-1.5 rounded-md px-2 text-sm text-gray-700 hover:bg-sunken">
             <Pencil size={15} /> Edit
           </button>
         )}
@@ -169,7 +171,7 @@ export default function QuickBar({ tools, store, surfaceRef, inspector, view, si
         </button>
 
         {arrangeOpen && canArrange && (
-          <div role="menu" aria-label="Arrange" className={`float-panel absolute w-56 p-1 ${above ? "bottom-full mb-2" : "top-full mt-2"} ${alignRight ? "right-0" : "left-0"}`}>
+          <FloatingPanel role="menu" aria-label="Arrange" className={`absolute w-56 p-1 ${above ? "bottom-full mb-2" : "top-full mt-2"} ${alignRight ? "right-0" : "left-0"}`}>
             {ARRANGE_ITEMS.map(({ mode, label, hint, Icon }) => (
               <button key={mode} type="button" role="menuitem" onClick={() => arrange(mode)} className="flex h-9 w-full items-center gap-2.5 rounded-md px-2 text-left text-sm text-gray-800 hover:bg-sunken">
                 <Icon size={15} />
@@ -177,13 +179,13 @@ export default function QuickBar({ tools, store, surfaceRef, inspector, view, si
                 <span className="text-[11px] text-muted">{hint}</span>
               </button>
             ))}
-          </div>
+          </FloatingPanel>
         )}
 
         {paletteOpen && colour && (
-          <div className={`float-panel absolute p-2.5 ${above ? "bottom-full mb-2" : "top-full mt-2"} ${alignRight ? "right-0" : "left-0"}`} style={{ width: 232 }}>
+          <FloatingPanel className={`absolute p-2.5 ${above ? "bottom-full mb-2" : "top-full mt-2"} ${alignRight ? "right-0" : "left-0"}`} style={{ width: 232 }}>
             <Swatches colors={palette} value={colour} onPick={pickColour} />
-          </div>
+          </FloatingPanel>
         )}
       </div>
     </div>

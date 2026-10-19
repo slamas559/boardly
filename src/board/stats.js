@@ -13,7 +13,7 @@ const isNumber = (value) => typeof value === "number" && Number.isFinite(value);
 /* ------------------------------ reading pasted data ------------------------------ */
 
 /** "1,234" or "12 %" style cells to a number, or null when the cell is not a number. */
-function cellNumber(cell) {
+export function cellNumber(cell) {
   const text = String(cell ?? "").trim().replace(/−/g, "-").replace(/%$/, "").trim();
   if (!text || !/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(text)) return null;
   const value = Number(text);

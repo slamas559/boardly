@@ -35,7 +35,8 @@ export function useInspector(tools) {
   const selectedEquation = selectedObjects.length === 1 && selectedObjects[0].type === "equation" ? selectedObjects[0] : null;
   const selectedAid = selectedObjects.length === 1 && selectedObjects[0].type === "aid" ? selectedObjects[0] : null;
   const selectedStats = selectedObjects.length === 1 && selectedObjects[0].type === "stats" ? selectedObjects[0] : null;
-  const kind = selectedGraph ? "graph" : selectedEquation ? "equation" : selectedAid ? "aid" : selectedStats ? "stats" : group && activeStyle && showsStyle ? "style" : null;
+  const selectedSolid = selectedObjects.length === 1 && selectedObjects[0].type === "solid" ? selectedObjects[0] : null;
+  const kind = selectedGraph ? "graph" : selectedEquation ? "equation" : selectedAid ? "aid" : selectedStats ? "stats" : selectedSolid ? "solid" : group && activeStyle && showsStyle ? "style" : null;
   const visible = kind !== null && (desktop ? desktopOpen : sheet.open);
 
   const rememberDesktop = useCallback((value) => {
@@ -45,8 +46,8 @@ export function useInspector(tools) {
 
   // Phones: selecting a graph slides the sheet up to its "peek" height so the equation can be edited at once;
   // aids and charts open at half height (a formula is edited right on the board, so it leaves the sheet alone)
-  const panelId = selectedGraph?.id ?? selectedAid?.id ?? selectedStats?.id ?? null; // a formula is edited on the board, so it does not pull the sheet up
-  const panelSnap = selectedAid || selectedStats ? "half" : "peek";
+  const panelId = selectedGraph?.id ?? selectedAid?.id ?? selectedStats?.id ?? selectedSolid?.id ?? null; // a formula is edited on the board, so it does not pull the sheet up
+  const panelSnap = selectedAid || selectedStats || selectedSolid ? "half" : "peek";
   const lastPanelId = useRef(null);
   useEffect(() => {
     if (!desktop) {
@@ -73,7 +74,7 @@ export function useInspector(tools) {
   }, [desktop]);
 
   return {
-    kind, selectedGraph, selectedEquation, selectedAid, selectedStats, desktop, visible, open, close, toggle, onToolPicked, sheet, setSheet, setSheetHeight,
+    kind, selectedGraph, selectedEquation, selectedAid, selectedStats, selectedSolid, desktop, visible, open, close, toggle, onToolPicked, sheet, setSheet, setSheetHeight,
     dockWidth: desktop && visible ? DOCK_WIDTH : 0, // how much canvas width the dock takes
     insetBottom: !desktop && visible ? sheetHeight + PHONE_RAIL_CLEARANCE : 0, // how much canvas height a phone sheet covers
   };

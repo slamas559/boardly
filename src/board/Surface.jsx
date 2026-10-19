@@ -8,6 +8,7 @@ import {
 } from "./constants.js";
 import { createStabilizer, strokePattern, strokeTexture } from "./brushes.js";
 import { arrangeOps } from "./layers.js";
+import { solidLayout } from "./solids.js";
 import {
   dist, hitGraphGeometry, hitGraphTrace, hitObject, isMovable, measureText, movePatch, objectInRect, q, scalePatch,
 } from "./geometry.js";
@@ -682,6 +683,20 @@ const Surface = forwardRef(function Surface(
       default: {
         // select
         const selected = selectedObjects();
+        if (selected.length === 1 && selected[0].type === "solid") {
+          // Pressing inside the 3D view of the selected solid and dragging turns it
+          const solid = selected[0];
+          const view3d = solidLayout(solid).viewport;
+          if (p[0] >= view3d.x && p[0] <= view3d.x + view3d.w && p[1] >= view3d.y && p[1] <= view3d.y + view3d.h) {
+            e.preventDefault();
+            drag.current = {
+              type: "graphCamera", obj: solid, start: [e.clientX, e.clientY],
+              azimuth: solid.azimuth ?? 38, elevation: solid.elevation ?? 24, moved: false, lowest: 4, highest: 86,
+            };
+            canvas.style.cursor = "grabbing";
+            break;
+          }
+        }
         if (selected.length === 1 && selected[0].type === "graph") {
           const graph = selected[0];
           const inPlot = p[0] >= graph.x + 42 && p[0] <= graph.x + graph.w - 12
@@ -1048,7 +1063,7 @@ const Surface = forwardRef(function Surface(
         const preview = {
           ...d.obj,
           azimuth: ((d.azimuth + deltaX * 0.7) % 360 + 360) % 360,
-          elevation: Math.max(12, Math.min(82, d.elevation - deltaY * 0.5)),
+          elevation: Math.max(d.lowest ?? 12, Math.min(d.highest ?? 82, d.elevation - deltaY * 0.5)),
         };
         transient.current.set(d.obj.id, preview);
         sharePreview(preview);

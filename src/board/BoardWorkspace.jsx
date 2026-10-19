@@ -16,6 +16,7 @@ import PaperPicker from "./PaperPicker.jsx";
 import { newAid } from "./mathAids.js";
 import { INSTRUMENTS, newInstrument } from "./geometryTools.js";
 import { CHARTS, newStats } from "./stats.js";
+import { SOLIDS, newSolid } from "./solids.js";
 import { newCover } from "./cover.js";
 import { useAnnotationTools } from "./useAnnotationTools.js";
 import { parseVideoLink } from "./mediaLinks.js";
@@ -332,7 +333,8 @@ export default function BoardWorkspace({ room, socket, isHost, canDraw = false, 
     const obj = kind === "cover" ? newCover(spot)
       : instrument ? newInstrument(kind, spot)
         : CHARTS.some((item) => item.id === kind) ? newStats(kind, spot)
-          : newAid(kind, spot);
+          : SOLIDS.some((item) => item.id === kind) ? newSolid(kind, spot)
+            : newAid(kind, spot);
     store.commit([{ op: "add", obj }]);
     tools.setSelectedIds([obj.id]);
     tools.setTool("select");
@@ -521,7 +523,7 @@ export default function BoardWorkspace({ room, socket, isHost, canDraw = false, 
         </div>
 
         {confirmClear && (
-          <div className="absolute inset-0 z-30 flex items-center justify-center bg-ink/30 p-4" role="dialog" aria-modal="true" aria-label="Clear page">
+          <div className="modal-safe absolute inset-0 z-30 flex items-center justify-center bg-ink/30" role="dialog" aria-modal="true" aria-label="Clear page">
             <div className="float-panel w-full max-w-sm p-5">
               <h3 className="text-base font-semibold">Clear page {page + 1}?</h3>
               <p className="mt-1.5 text-sm text-muted">Everything on this page is removed for everyone. You can undo it with Ctrl+Z.</p>

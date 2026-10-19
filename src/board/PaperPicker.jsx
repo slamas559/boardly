@@ -3,6 +3,7 @@
 // that paints the board, so what you tap is what you get.
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Grid3x3 } from "lucide-react";
+import FloatingPanel from "../components/FloatingPanel.jsx";
 import { DEFAULT_PAPER, PAPER_KINDS, PAPER_SCALES, PLANE_ORIGIN, drawPaper, paperId } from "./paper.js";
 
 const PREVIEW = { w: 92, h: 60, k: 0.9 };
@@ -70,7 +71,7 @@ export default function PaperPicker({ store, page, pageCount }) {
         <Grid3x3 size={15} />
       </button>
       {open && (
-        <div role="dialog" aria-label="Page paper" className="float-panel absolute bottom-full right-0 z-20 mb-2 w-[min(20.5rem,calc(100vw-1.5rem))] p-3">
+        <FloatingPanel role="dialog" aria-label="Page paper" className="absolute bottom-full right-0 z-20 mb-2 max-h-[calc(100dvh-8rem)] w-[min(20.5rem,calc(100vw-1.5rem))] overflow-y-auto p-3">
           <div className="mb-2 flex items-baseline justify-between">
             <h3 className="text-sm font-semibold">Paper</h3>
             <span className="text-[11px] text-muted">{allPages ? "All pages" : `Page ${page + 1}`}</span>
@@ -112,7 +113,7 @@ export default function PaperPicker({ store, page, pageCount }) {
             <input type="checkbox" checked={allPages} onChange={(e) => setAllPages(e.target.checked)} className="h-4 w-4" />
             Use on all {pageCount} {pageCount === 1 ? "page" : "pages"}
           </label>
-        </div>
+        </FloatingPanel>
       )}
     </div>
   );

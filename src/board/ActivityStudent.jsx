@@ -114,7 +114,7 @@ export default function ActivityStudent({ activity, onRespond }) {
   return (
     <section
       aria-label="Question from your teacher"
-      className="float-panel pointer-events-auto fixed inset-x-2 bottom-2 z-40 mx-auto flex max-h-[min(88dvh,46rem)] max-w-xl flex-col overflow-hidden pb-[env(safe-area-inset-bottom)] sm:bottom-4"
+      className="float-panel pointer-events-auto sheet-x fixed bottom-2 z-40 mx-auto flex max-h-[min(88dvh,46rem)] max-w-xl flex-col overflow-hidden pb-[env(safe-area-inset-bottom)] sm:bottom-4"
     >
       <button
         type="button"
@@ -156,7 +156,7 @@ export function Spotlight({ spotlight }) {
   useEffect(() => { setDismissed((current) => (current === token ? current : "")); }, [token]);
   if (!spotlight || dismissed === token) return null;
   return (
-    <div className="pointer-events-auto fixed inset-0 z-[80] flex flex-col items-center justify-center gap-3 bg-ink/80 p-4" role="dialog" aria-modal="true" aria-label="Shared working">
+    <div className="modal-safe pointer-events-auto fixed inset-0 z-[80] flex flex-col items-center justify-center gap-3 bg-ink/80" role="dialog" aria-modal="true" aria-label="Shared working">
       <div className="flex w-full max-w-3xl items-center justify-between text-white">
         <p className="text-sm font-medium">{spotlight.name ? `${spotlight.name}'s working` : "Shared working"}</p>
         <button type="button" onClick={() => setDismissed(token)} className="flex h-9 items-center gap-1.5 rounded-md bg-white/15 px-3 text-sm hover:bg-white/25"><X size={16} /> Close</button>

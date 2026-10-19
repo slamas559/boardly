@@ -78,6 +78,7 @@ export function getBounds(o) {
     case "equation":
     case "aid":
     case "stats":
+    case "solid":
     case "cover":
       return { x: o.x, y: o.y, w: o.w, h: o.h };
     case "instrument":
@@ -174,6 +175,7 @@ export function hitObject(o, p, tol) {
     case "equation":
     case "aid":
     case "stats":
+    case "solid":
     case "cover":
     case "table":
     case "media":
@@ -253,6 +255,7 @@ export function movePatch(o, dx, dy) {
     case "equation":
     case "aid":
     case "stats":
+    case "solid":
     case "cover":
     case "instrument":
     case "table":
@@ -285,6 +288,8 @@ export function scalePatch(o, sx, sy, ox, oy) {
       return { x: fx(o.x), y: fy(o.y), w: Math.max(160, o.w * Math.abs(sx)), h: Math.max(110, o.h * Math.abs(sy)) };
     case "stats":
       return { x: fx(o.x), y: fy(o.y), w: Math.max(320, o.w * Math.abs(sx)), h: Math.max(220, o.h * Math.abs(sy)) };
+    case "solid":
+      return { x: fx(o.x), y: fy(o.y), w: Math.max(300, o.w * Math.abs(sx)), h: Math.max(280, o.h * Math.abs(sy)) };
     case "cover":
       return { x: fx(o.x), y: fy(o.y), w: Math.max(60, o.w * Math.abs(sx)), h: Math.max(40, o.h * Math.abs(sy)) };
     case "instrument": {

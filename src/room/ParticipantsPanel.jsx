@@ -2,6 +2,7 @@
 // or one per person. Built to stay light in a big room: it searches, and draws at most MAX_ROWS people at a time.
 import { useMemo, useState } from "react";
 import { Mic, PenLine, Search } from "lucide-react";
+import FloatingPanel from "../components/FloatingPanel.jsx";
 
 const MAX_ROWS = 100;
 
@@ -48,7 +49,7 @@ export default function ParticipantsPanel({ isHost, users, total, flags, access,
   }, [users, query]);
 
   return (
-    <div className="float-panel absolute right-0 top-full z-40 mt-1.5 w-[min(20rem,calc(100vw-1rem))] p-2">
+    <FloatingPanel className="absolute right-0 top-full z-40 mt-1.5 w-[min(20rem,calc(100vw-1rem))] p-2">
       <div className="px-2 pb-1.5 pt-1 text-[11px] font-medium uppercase tracking-wider text-muted">In this room · {total}</div>
 
       {isHost && (
@@ -100,6 +101,6 @@ export default function ParticipantsPanel({ isHost, users, total, flags, access,
         {shown.more > 0 && <li className="px-2 py-2 text-xs text-muted">{shown.more} more. Search to find someone.</li>}
         {query && shown.rows.length === 0 && <li className="px-2 py-2 text-sm text-muted">No one matches.</li>}
       </ul>
-    </div>
+    </FloatingPanel>
   );
 }

@@ -293,7 +293,7 @@ export default function ActivityHost({ activity, students, actions, boardApi, on
   return (
     <aside
       aria-label="Class activity"
-      className="float-panel pointer-events-auto fixed inset-x-2 bottom-2 z-40 flex max-h-[min(86dvh,44rem)] flex-col overflow-hidden sm:inset-x-auto sm:bottom-auto sm:right-3 sm:top-14 sm:w-[26rem] sm:max-h-[calc(100dvh-4.5rem)]"
+      className="float-panel pointer-events-auto sheet-x fixed bottom-2 z-40 flex max-h-[min(86dvh,44rem)] flex-col overflow-hidden sm:bottom-auto sm:left-auto sm:right-3 sm:top-14 sm:w-[26rem] sm:max-h-[calc(100dvh-4.5rem)]"
     >
       <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-2.5">
         <h2 className="text-sm font-semibold">{activity ? "Class question" : "Ask the class"}</h2>

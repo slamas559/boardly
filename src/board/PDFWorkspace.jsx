@@ -510,7 +510,7 @@ export default function PDFWorkspace({ room, socket, isHost, canDraw = false, pa
       </Document>
 
       {confirmClear && (
-        <div className="absolute inset-0 z-30 flex items-center justify-center bg-ink/30 p-4" role="dialog" aria-modal="true" aria-label="Clear annotations">
+        <div className="modal-safe absolute inset-0 z-30 flex items-center justify-center bg-ink/30" role="dialog" aria-modal="true" aria-label="Clear annotations">
           <div className="float-panel w-full max-w-sm p-5">
             <h3 className="text-base font-semibold">Clear annotations on page {page}?</h3>
             <p className="mt-1.5 text-sm text-muted">Highlights, notes and drawings on this page are removed for everyone. You can undo it with Ctrl+Z.</p>

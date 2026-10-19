@@ -79,7 +79,7 @@ export const QaPanel = ({
   if (!qaPanelOpen) return null;
 
   return (
-    <div className="fixed inset-x-2 bottom-2 sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-80 bg-white rounded-lg shadow-xl z-40 border border-gray-200 flex flex-col max-h-[70dvh] sm:max-h-96">
+    <div className="sheet-x fixed bottom-2 sm:left-auto sm:right-4 sm:bottom-4 sm:w-80 bg-white rounded-lg shadow-xl z-40 border border-gray-200 flex flex-col max-h-[70dvh] sm:max-h-96">
       <div className="p-4 border-b border-gray-200 flex justify-between items-center">
         <h3 className="font-semibold text-gray-800">Questions & Answers</h3>
         <button 

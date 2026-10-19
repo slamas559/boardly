@@ -12,6 +12,7 @@ import api from "../utils/api";
 import BoardWorkspace from "../board/BoardWorkspace.jsx";
 import PDFWorkspace from "../board/PDFWorkspace.jsx";
 import ParticipantsPanel from "./ParticipantsPanel.jsx";
+import FloatingPanel from "../components/FloatingPanel.jsx";
 import { QaPanel, useQaManager } from "../components/layout/QaManager";
 import VoiceBroadcast from "../components/layout/VoiceBroadcast";
 import SessionRecorder from "../components/layout/SessionRecorder.jsx";
@@ -252,7 +253,7 @@ export default function RoomShell({ room, isTutor }) {
           <div ref={menuRef} className="relative">
             <IconButton icon={MoreHorizontal} label="More" active={menuOpen} onClick={() => setMenuOpen((v) => !v)} />
             {menuOpen && (
-              <div className="float-panel absolute right-0 top-full z-40 mt-1.5 w-60 p-1.5">
+              <FloatingPanel className="absolute right-0 top-full z-40 mt-1.5 max-h-[calc(100dvh-4rem)] w-60 overflow-y-auto p-1.5">
                 <button type="button" onClick={copyLink} className="flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-sm hover:bg-sunken"><Link2 size={15} /> Copy invite link</button>
                 <div className="px-2.5 pb-1.5 text-xs text-muted">Code <span className="font-mono text-gray-800">{room.code}</span></div>
                 {isHost && (
@@ -274,7 +275,7 @@ export default function RoomShell({ room, isTutor }) {
                     <button type="button" onClick={leave} className="flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-sm hover:bg-sunken"><LogOut size={15} /> Leave room</button>
                   </>
                 )}
-              </div>
+              </FloatingPanel>
             )}
           </div>
         </div>
@@ -316,7 +317,7 @@ export default function RoomShell({ room, isTutor }) {
       <ToastContainer position="top-center" autoClose={1800} hideProgressBar newestOnTop closeOnClick pauseOnFocusLoss={false} theme="dark" toastStyle={{ borderRadius: 6, fontSize: 14 }} />
 
       {confirmEnd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4" role="dialog" aria-modal="true" aria-label="End session">
+        <div className="modal-safe fixed inset-0 z-50 flex items-center justify-center bg-ink/40" role="dialog" aria-modal="true" aria-label="End session">
           <div className="float-panel w-full max-w-sm p-5">
             <div className="flex items-start justify-between">
               <h3 className="text-base font-semibold">End this session?</h3>

@@ -83,7 +83,7 @@ export default function Lobby() {
       </main>
 
       {toDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4" role="dialog" aria-modal="true" aria-label="Delete room">
+        <div className="modal-safe fixed inset-0 z-50 flex items-center justify-center bg-ink/40" role="dialog" aria-modal="true" aria-label="Delete room">
           <div className="float-panel w-full max-w-sm p-5">
             <h2 className="text-base font-semibold">Delete “{toDelete.topic}”?</h2>
             <p className="mt-1.5 text-sm text-muted">The board and document in this room are removed permanently.</p>

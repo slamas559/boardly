@@ -7,6 +7,7 @@ import { findKeyPoints, formatNumber, isExplicitGraph, tracePoint } from "./grap
 import { equationImage } from "./mathRender.js";
 import { drawAid } from "./aidRender.js";
 import { drawStats } from "./statsRender.js";
+import { drawSolid } from "./solidRender.js";
 import { drawCover } from "./cover.js";
 import { drawInstrument, drawInstrumentSelection, drawMeasure } from "./instrumentRender.js";
 
@@ -16,6 +17,9 @@ const graphFunctionCache = new Map();
 const graphRegionCache = new Map();
 const mediaCache = new Map();
 const videoPlaybackCache = new Map();
+let solid3dModule;
+let solid3dLoad;
+let solid3dLoadError = "";
 let graph3dModule;
 let graph3dLoad;
 let graph3dLoadError = "";
@@ -27,6 +31,19 @@ function loadGraph3d() {
       if (typeof window !== "undefined") window.dispatchEvent(new Event("boardly-3d-renderer-ready"));
     }).catch((error) => {
       graph3dLoadError = error instanceof Error ? error.message : "The 3D renderer could not be loaded.";
+      if (typeof window !== "undefined") window.dispatchEvent(new Event("boardly-3d-renderer-ready"));
+    });
+  }
+}
+
+// The 3D solids load their renderer (three.js) the first time one is on the board
+function loadSolid3d() {
+  if (!solid3dLoad) {
+    solid3dLoad = import("./solid3d.js").then((module) => {
+      solid3dModule = module;
+      if (typeof window !== "undefined") window.dispatchEvent(new Event("boardly-3d-renderer-ready"));
+    }).catch((error) => {
+      solid3dLoadError = error instanceof Error ? error.message : "The 3D renderer could not be loaded.";
       if (typeof window !== "undefined") window.dispatchEvent(new Event("boardly-3d-renderer-ready"));
     });
   }
@@ -722,6 +739,7 @@ export function drawObject(ctx, o, { k = 1, pageSize, alpha = 1, viewer = "host"
     case "equation": drawEquation(ctx, o); break;
     case "aid": drawAid(ctx, o); break;
     case "stats": drawStats(ctx, o); break;
+    case "solid": loadSolid3d(); drawSolid(ctx, o, solid3dModule, solid3dLoadError); break;
     case "cover": drawCover(ctx, o, viewer, k); break;
     case "media": drawMedia(ctx, o); break;
     case "text": drawText(ctx, o); break;

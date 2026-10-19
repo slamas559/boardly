@@ -7,6 +7,7 @@ import { drawInstrument } from "./instrumentRender.js";
 import { drawStats } from "./statsRender.js";
 import { drawCover, newCover } from "./cover.js";
 import { CHARTS, newStats } from "./stats.js";
+import { SOLIDS } from "./solids.js";
 
 const PREVIEW_WIDTH = 288;
 
@@ -100,6 +101,24 @@ function InstrumentPreview({ kind }) {
   return <canvas ref={ref} className="block h-auto w-full rounded-lg" aria-hidden="true" />;
 }
 
+const SOLID_ART = {
+  cube: <><polygon points="60,10 95,28 60,46 25,28" /><polygon points="25,28 60,46 60,64 25,46" /><polygon points="60,46 95,28 95,46 60,64" /></>,
+  cuboid: <><polygon points="14,28 54,14 106,26 66,40" /><polygon points="14,28 66,40 66,62 14,50" /><polygon points="66,40 106,26 106,48 66,62" /></>,
+  sphere: <><circle cx="60" cy="36" r="28" /><ellipse cx="60" cy="36" rx="28" ry="9" /><ellipse cx="60" cy="36" rx="10" ry="28" /></>,
+  cylinder: <><ellipse cx="60" cy="18" rx="26" ry="8" /><path d="M34 18v36a26 8 0 0 0 52 0V18" /></>,
+  cone: <><path d="M34 52L60 8l26 44" /><ellipse cx="60" cy="52" rx="26" ry="9" /></>,
+  pyramid: <><polygon points="60,8 22,48 58,64" /><polygon points="60,8 58,64 100,48" /><path d="M60 8L64 38M22 48l42-10 36 10" strokeDasharray="3 3" fill="none" /></>,
+  prism: <><polygon points="16,60 56,60 36,22" /><polygon points="56,60 106,48 86,10 36,22" /><path d="M16 60l50-12 40 0" strokeDasharray="3 3" fill="none" /></>,
+};
+
+function SolidPreview({ kind }) {
+  return (
+    <svg viewBox="0 0 120 72" className="block h-auto w-full rounded-lg bg-sunken" aria-hidden="true">
+      <g fill="#2540D9" fillOpacity="0.14" stroke="#2540D9" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round">{SOLID_ART[kind]}</g>
+    </svg>
+  );
+}
+
 export default function AidDialog({ onClose, onPick }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
@@ -108,11 +127,11 @@ export default function AidDialog({ onClose, onPick }) {
   }, [onClose]);
 
   return (
-    <div className="pointer-events-auto fixed inset-0 z-[110] flex items-center justify-center bg-ink/40 p-4" role="dialog" aria-modal="true" aria-labelledby="aid-dialog-title" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="modal-safe pointer-events-auto fixed inset-0 z-[110] flex items-center justify-center bg-ink/40" role="dialog" aria-modal="true" aria-labelledby="aid-dialog-title" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="float-panel max-h-[calc(100dvh-2rem)] w-full max-w-2xl overflow-y-auto p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 id="aid-dialog-title" className="text-base font-semibold">Math aids, data and class tools</h3>
+            <h3 id="aid-dialog-title" className="text-base font-semibold">Math aids, data, 3D solids and class tools</h3>
             <p className="mt-0.5 text-sm text-muted">Drop one on the board, then change it live while you teach.</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-sm text-muted hover:bg-sunken">Close</button>
@@ -144,6 +163,23 @@ export default function AidDialog({ onClose, onPick }) {
               className="flex flex-col gap-2 rounded-lg border border-line bg-white p-2 text-left transition-colors hover:border-accent hover:bg-accent-soft focus-visible:border-accent"
             >
               <ChartPreview chart={item.id} />
+              <span className="px-1 pb-1">
+                <span className="block text-sm font-medium">{item.label}</span>
+                <span className="block text-xs text-muted">{item.hint}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+        <h4 className="mt-5 text-[11px] font-medium uppercase tracking-wider text-muted">3D solids</h4>
+        <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {SOLIDS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onPick(item.id)}
+              className="flex flex-col gap-2 rounded-lg border border-line bg-white p-2 text-left transition-colors hover:border-accent hover:bg-accent-soft focus-visible:border-accent"
+            >
+              <SolidPreview kind={item.id} />
               <span className="px-1 pb-1">
                 <span className="block text-sm font-medium">{item.label}</span>
                 <span className="block text-xs text-muted">{item.hint}</span>

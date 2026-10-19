@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import FloatingPanel from "../FloatingPanel.jsx";
 import { CircleDot, Download, LoaderCircle, Mic, Monitor, Video } from "lucide-react";
 import api from "../../utils/api";
 
 const MAX_RECORDING_BYTES = 500 * 1024 * 1024;
 const SOURCES_KEY = "boardly.recording.sources";
+
+// Recording captures the screen, which phones (and most tablets) cannot do: their browsers have no screen capture,
+// so the Record button is left out there instead of failing with an error.
+const canCaptureScreen = () => typeof navigator !== "undefined" && typeof navigator.mediaDevices?.getDisplayMedia === "function";
 
 // What goes into a recording besides the screen. Remembered on this browser, so a host who always records
 // with their voice does not have to remember to switch it on.
@@ -299,6 +304,8 @@ export default function SessionRecorder({ room, socket }) {
     URL.revokeObjectURL(url);
   };
 
+  if (!canCaptureScreen()) return null;
+
   const busy = ["saving", "uploading"].includes(phase);
   const summary = ["Screen", sources.mic && "microphone", sources.camera && "camera"].filter(Boolean).join(" + ");
 
@@ -319,7 +326,7 @@ export default function SessionRecorder({ room, socket }) {
       </button>
       {phase === "recording" && <span role="status" className="sr-only">Recording: {summary}</span>}
       {menuOpen && phase !== "recording" && (
-        <div role="dialog" aria-label="Recording options" className="float-panel absolute right-0 top-full z-50 mt-2 w-72 max-w-[calc(100vw-1rem)] p-3">
+        <FloatingPanel role="dialog" aria-label="Recording options" className="absolute right-0 top-full z-50 mt-2 max-h-[calc(100dvh-4rem)] w-72 overflow-y-auto p-3">
           <div className="text-[11px] font-medium uppercase tracking-wider text-muted">What to record</div>
           <ul className="mt-2 space-y-1">
             <li className="flex items-center gap-2.5 rounded-md px-2 py-1.5">
@@ -337,7 +344,7 @@ export default function SessionRecorder({ room, socket }) {
             <CircleDot size={15} /> Start recording
           </button>
           <p className="mt-2 text-center text-[11px] text-muted">{summary} · your choice is remembered</p>
-        </div>
+        </FloatingPanel>
       )}
       {phase === "uploading" && <span role="status" className="sr-only">Saving recording: {progress}%</span>}
       {notice && !error && (

@@ -1,10 +1,12 @@
 // Editor for the selected statistics chart, in the same docked panel / phone sheet as the other editors.
 // Paste or type data, pick the chart, and every number (mean, median, SD, regression ...) updates on the board.
 import { useEffect, useRef, useState } from "react";
+import { FileUp } from "lucide-react";
 import { PALETTE } from "./constants.js";
 import { Swatches } from "./Toolbar.jsx";
 import { NumberBox } from "./GraphParams.jsx";
 import { ToggleRow } from "./GraphExplore.jsx";
+import { FILE_ACCEPT, describeTable, maxColumnsFor, readTableFile, tableToText } from "./dataFile.js";
 import { CHARTS, EXAMPLES, datasetToText, describeCorrelation, histogramBins, linearRegression, numbersOf, pairsOf, parseDataset, statsTable } from "./stats.js";
 
 const FieldLabel = ({ children }) => <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted">{children}</div>;
@@ -51,6 +53,59 @@ function DataBox({ chart, commit }) {
     }, 450);
   };
 
+  // Loading a file: a data file replaces the box, after choosing columns when it has more than the chart can use
+  const fileInput = useRef(null);
+  const [fileNote, setFileNote] = useState(null); // { text, error }
+  const [pending, setPending] = useState(null); // a loaded file waiting for a choice of columns: { name, table, picked }
+  const [dragging, setDragging] = useState(false);
+  const limit = maxColumnsFor(chart.chart);
+
+  const applyText = (value) => {
+    clearTimeout(timer.current);
+    setText(value);
+    const parsed = parseDataset(value);
+    setReport(parsed);
+    if (parsed.ok) {
+      sent.current = datasetToText(parsed.columns);
+      commit({ columns: parsed.columns });
+    }
+    return parsed;
+  };
+
+  const finish = (name, table, indexes) => {
+    const parsed = applyText(tableToText(table, indexes));
+    setPending(null);
+    if (!parsed.ok) { setFileNote({ error: true, text: parsed.notes[0] || "No numbers found in this file." }); return; }
+    const rows = Math.max(...parsed.columns.map((column) => column.values.length));
+    setFileNote({ text: `${name}: ${parsed.columns.map((column) => column.name).join(", ")} · ${rows} row${rows === 1 ? "" : "s"}${parsed.notes.length ? ` · ${parsed.notes.join(" ")}` : ""}` });
+  };
+
+  const loadFile = async (file) => {
+    if (!file) return;
+    setFileNote({ text: `Reading ${file.name}…` });
+    setPending(null);
+    try {
+      const { rows, delimiter } = await readTableFile(file);
+      const table = describeTable(rows, delimiter);
+      if (!table.numeric.length) { setFileNote({ error: true, text: "No columns of numbers were found in this file." }); return; }
+      if (table.numeric.length <= limit && !(chart.chart === "scatter" && table.numeric.length < 2)) {
+        finish(file.name, table, table.numeric.map((column) => column.index));
+      } else if (table.numeric.length === 1 && chart.chart === "scatter") {
+        setFileNote({ error: true, text: "A scatter plot needs two columns of numbers, and this file has only one." });
+      } else {
+        setFileNote(null);
+        setPending({ name: file.name, table, picked: table.numeric.slice(0, limit).map((column) => column.index) });
+      }
+    } catch (error) {
+      setFileNote({ error: true, text: error.message || "That file could not be read." });
+    }
+  };
+
+  const togglePicked = (index) => setPending((current) => {
+    const picked = current.picked.includes(index) ? current.picked.filter((i) => i !== index) : [...current.picked, index].slice(-limit);
+    return { ...current, picked };
+  });
+
   const shown = report ?? parseDataset(stored);
   const count = shown.columns.reduce((sum, column) => sum + numbersOf(column).length, 0);
   const summary = shown.ok
@@ -58,8 +113,48 @@ function DataBox({ chart, commit }) {
     : shown.notes[0];
 
   return (
-    <div>
-      <label htmlFor={`data-${chart.id}`} className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-muted">Data</label>
+    <div
+      onDragOver={(e) => { if (e.dataTransfer?.types?.includes("Files")) { e.preventDefault(); setDragging(true); } }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(e) => { if (e.dataTransfer?.files?.length) { e.preventDefault(); setDragging(false); loadFile(e.dataTransfer.files[0]); } }}
+    >
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <label htmlFor={`data-${chart.id}`} className="block text-[11px] font-medium uppercase tracking-wider text-muted">Data</label>
+        <button type="button" onClick={() => fileInput.current?.click()} className="flex h-8 items-center gap-1.5 rounded-md border border-line bg-white px-2.5 text-xs font-medium hover:bg-sunken">
+          <FileUp size={14} /> Upload file
+        </button>
+        <input ref={fileInput} type="file" accept={FILE_ACCEPT} className="sr-only" tabIndex={-1} aria-label="Upload a data file"
+          onChange={(e) => { loadFile(e.target.files?.[0]); e.target.value = ""; }} />
+      </div>
+      {pending && (
+        <div className="mb-2 rounded-md border border-line bg-sunken p-2.5" role="group" aria-label="Choose columns">
+          <div className="text-sm font-medium">{pending.name} has {pending.table.numeric.length} columns of numbers</div>
+          <p className="mb-2 text-xs text-muted">
+            {chart.chart === "scatter" ? "Pick two: the first you tick is x and the second is y." : `Pick up to ${limit} to chart.`}
+          </p>
+          <ul className="space-y-1">
+            {pending.table.numeric.map((column) => {
+              const position = pending.picked.indexOf(column.index);
+              return (
+                <li key={column.index}>
+                  <label className="flex min-h-9 cursor-pointer items-center gap-2 rounded px-1.5 text-sm hover:bg-white">
+                    <input type="checkbox" className="h-4 w-4" checked={position >= 0} onChange={() => togglePicked(column.index)} />
+                    <span className="min-w-0 flex-1 truncate">{column.name}</span>
+                    <span className="text-xs text-muted">{column.count} values</span>
+                    {chart.chart === "scatter" && position >= 0 && <span className="rounded bg-accent-soft px-1.5 text-xs font-medium text-accent">{position === 0 ? "x" : "y"}</span>}
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="mt-2 flex gap-2">
+            <button type="button" disabled={chart.chart === "scatter" ? pending.picked.length !== 2 : pending.picked.length === 0}
+              onClick={() => finish(pending.name, pending.table, pending.picked)}
+              className="h-9 flex-1 rounded-md bg-ink text-sm font-medium text-paper disabled:opacity-40">Use these columns</button>
+            <button type="button" onClick={() => setPending(null)} className="h-9 rounded-md border border-line bg-white px-3 text-sm hover:bg-sunken">Cancel</button>
+          </div>
+        </div>
+      )}
       <textarea
         id={`data-${chart.id}`}
         value={text}
@@ -69,9 +164,10 @@ function DataBox({ chart, commit }) {
         autoCapitalize="off"
         autoCorrect="off"
         aria-invalid={shown.ok ? undefined : true}
-        placeholder={"Paste from Excel or Google Sheets, or type numbers:\n45 52 58 61 64\n\nTwo columns for a scatter plot:\nHours\tScore\n1\t48\n2\t55"}
-        className={`w-full resize-y rounded-md border bg-white px-2.5 py-2 font-mono text-[13px] leading-relaxed ${shown.ok ? "border-line" : "border-danger"}`}
+        placeholder={"Upload a CSV or Excel file, paste from Excel or Google Sheets, or type numbers:\n45 52 58 61 64\n\nTwo columns for a scatter plot:\nHours\tScore\n1\t48\n2\t55"}
+        className={`w-full resize-y rounded-md border bg-white px-2.5 py-2 font-mono text-[13px] leading-relaxed ${dragging ? "border-accent ring-2 ring-accent/30" : shown.ok ? "border-line" : "border-danger"}`}
       />
+      {fileNote && <p className={`mt-1 text-[11px] ${fileNote.error ? "text-danger" : "text-muted"}`} role={fileNote.error ? "alert" : "status"}>{fileNote.text}</p>}
       <p className={`mt-1 text-[11px] ${shown.ok ? "text-muted" : "text-danger"}`} aria-live="polite">
         {summary}{shown.ok && shown.notes.length ? ` · ${shown.notes.join(" ")}` : ""}
       </p>

@@ -224,7 +224,7 @@ function VideoLinkDialog({ onClose, onAdd }) {
     }
   };
   return (
-    <div className="pointer-events-auto fixed inset-0 z-[110] flex items-center justify-center bg-ink/40 p-4" role="dialog" aria-modal="true" aria-labelledby="video-link-title">
+    <div className="modal-safe pointer-events-auto fixed inset-0 z-[110] flex items-center justify-center bg-ink/40" role="dialog" aria-modal="true" aria-labelledby="video-link-title">
       <form onSubmit={submit} className="float-panel w-full max-w-md p-5">
         <div className="flex items-start justify-between">
           <h3 id="video-link-title" className="text-base font-semibold">Add a video link</h3>
@@ -320,7 +320,7 @@ function InsertDialog({ kind, onClose, onCreate }) {
   };
 
   return (
-    <div className="pointer-events-auto fixed inset-0 z-[120] flex items-center justify-center bg-black/30 p-4" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="modal-safe pointer-events-auto fixed inset-0 z-[120] flex items-center justify-center bg-black/30" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <form className="float-panel max-h-[calc(100dvh-2rem)] w-full max-w-md space-y-4 overflow-y-auto p-5" onSubmit={submit} aria-label={kind === "graph" ? "Create graph" : "Create table"}>
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-ink">{kind === "graph" ? "Graph an equation" : "Insert a table"}</h2>
