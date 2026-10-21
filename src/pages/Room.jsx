@@ -1,4 +1,5 @@
 // Room.jsx - Updated for split payment system
+import usePageTitle from "../hooks/usePageTitle.js";
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import RoomShell from "../room/RoomShell.jsx";
@@ -17,6 +18,7 @@ const Room = () => {
   const [paymentRequired, setPaymentRequired] = useState(false);
   const [paymentSetupWarning, setPaymentSetupWarning] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  usePageTitle(room?.topic);
 
 
   useEffect(() => {
@@ -146,7 +148,7 @@ const Room = () => {
   if (error) {
     return (
       <StatusCard icon={SearchX} title="Room not found" body={error}>
-        <button onClick={() => navigate("/")} className="h-10 w-full rounded-md bg-ink text-sm font-medium text-paper hover:bg-gray-800">Back to home</button>
+        <button onClick={() => navigate("/")} className="h-10 w-full rounded-md bg-accent text-sm font-medium text-white hover:bg-accent-strong">Back to home</button>
       </StatusCard>
     );
   }
@@ -167,7 +169,7 @@ const Room = () => {
   if (paymentSetupWarning) {
     return (
       <StatusCard icon={Wallet} title="Set up payouts first" body="This is a paid session, but your bank account is not connected yet. Listeners cannot pay until it is.">
-        <button onClick={() => navigate("/profile")} className="h-10 w-full rounded-md bg-ink text-sm font-medium text-paper hover:bg-gray-800">Connect bank account</button>
+        <button onClick={() => navigate("/profile")} className="h-10 w-full rounded-md bg-accent text-sm font-medium text-white hover:bg-accent-strong">Connect bank account</button>
         <button onClick={() => navigate("/lobby")} className="mt-2 h-10 w-full rounded-md border border-line text-sm hover:bg-sunken">Back to my rooms</button>
       </StatusCard>
     );

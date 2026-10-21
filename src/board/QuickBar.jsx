@@ -4,7 +4,8 @@
 // gets in the way of dragging, resizing or panning.
 import { useCallback, useEffect, useRef, useState } from "react";
 import FloatingPanel from "../components/FloatingPanel.jsx";
-import { BringToFront, ChevronDown, ChevronUp, Copy, Eye, EyeOff, Group, Layers, Pencil, SendToBack, SlidersHorizontal, Trash2, Ungroup } from "lucide-react";
+import { outlineOf } from "./profiles.js";
+import { Box, BringToFront, ChevronDown, ChevronUp, Copy, Eye, EyeOff, Group, Layers, Pencil, SendToBack, SlidersHorizontal, Trash2, Ungroup } from "lucide-react";
 import { HIGHLIGHT_PALETTE, PALETTE } from "./constants.js";
 import { getBounds, unionBounds } from "./geometry.js";
 import { Swatches } from "./Toolbar.jsx";
@@ -20,15 +21,21 @@ const ARRANGE_ITEMS = [
   { mode: "back", label: "Send to back", hint: "Ctrl+Shift+[", Icon: SendToBack },
 ];
 
+const MAKE_3D_ITEMS = [
+  { mode: "revolve", label: "Spin around an axis", hint: "A triangle becomes a cone, a circle a sphere" },
+  { mode: "extrude", label: "Give it depth", hint: "A triangle becomes a prism, a circle a cylinder" },
+];
+
 const iconButton = "flex h-8 w-8 items-center justify-center rounded-md text-gray-700 hover:bg-sunken";
 
-export default function QuickBar({ tools, store, surfaceRef, inspector, view, size, safeLeft = EDGE, safeBottom = EDGE }) {
+export default function QuickBar({ tools, store, surfaceRef, inspector, view, size, onMake3D, safeLeft = EDGE, safeBottom = EDGE }) {
   const { selectedObjects, selectedIds, editingObj, group, activeStyle } = tools;
   const barRef = useRef(null);
   const [barSize, setBarSize] = useState({ w: 0, h: 0 });
   const [busy, setBusy] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [arrangeOpen, setArrangeOpen] = useState(false);
+  const [solidOpen, setSolidOpen] = useState(false);
 
   useEffect(() => {
     const down = (e) => { if (!barRef.current?.contains(e.target)) setBusy(true); };
@@ -44,7 +51,7 @@ export default function QuickBar({ tools, store, surfaceRef, inspector, view, si
   }, []);
 
   const selectionKey = selectedIds.join(",");
-  useEffect(() => { setPaletteOpen(false); setArrangeOpen(false); }, [selectionKey]);
+  useEffect(() => { setPaletteOpen(false); setArrangeOpen(false); setSolidOpen(false); }, [selectionKey]);
 
   // Track the bar's own size (its buttons change with the selection) to place it precisely
   const observer = useRef(null);
@@ -84,6 +91,9 @@ export default function QuickBar({ tools, store, surfaceRef, inspector, view, si
     setPaletteOpen(false);
   };
   const canDuplicate = !objects.some((o) => o.type === "markup");
+  // A single closed shape (or a freehand loop) can be turned into a 3D solid
+  const canMake3D = Boolean(onMake3D) && objects.length === 1 && outlineOf(objects[0]) !== null;
+  const make3D = (mode) => { onMake3D(mode, objects[0]); setSolidOpen(false); };
   const canArrange = objects.some((o) => o.type !== "cover") && store.onPage(objects[0].page ?? 0).length > 1;
   const arrange = (mode) => { surfaceRef.current?.arrange(mode); setArrangeOpen(false); };
 
@@ -148,6 +158,19 @@ export default function QuickBar({ tools, store, surfaceRef, inspector, view, si
             <Ungroup size={16} />
           </button>
         )}
+        {canMake3D && (
+          <button
+            type="button"
+            onClick={() => { setSolidOpen((v) => !v); setArrangeOpen(false); setPaletteOpen(false); }}
+            aria-label="Make 3D"
+            aria-expanded={solidOpen}
+            aria-haspopup="menu"
+            title="Turn this shape into a 3D solid"
+            className={`${iconButton} ${solidOpen ? "bg-sunken" : ""}`}
+          >
+            <Box size={16} />
+          </button>
+        )}
         {canArrange && (
           <button
             type="button"
@@ -169,6 +192,17 @@ export default function QuickBar({ tools, store, surfaceRef, inspector, view, si
         <button type="button" onClick={() => surfaceRef.current?.deleteSelected()} aria-label="Delete" title="Delete" className={`${iconButton} text-danger hover:bg-danger-soft`}>
           <Trash2 size={15} />
         </button>
+
+        {solidOpen && canMake3D && (
+          <FloatingPanel role="menu" aria-label="Make 3D" className={`absolute w-64 p-1 ${above ? "bottom-full mb-2" : "top-full mt-2"} ${alignRight ? "right-0" : "left-0"}`}>
+            {MAKE_3D_ITEMS.map(({ mode, label, hint }) => (
+              <button key={mode} type="button" role="menuitem" onClick={() => make3D(mode)} className="flex w-full flex-col rounded-md px-2.5 py-2 text-left hover:bg-sunken">
+                <span className="text-sm font-medium text-gray-800">{label}</span>
+                <span className="text-xs text-muted">{hint}</span>
+              </button>
+            ))}
+          </FloatingPanel>
+        )}
 
         {arrangeOpen && canArrange && (
           <FloatingPanel role="menu" aria-label="Arrange" className={`absolute w-56 p-1 ${above ? "bottom-full mb-2" : "top-full mt-2"} ${alignRight ? "right-0" : "left-0"}`}>

@@ -2,6 +2,10 @@
 // volume and surface area with the working shown, and where to draw each measurement on the solid.
 // Pure functions, so every number a student sees can be tested.
 
+import {
+  AXES, extrudeMeasures, isValidProfile, longestSide, profileBounds, revolveExtent, revolveMeasures,
+} from "./profiles.js";
+
 export const SOLID_LIMITS = { min: 0.1, max: 1000, unitLength: 8, titleLength: 60 };
 export const SOLID_COLOR = "#2540D9";
 
@@ -26,7 +30,20 @@ export const SOLIDS = [
   },
 ];
 
-export const solidInfo = (kind) => SOLIDS.find((item) => item.id === kind) || SOLIDS[0];
+// Shapes drawn on the board and then spun around an axis or stretched along their depth
+export const CUSTOM_SOLIDS = [
+  { id: "revolve", label: "Spun shape", hint: "A shape turned around an axis", custom: true, params: [{ key: "sweep", label: "Sweep angle", symbol: "θ", def: 360, min: 10, max: 360, suffix: "°" }] },
+  { id: "extrude", label: "Stretched shape", hint: "A shape given depth", custom: true, params: [{ key: "depth", label: "Depth", symbol: "d", def: 4 }] },
+];
+export const isCustomKind = (kind) => CUSTOM_SOLIDS.some((item) => item.id === kind);
+
+export const solidInfo = (kind) => SOLIDS.find((item) => item.id === kind) || CUSTOM_SOLIDS.find((item) => item.id === kind) || SOLIDS[0];
+
+const DEFAULT_PROFILE = [[-3, -3], [3, -3], [3, 3], [-3, 3]];
+
+/** The profile of a spun or stretched solid (a plain square if it is missing or damaged), and its spin axis. */
+export const profileOf = (o) => (isValidProfile(o?.profile) ? o.profile : DEFAULT_PROFILE);
+export const axisOf = (o) => (AXES.includes(o?.axis) ? o.axis : "left");
 
 /** The sizes of a solid, each one a usable number (anything missing or out of range falls back to its default). */
 export function solidSizes(o) {
@@ -34,7 +51,8 @@ export function solidSizes(o) {
   const out = {};
   for (const param of info.params) {
     const value = Number(o?.params?.[param.key]);
-    out[param.key] = Number.isFinite(value) && value >= SOLID_LIMITS.min && value <= SOLID_LIMITS.max ? value : param.def;
+    const min = param.min ?? SOLID_LIMITS.min, max = param.max ?? SOLID_LIMITS.max;
+    out[param.key] = Number.isFinite(value) && value >= min && value <= max ? value : param.def;
   }
   return out;
 }
@@ -48,6 +66,19 @@ export function newSolid(kind, { id, page, cx, cy }) {
   return {
     id, type: "solid", page, kind: info.id, params: defaultSizes(info.id),
     x: Math.round((cx - w / 2) * 100) / 100, y: Math.round((cy - h / 2) * 100) / 100, w, h,
+    color: SOLID_COLOR, azimuth: 38, elevation: 24,
+    edges: true, seeThrough: false, labels: true, measures: true,
+  };
+}
+
+/** A solid made from a drawn shape: `mode` is "revolve" or "extrude", `profile` the outline in solid units. */
+export function newProfileSolid(mode, profile, { id, page, x, y, axis = "left" }) {
+  const kind = mode === "extrude" ? "extrude" : "revolve";
+  const params = defaultSizes(kind);
+  if (kind === "extrude") params.depth = Math.max(0.1, Math.round(longestSide(profile) * 0.6 * 10) / 10);
+  return {
+    id, type: "solid", page, kind, profile, axis, params,
+    x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100, w: 440, h: 460,
     color: SOLID_COLOR, azimuth: 38, elevation: 24,
     edges: true, seeThrough: false, labels: true, measures: true,
   };
@@ -112,6 +143,28 @@ export function solidMeasures(o) {
       extras = [{ label: "Slant height", text: `l = √((a⁄2)² + h²) = ${fmt(slant)}` }];
       break;
     }
+    case "revolve": {
+      const m = revolveMeasures(profileOf(o), axisOf(o), s.sweep);
+      volume = m.volume; surface = m.surface;
+      formulas = { volume: "V = θ × x̄ × A", surface: m.full ? "S = θ × Σ(r̄ × l)" : "S = θ × Σ(r̄ × l) + 2A" };
+      working = {
+        volume: `${fmt(m.sweep)} × ${fmt(m.centroid)} × ${fmt(m.area)}`,
+        surface: m.full ? `${fmt(m.sweep)} × ${fmt(m.band)}` : `${fmt(m.sweep)} × ${fmt(m.band)} + 2 × ${fmt(m.area)}`,
+      };
+      extras = [
+        { label: "Angle", text: `θ = ${fmt(s.sweep)}° = ${fmt(m.sweep)} radians` },
+        { label: "Area", text: `A = ${fmt(m.area)} (the shape that is spun), x̄ = ${fmt(m.centroid)} (its centre's distance from the axis)` },
+      ];
+      break;
+    }
+    case "extrude": {
+      const m = extrudeMeasures(profileOf(o), s.depth);
+      volume = m.volume; surface = m.surface;
+      formulas = { volume: "V = A × d", surface: "S = 2A + P × d" };
+      working = { volume: `${fmt(m.area)} × ${fmt(s.depth)}`, surface: `2 × ${fmt(m.area)} + ${fmt(m.perimeter)} × ${fmt(s.depth)}` };
+      extras = [{ label: "Shape", text: `A = ${fmt(m.area)} (area of the shape), P = ${fmt(m.perimeter)} (its perimeter)` }];
+      break;
+    }
     default: { // prism: an isosceles triangle (base b, height t) stretched by length l
       const side = Math.hypot(s.b / 2, s.t);
       volume = 0.5 * s.b * s.t * s.l; surface = s.b * s.t + (s.b + 2 * side) * s.l;
@@ -147,8 +200,30 @@ export function solidExtent(o) {
     case "sphere": return { x: 2 * s.r, y: 2 * s.r, z: 2 * s.r };
     case "cylinder": case "cone": return { x: 2 * s.r, y: s.h, z: 2 * s.r };
     case "pyramid": return { x: s.a, y: s.h, z: s.a };
+    case "revolve": {
+      const e = revolveExtent(profileOf(o), axisOf(o));
+      return { x: Math.max(2 * e.radius, 0.01), y: Math.max(e.height, 0.01), z: Math.max(2 * e.radius, 0.01) };
+    }
+    case "extrude": {
+      const box = profileBounds(profileOf(o));
+      return { x: Math.max(box.w, 0.01), y: Math.max(box.h, 0.01), z: s.depth };
+    }
     default: return { x: s.b, y: s.t, z: s.l };
   }
+}
+
+/** How far a spun or stretched solid sits above or below the middle of its drawing (so it can be centred). */
+export function solidShiftY(o) {
+  const kind = solidInfo(o?.kind).id;
+  if (kind === "revolve") {
+    const e = revolveExtent(profileOf(o), axisOf(o));
+    return (e.minY + e.maxY) / 2;
+  }
+  if (kind === "extrude") {
+    const box = profileBounds(profileOf(o));
+    return (box.minY + box.maxY) / 2;
+  }
+  return 0;
 }
 
 /**
@@ -180,6 +255,18 @@ export function dimensionLines(o) {
       line("a", [-hx, -hy, hz], [hx, -hy, hz]),
       line("h", [0, -hy, 0], [0, hy, 0]),
     ];
+    case "revolve": {
+      const pad = Math.max(0.15, e.y * 0.12);
+      const r = revolveExtent(profileOf(o), axisOf(o)).radius;
+      return [
+        { key: "axis", text: "axis", from: [0, -hy - pad, 0], to: [0, hy + pad, 0], dashed: true },
+        ...(r > 0 ? [{ key: "r", text: `r = ${fmt(r)}`, from: [0, -hy, 0], to: [r, -hy, 0] }] : []),
+      ];
+    }
+    case "extrude": {
+      const box = profileBounds(profileOf(o));
+      return [{ key: "d", text: `d = ${fmt(s.depth)}`, from: [box.w / 2, -hy, -hz], to: [box.w / 2, -hy, hz] }];
+    }
     default: return [ // the triangle is on the front face: base along x, height up the middle
       line("b", [-hx, -hy, hz], [hx, -hy, hz]),
       line("t", [0, -hy, hz], [0, hy, hz]),
@@ -189,7 +276,7 @@ export function dimensionLines(o) {
 }
 
 /** Is this a solid the server and the other clients can draw? Used for sanity checks on incoming objects. */
-export const isSolidKind = (kind) => SOLIDS.some((item) => item.id === kind);
+export const isSolidKind = (kind) => SOLIDS.some((item) => item.id === kind) || isCustomKind(kind);
 
 /* --------------------------------- the card --------------------------------- */
 

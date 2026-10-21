@@ -150,7 +150,7 @@ function DataBox({ chart, commit }) {
           <div className="mt-2 flex gap-2">
             <button type="button" disabled={chart.chart === "scatter" ? pending.picked.length !== 2 : pending.picked.length === 0}
               onClick={() => finish(pending.name, pending.table, pending.picked)}
-              className="h-9 flex-1 rounded-md bg-ink text-sm font-medium text-paper disabled:opacity-40">Use these columns</button>
+              className="h-9 flex-1 rounded-md bg-accent text-sm font-medium text-white disabled:opacity-40">Use these columns</button>
             <button type="button" onClick={() => setPending(null)} className="h-9 rounded-md border border-line bg-white px-3 text-sm hover:bg-sunken">Cancel</button>
           </div>
         </div>

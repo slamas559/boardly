@@ -76,7 +76,7 @@ export default function ParticipantsPanel({ isHost, users, total, flags, access,
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Find someone"
             aria-label="Find someone in the room"
-            className="h-8 w-full rounded-md border border-line bg-surface pl-8 pr-2 text-sm outline-none focus:border-ink"
+            className="h-8 w-full rounded-md border border-line bg-surface pl-8 pr-2 text-sm outline-none focus:border-accent"
           />
         </div>
       )}

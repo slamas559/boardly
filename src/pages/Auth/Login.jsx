@@ -1,3 +1,4 @@
+import usePageTitle from "../../hooks/usePageTitle.js";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { GoogleOAuthProvider, GoogleLogin } from "@react-oauth/google";
@@ -7,6 +8,7 @@ import AuthLayout, { fieldClass, primaryBtn } from "./AuthLayout";
 import EmailVerificationRequired from "../EmailVerificationComponents/EmailVerificationRequired";
 
 const Login = () => {
+  usePageTitle("Sign in");
   const [form, setForm] = useState({ email: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);

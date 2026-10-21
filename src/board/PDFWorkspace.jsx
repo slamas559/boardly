@@ -364,7 +364,7 @@ export default function PDFWorkspace({ room, socket, isHost, canDraw = false, pa
             <FileText size={28} strokeWidth={1.5} className="text-gray-500" />
             <h2 className="mt-4 text-lg font-semibold">Share a document</h2>
             <p className="mt-1 max-w-xs text-sm text-muted">Upload a PDF. Everyone in the room sees the page you are on, plus your highlights and notes.</p>
-            <button type="button" disabled={uploading !== null} onClick={() => fileRef.current?.click()} className="mt-5 inline-flex h-10 items-center gap-2 rounded-md bg-ink px-4 text-sm font-medium text-paper hover:bg-gray-800 disabled:opacity-60">
+            <button type="button" disabled={uploading !== null} onClick={() => fileRef.current?.click()} className="mt-5 inline-flex h-10 items-center gap-2 rounded-md bg-accent px-4 text-sm font-medium text-white hover:bg-accent-strong disabled:opacity-60">
               {uploading !== null ? <><Loader2 size={15} className="animate-spin" /> Uploading {uploading}%</> : <><Upload size={15} /> Choose PDF</>}
             </button>
             <p className="mt-3 text-xs text-muted">or drop a file here · up to 100 MB</p>
@@ -420,7 +420,7 @@ export default function PDFWorkspace({ room, socket, isHost, canDraw = false, pa
           </div>
           <div className="ml-auto flex items-center gap-1">
             {!isHost && !following && (
-              <button type="button" onClick={() => { setFollowing(true); setPage(hostPage); }} className="flex h-8 items-center gap-1.5 rounded-md bg-ink px-2.5 text-xs font-medium text-paper">
+              <button type="button" onClick={() => { setFollowing(true); setPage(hostPage); }} className="flex h-8 items-center gap-1.5 rounded-md bg-accent px-2.5 text-xs font-medium text-white">
                 <Radio size={13} /> <span className="hidden xs:inline">Return to presenter</span><span className="xs:hidden">Presenter</span>
               </button>
             )}

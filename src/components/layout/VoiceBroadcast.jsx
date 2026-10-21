@@ -375,7 +375,7 @@ const VoiceBroadcast = ({ room, socket, isTutor, canSpeak = false }) => {
       </div>
 
       {live && audioBlocked && (
-        <button onClick={enableSound} className="h-8 rounded-md bg-ink px-2.5 text-xs font-medium text-paper">Tap to hear</button>
+        <button onClick={enableSound} className="h-8 rounded-md bg-accent px-2.5 text-xs font-medium text-white">Tap to hear</button>
       )}
 
       {live && (

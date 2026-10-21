@@ -1,3 +1,4 @@
+import usePageTitle from "../../hooks/usePageTitle.js";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { GoogleOAuthProvider, GoogleLogin } from "@react-oauth/google";
@@ -7,6 +8,7 @@ import AuthLayout, { fieldClass, primaryBtn } from "./AuthLayout";
 import EmailVerificationRequired from "../EmailVerificationComponents/EmailVerificationRequired";
 
 const Register = () => {
+  usePageTitle("Create an account");
   const [form, setForm] = useState({ name: "", email: "", password: "", bio: "" });
   const [avatar, setAvatar] = useState(null);
   const [loading, setLoading] = useState(false);

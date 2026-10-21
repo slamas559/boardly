@@ -3,10 +3,12 @@ import { Link, useNavigate } from "react-router-dom";
 import { Copy, Loader2, Plus, Search, Trash2 } from "lucide-react";
 import api from "../utils/api";
 import Header from "./Header";
+import usePageTitle from "../hooks/usePageTitle.js";
 
 const fmt = (d) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(d));
 
 export default function Lobby() {
+  usePageTitle("My rooms");
   const navigate = useNavigate();
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +46,7 @@ export default function Lobby() {
             <h1 className="font-display text-4xl">My rooms</h1>
             <p className="mt-1 text-sm text-muted">{rooms.length} {rooms.length === 1 ? "room" : "rooms"}</p>
           </div>
-          <Link to="/create" className="inline-flex h-10 items-center gap-2 rounded-md bg-ink px-4 text-sm font-medium text-paper hover:bg-gray-800"><Plus size={16} /> New room</Link>
+          <Link to="/create" className="inline-flex h-10 items-center gap-2 rounded-md bg-accent px-4 text-sm font-medium text-white hover:bg-accent-strong"><Plus size={16} /> New room</Link>
         </div>
 
         <div className="relative mt-6 max-w-sm">
@@ -57,24 +59,24 @@ export default function Lobby() {
         ) : shown.length === 0 ? (
           <div className="mt-10 rounded-lg border border-dashed border-line-strong bg-white px-6 py-14 text-center">
             <p className="text-[15px] font-medium">{q ? "No rooms match that search" : "You have no rooms yet"}</p>
-            {!q && <><p className="mt-1 text-sm text-muted">Create one and share the link.</p><Link to="/create" className="mt-4 inline-flex h-10 items-center rounded-md bg-ink px-4 text-sm font-medium text-paper">Create a room</Link></>}
+            {!q && <><p className="mt-1 text-sm text-muted">Create one and share the link.</p><Link to="/create" className="mt-4 inline-flex h-10 items-center rounded-md bg-accent px-4 text-sm font-medium text-white">Create a room</Link></>}
           </div>
         ) : (
           <ul className="mt-6 divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">
             {shown.map((r) => (
-              <li key={r._id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 sm:px-5">
-                <button type="button" onClick={() => navigate(`/room/${r.code}`)} className="min-w-0 flex-1 text-left">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate text-[15px] font-medium">{r.topic}</span>
+              <li key={r._id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:gap-4 sm:px-5 sm:py-3.5">
+                <button type="button" onClick={() => navigate(`/room/${r.code}`)} className="w-full min-w-0 text-left sm:flex-1">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="min-w-0 max-w-full break-words text-[16px] font-medium sm:truncate sm:text-[15px]">{r.topic}</span>
                     <span className={`shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${r.status === "active" ? "bg-ok-soft text-ok" : "bg-sunken text-muted"}`}>{r.status === "active" ? "Live" : "Ended"}</span>
                     {r.isPaid && <span className="shrink-0 rounded-sm bg-accent-soft px-1.5 py-0.5 text-[10px] font-medium text-accent">₦{r.price?.toLocaleString()}</span>}
                   </div>
                   <div className="mt-0.5 text-xs text-muted">Created {fmt(r.createdAt)} · <span className="font-mono">{r.code}</span></div>
                 </button>
-                <div className="flex items-center gap-1">
-                  <button type="button" onClick={() => copy(r)} className="flex h-9 items-center gap-1.5 rounded-md border border-line px-2.5 text-sm hover:bg-sunken"><Copy size={14} /> {copied === r._id ? "Copied" : "Copy link"}</button>
-                  <button type="button" onClick={() => navigate(`/room/${r.code}`)} className="h-9 rounded-md bg-ink px-3.5 text-sm font-medium text-paper hover:bg-gray-800">{r.status === "active" ? "Enter" : "Open"}</button>
-                  <button type="button" aria-label={`Delete ${r.topic}`} onClick={() => setToDelete(r)} className="flex h-9 w-9 items-center justify-center rounded-md text-gray-500 hover:bg-danger-soft hover:text-danger"><Trash2 size={15} /></button>
+                <div className="flex items-center gap-2 sm:gap-1">
+                  <button type="button" onClick={() => copy(r)} className="flex h-10 items-center gap-1.5 rounded-md border border-line px-3 text-sm hover:bg-sunken sm:h-9 sm:px-2.5"><Copy size={14} /> {copied === r._id ? "Copied" : "Copy link"}</button>
+                  <button type="button" onClick={() => navigate(`/room/${r.code}`)} className="h-10 flex-1 rounded-md bg-accent px-3.5 text-sm font-medium text-white hover:bg-accent-strong sm:h-9 sm:flex-none">{r.status === "active" ? "Enter" : "Open"}</button>
+                  <button type="button" aria-label={`Delete ${r.topic}`} onClick={() => setToDelete(r)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-gray-500 hover:bg-danger-soft hover:text-danger sm:h-9 sm:w-9"><Trash2 size={15} /></button>
                 </div>
               </li>
             ))}

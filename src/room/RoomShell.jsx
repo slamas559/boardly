@@ -185,7 +185,7 @@ export default function RoomShell({ room, isTutor }) {
               {[["whiteboard", "Board", PenLine], ["pdf", "Document", FileText]].map(([id, label, Icon]) => (
                 <button
                   key={id} role="tab" aria-selected={view === id} type="button" onClick={() => changeView(id)}
-                  className={`flex h-7 items-center gap-1.5 rounded-[4px] px-3 text-sm ${view === id ? "bg-ink text-paper" : "text-gray-700 hover:bg-sunken"}`}
+                  className={`flex h-7 items-center gap-1.5 rounded-[4px] px-3 text-sm ${view === id ? "bg-accent text-white" : "text-gray-700 hover:bg-sunken"}`}
                 >
                   <Icon size={14} /> {label}
                 </button>

@@ -243,7 +243,7 @@ function VideoLinkDialog({ onClose, onAdd }) {
         {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" onClick={onClose} className="h-9 rounded-md border border-line px-3 text-sm hover:bg-sunken">Cancel</button>
-          <button type="submit" className="h-9 rounded-md bg-ink px-3 text-sm font-medium text-paper hover:opacity-90">Add to board</button>
+          <button type="submit" className="h-9 rounded-md bg-accent px-3 text-sm font-medium text-white hover:opacity-90">Add to board</button>
         </div>
       </form>
     </div>
@@ -433,7 +433,7 @@ function InsertDialog({ kind, onClose, onCreate }) {
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} className="h-9 rounded border border-line px-3 text-sm">Cancel</button>
-          <button type="submit" className="h-9 rounded bg-ink px-4 text-sm font-medium text-paper">{kind === "graph" ? "Add graph" : "Add table"}</button>
+          <button type="submit" className="h-9 rounded bg-accent px-4 text-sm font-medium text-white">{kind === "graph" ? "Add graph" : "Add table"}</button>
         </div>
       </form>
     </div>

@@ -8,8 +8,9 @@
     utilities like bg-gray-50, text-blue-600 or rounded-xl inherit this look automatically.
 */
 @theme {
-  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-display: "Instrument Serif", ui-serif, Georgia, "Times New Roman", serif;
+  --font-sans: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Bricolage Grotesque", "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-hand: "Caveat", "Bradley Hand", "Segoe Print", cursive;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* Semantic */
@@ -27,6 +28,24 @@
   --color-danger-soft: #fdecea;
   --color-ok: #1f7a4d;
   --color-ok-soft: #e8f5ee;
+
+  /* Marker colours: the pens of a whiteboard, used sparingly for small details (a tag, an icon, a highlight) */
+  --color-coral-50: #fdf0ec;
+  --color-coral-100: #fbddd4;
+  --color-coral-500: #e2492b;
+  --color-coral-600: #c93b1f;
+  --color-sun-50: #fff6dc;
+  --color-sun-100: #fde9a8;
+  --color-sun-500: #f2b01e;
+  --color-sun-700: #8a5d00;
+  --color-leaf-50: #e7f5ee;
+  --color-leaf-100: #c8e8d8;
+  --color-leaf-500: #1f9d6b;
+  --color-leaf-700: #166c49;
+  --color-ocean-50: #e8f3fa;
+  --color-ocean-100: #c6e2f3;
+  --color-ocean-500: #2e8fc9;
+  --color-ocean-700: #1b6693;
 
   /* Neutrals (warm) replace Tailwind gray */
   --color-gray-50: #f8f7f4;
@@ -97,6 +116,11 @@
   html {
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+    scroll-padding-top: 4.5rem;
+    scroll-behavior: smooth;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
   }
 
   /* Landscape phones: keep everything clear of the notch and rounded corners */
@@ -106,7 +130,6 @@
     font-family: var(--font-sans);
     background: var(--color-paper);
     color: var(--color-ink);
-    font-feature-settings: "ss01", "cv11";
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
@@ -147,8 +170,13 @@
 @layer components {
   .font-display {
     font-family: var(--font-display);
-    font-weight: 400;
-    letter-spacing: -0.02em;
+    font-weight: 650;
+    letter-spacing: -0.025em;
+  }
+  .font-hand {
+    font-family: var(--font-hand);
+    font-weight: 600;
+    letter-spacing: 0;
   }
 
   /* Surfaces that float above the board (toolbars, popovers, sheets) */

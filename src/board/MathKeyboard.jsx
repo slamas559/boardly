@@ -55,7 +55,7 @@ export default function MathKeyboard({ onInsert, onAction }) {
             title={item.title}
             onPointerDown={keepFocus}
             onClick={() => setTab(item.id)}
-            className={`h-8 shrink-0 rounded-md px-2.5 text-sm ${tab === item.id ? "bg-ink text-paper" : "text-gray-700 hover:bg-sunken"}`}
+            className={`h-8 shrink-0 rounded-md px-2.5 text-sm ${tab === item.id ? "bg-accent text-white" : "text-gray-700 hover:bg-sunken"}`}
           >
             {item.label}
           </button>

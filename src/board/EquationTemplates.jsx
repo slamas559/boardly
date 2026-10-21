@@ -80,7 +80,7 @@ export default function EquationTemplates({ onUse, color, ready }) {
         type="button"
         disabled={!built.latex}
         onClick={() => { onUse(built.latex); setChosen(null); }}
-        className="h-10 w-full rounded-md bg-ink text-sm font-medium text-paper hover:opacity-90 disabled:opacity-40"
+        className="h-10 w-full rounded-md bg-accent text-sm font-medium text-white hover:opacity-90 disabled:opacity-40"
       >
         Use this formula
       </button>

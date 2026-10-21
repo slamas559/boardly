@@ -136,7 +136,7 @@ export default function AidDialog({ onClose, onPick }) {
           </div>
           <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-sm text-muted hover:bg-sunken">Close</button>
         </div>
-        <h4 className="mt-4 text-[11px] font-medium uppercase tracking-wider text-muted">Math aids</h4>
+        <h4 className="mt-4 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted"><span className="h-2 w-2 rounded-full bg-accent" aria-hidden="true" />Math aids</h4>
         <div className="mt-2 grid gap-3 sm:grid-cols-3">
           {AID_KINDS.map((item) => (
             <button
@@ -153,7 +153,7 @@ export default function AidDialog({ onClose, onPick }) {
             </button>
           ))}
         </div>
-        <h4 className="mt-5 text-[11px] font-medium uppercase tracking-wider text-muted">Data and statistics</h4>
+        <h4 className="mt-5 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted"><span className="h-2 w-2 rounded-full bg-leaf-500" aria-hidden="true" />Data and statistics</h4>
         <div className="mt-2 grid gap-3 sm:grid-cols-3">
           {CHARTS.map((item) => (
             <button
@@ -170,7 +170,7 @@ export default function AidDialog({ onClose, onPick }) {
             </button>
           ))}
         </div>
-        <h4 className="mt-5 text-[11px] font-medium uppercase tracking-wider text-muted">3D solids</h4>
+        <h4 className="mt-5 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted"><span className="h-2 w-2 rounded-full bg-ocean-500" aria-hidden="true" />3D solids</h4>
         <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {SOLIDS.map((item) => (
             <button
@@ -187,7 +187,7 @@ export default function AidDialog({ onClose, onPick }) {
             </button>
           ))}
         </div>
-        <h4 className="mt-5 text-[11px] font-medium uppercase tracking-wider text-muted">Class tools</h4>
+        <h4 className="mt-5 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted"><span className="h-2 w-2 rounded-full bg-coral-500" aria-hidden="true" />Class tools</h4>
         <div className="mt-2 grid gap-3 sm:grid-cols-3">
           <button
             type="button"
@@ -201,7 +201,7 @@ export default function AidDialog({ onClose, onPick }) {
             </span>
           </button>
         </div>
-        <h4 className="mt-5 text-[11px] font-medium uppercase tracking-wider text-muted">Geometry tools</h4>
+        <h4 className="mt-5 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted"><span className="h-2 w-2 rounded-full bg-sun-500" aria-hidden="true" />Geometry tools</h4>
         <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {INSTRUMENTS.map((item) => (
             <button

@@ -1,3 +1,4 @@
+import usePageTitle from "../hooks/usePageTitle.js";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowUpRight, Copy, Download, Plus, Trash2 } from "lucide-react";
@@ -9,6 +10,7 @@ const date = (value) => value
   : "—";
 
 export default function Dashboard() {
+  usePageTitle("Dashboard");
   const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
   const [rooms, setRooms] = useState([]);
@@ -73,20 +75,20 @@ export default function Dashboard() {
             <h1 className="mt-2 font-display text-5xl">Good to see you, {profile?.name?.split(" ")[0]}</h1>
             <p className="mt-3 text-muted">Create a room, share the link, and work together in real time.</p>
           </div>
-          <Link to="/create" className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-ink px-4 text-sm font-medium text-paper hover:bg-gray-800"><Plus size={16} /> New room</Link>
+          <Link to="/create" className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-accent px-4 text-sm font-medium text-white hover:bg-accent-strong"><Plus size={16} /> New room</Link>
         </header>
         {error && <p className="border-b border-danger/20 py-4 text-sm text-danger">{error}</p>}
         <section className="grid gap-5 border-b border-line py-6 lg:grid-cols-[1fr_auto]">
           <form onSubmit={join} className="flex max-w-md">
             <input value={code} onChange={(event) => setCode(event.target.value)} placeholder="Enter a room code" aria-label="Room code" className="h-10 min-w-0 flex-1 rounded-l-md border border-line-strong bg-white px-3 font-mono text-sm" />
-            <button className="h-10 rounded-r-md bg-ink px-4 text-sm font-medium text-paper hover:bg-gray-800">Join room</button>
+            <button className="h-10 rounded-r-md bg-accent px-4 text-sm font-medium text-white hover:bg-accent-strong">Join room</button>
           </form>
           <p className="self-center text-sm text-muted">Have a link? Paste its room code to join.</p>
         </section>
         <section className="grid border-b border-line sm:grid-cols-3">
-          <Metric label="Rooms created" value={rooms.length} />
-          <Metric label="Active now" value={activeRooms.length} />
-          <Metric label="Member since" value={date(profile?.createdAt)} />
+          <Metric label="Rooms created" value={rooms.length} tone="bg-accent" />
+          <Metric label="Active now" value={activeRooms.length} tone="bg-leaf-500" />
+          <Metric label="Member since" value={date(profile?.createdAt)} tone="bg-coral-500" />
         </section>
 
         <section className="border-b border-line py-9">
@@ -115,7 +117,7 @@ export default function Dashboard() {
                       <a
                         href={recording.url.replace("/video/upload/", "/video/upload/fl_attachment/")}
                         download
-                        className="inline-flex h-8 items-center gap-1.5 rounded-md bg-ink px-2.5 text-xs font-medium text-paper hover:opacity-90"
+                        className="inline-flex h-8 items-center gap-1.5 rounded-md bg-accent px-2.5 text-xs font-medium text-white hover:opacity-90"
                       >
                         <Download size={14} /> Download
                       </a>
@@ -170,8 +172,8 @@ export default function Dashboard() {
   );
 }
 
-function Metric({ label, value }) {
-  return <div className="border-b border-line py-6 sm:border-b-0 sm:border-r sm:px-6 first:sm:pl-0 last:border-r-0"><p className="text-sm text-muted">{label}</p><p className="mt-2 text-2xl font-semibold">{value}</p></div>;
+function Metric({ label, value, tone = "bg-accent" }) {
+  return <div className="border-b border-line py-6 sm:border-b-0 sm:border-r sm:px-6 first:sm:pl-0 last:border-r-0"><p className="flex items-center gap-2 text-sm text-muted"><span className={`h-2 w-2 rounded-full ${tone}`} aria-hidden="true" />{label}</p><p className="font-display mt-2 text-3xl">{value}</p></div>;
 }
 
 function formatDuration(value = 0) {

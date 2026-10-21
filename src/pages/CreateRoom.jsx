@@ -1,3 +1,4 @@
+import usePageTitle from "../hooks/usePageTitle.js";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
@@ -11,6 +12,7 @@ const TYPES = [
 ];
 
 export default function CreateRoom() {
+  usePageTitle("New room");
   const navigate = useNavigate();
   const [topic, setTopic] = useState("");
   const [price, setPrice] = useState("");
@@ -59,7 +61,7 @@ export default function CreateRoom() {
             <legend className="mb-1.5 text-sm font-medium">Access</legend>
             <div className="grid gap-2 sm:grid-cols-2">
               {TYPES.map((t) => (
-                <label key={t.id} className={`cursor-pointer rounded-md border bg-white p-4 ${type === t.id ? "border-ink outline outline-1 outline-ink" : "border-line-strong hover:border-gray-400"}`}>
+                <label key={t.id} className={`cursor-pointer rounded-md border bg-white p-4 ${type === t.id ? "border-accent bg-accent-soft/50 outline outline-1 outline-accent" : "border-line-strong hover:border-gray-400"}`}>
                   <input type="radio" name="type" value={t.id} checked={type === t.id} onChange={() => setType(t.id)} className="sr-only" />
                   <div className="text-[15px] font-medium">{t.title}</div>
                   <p className="mt-1 text-sm leading-snug text-muted">{t.body}</p>
@@ -80,7 +82,7 @@ export default function CreateRoom() {
           )}
 
           <div className="flex items-center gap-3 pt-2">
-            <button type="submit" disabled={invalid || creating} className="inline-flex h-11 items-center gap-2 rounded-md bg-ink px-5 text-sm font-medium text-paper hover:bg-gray-800 disabled:opacity-50">
+            <button type="submit" disabled={invalid || creating} className="inline-flex h-11 items-center gap-2 rounded-md bg-accent px-5 text-sm font-medium text-white hover:bg-accent-strong disabled:opacity-50">
               {creating ? <><Loader2 size={16} className="animate-spin" /> Creating…</> : "Create room"}
             </button>
             <button type="button" onClick={() => navigate("/lobby")} className="h-11 rounded-md px-4 text-sm text-gray-700 hover:bg-sunken">Cancel</button>

@@ -226,7 +226,7 @@ export default function GraphInspector({ graph, store, peek = false, onExpand })
         {tabs.map((id) => (
           <button
             key={id} type="button" role="tab" aria-selected={activeTab === id} onClick={() => setTab(id)}
-            className={`relative -mb-px flex-1 border-b-2 px-2 pb-2 pt-1 text-xs font-medium ${activeTab === id ? "border-ink text-ink" : "border-transparent text-muted hover:text-ink"}`}
+            className={`relative -mb-px flex-1 border-b-2 px-2 pb-2 pt-1 text-xs font-medium ${activeTab === id ? "border-accent text-accent" : "border-transparent text-muted hover:text-ink"}`}
           >
             {TAB_LABELS[id]}
             {problem?.section === id && <span className="absolute right-1.5 top-0.5 h-1.5 w-1.5 rounded-full bg-danger" aria-label="Has an error" />}

@@ -39,7 +39,7 @@ function ToolButton({ icon: Icon, label, shortcut, active, onClick, disabled, ch
       aria-haspopup={popup ? "menu" : undefined}
       aria-expanded={popup ? Boolean(expanded) : undefined}
       className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-md transition-colors md:h-9 md:w-9 ${
-        active ? "bg-ink text-paper" : "text-gray-700 hover:bg-sunken"
+        active ? "bg-accent text-white" : "text-gray-700 hover:bg-sunken"
       } ${disabled ? "opacity-35 hover:bg-transparent" : ""} ${className}`}
     >
       {Icon ? <Icon size={18} strokeWidth={1.8} /> : null}
@@ -64,7 +64,7 @@ function MenuItem({ icon: Icon, label, shortcut, active, disabled, onClick, role
       onClick={onClick}
       disabled={disabled}
       className={`flex h-9 w-full min-w-[11rem] items-center gap-2.5 rounded-md px-2.5 text-left text-sm transition-colors ${
-        active ? "bg-ink text-paper" : "text-gray-800 hover:bg-sunken"
+        active ? "bg-accent text-white" : "text-gray-800 hover:bg-sunken"
       } ${disabled ? "opacity-35 hover:bg-transparent" : ""}`}
     >
       {Icon ? <Icon size={16} strokeWidth={1.8} className="shrink-0" /> : null}
@@ -435,7 +435,7 @@ function SegButton({ active, onClick, label, children, className = "" }) {
       title={label}
       aria-pressed={active}
       className={`flex h-8 flex-1 items-center justify-center border-r border-line text-sm last:border-r-0 ${
-        active ? "bg-ink text-paper" : "text-gray-700 hover:bg-sunken"
+        active ? "bg-accent text-white" : "text-gray-700 hover:bg-sunken"
       } ${className}`}
     >
       {children}
@@ -581,7 +581,7 @@ export function StylePanel({ group, style, onChange, selectionCount, onDelete, o
                       onClick={() => onChange({ texture: t.id })}
                       aria-pressed={active}
                       title={t.label}
-                      className={`flex flex-col gap-0.5 rounded-md border px-2 pb-1 pt-1.5 text-left ${active ? "border-ink bg-sunken" : "border-line hover:bg-sunken"}`}
+                      className={`flex flex-col gap-0.5 rounded-md border px-2 pb-1 pt-1.5 text-left ${active ? "border-accent bg-accent-soft" : "border-line hover:bg-sunken"}`}
                     >
                       <BrushSwatch texture={t.id} color={style.color} width={style.width} opacity={style.opacity ?? 1} tool={group} />
                       <span className="text-[11px] text-gray-700">{t.label}</span>
@@ -647,7 +647,7 @@ export function StylePanel({ group, style, onChange, selectionCount, onDelete, o
                     aria-label={f.label}
                     aria-pressed={style.fontFamily === f.id}
                     className={`h-9 rounded-md border text-base ${
-                      style.fontFamily === f.id ? "border-ink bg-ink text-paper" : "border-line text-gray-800 hover:bg-sunken"
+                      style.fontFamily === f.id ? "border-accent bg-accent text-white" : "border-line text-gray-800 hover:bg-sunken"
                     }`}
                     style={{ fontFamily: FONT_STACKS[f.id], fontSize: f.id === "hand" ? 20 : 16 }}
                   >

@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import Logo from "../ui/Logo.jsx";
 
 const groups = [
-  ["Product", [["/register", "Create an account"], ["/login", "Sign in"], ["/faq", "FAQ"]]],
+  ["Product", [["/register", "Create an account"], ["/login", "Sign in"], ["/#how", "How it works"], ["/#pricing", "Pricing"], ["/faq", "FAQ"]]],
   ["Company", [["/contact", "Contact"], ["/terms", "Terms"], ["/privacy", "Privacy"], ["/refund", "Refund policy"]]],
 ];
 
@@ -13,7 +13,7 @@ export default function Footer() {
         <div>
           <Link to="/" className="inline-flex items-center gap-2.5">
             <Logo className="h-6 w-6" />
-            <span className="font-semibold tracking-tight">Boardly</span>
+            <span className="font-display text-lg">Boardly</span>
           </Link>
           <p className="mt-3 max-w-xs text-sm text-muted">A shared board and document room for teaching, tutoring and meetings.</p>
         </div>

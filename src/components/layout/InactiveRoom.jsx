@@ -17,7 +17,7 @@ const InactiveRoom = ({ room, isTutor, onNavigateToLobby, onActivateRoom }) => (
 
       {isTutor ? (
         <div className="mt-6 space-y-2">
-          <button onClick={onActivateRoom} className="h-10 w-full rounded-md bg-ink text-sm font-medium text-paper hover:bg-gray-800">Start session again</button>
+          <button onClick={onActivateRoom} className="h-10 w-full rounded-md bg-accent text-sm font-medium text-white hover:bg-accent-strong">Start session again</button>
           <button onClick={onNavigateToLobby} className="h-10 w-full rounded-md border border-line text-sm hover:bg-sunken">Back to my rooms</button>
         </div>
       ) : (

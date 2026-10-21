@@ -16,7 +16,9 @@ import PaperPicker from "./PaperPicker.jsx";
 import { newAid } from "./mathAids.js";
 import { INSTRUMENTS, newInstrument } from "./geometryTools.js";
 import { CHARTS, newStats } from "./stats.js";
-import { SOLIDS, newSolid } from "./solids.js";
+import { SOLIDS, newProfileSolid, newSolid } from "./solids.js";
+import { isSymmetricAcross, outlineOf, toProfile } from "./profiles.js";
+import { getBounds } from "./geometry.js";
 import { newCover } from "./cover.js";
 import { useAnnotationTools } from "./useAnnotationTools.js";
 import { parseVideoLink } from "./mediaLinks.js";
@@ -341,6 +343,19 @@ export default function BoardWorkspace({ room, socket, isHost, canDraw = false, 
     if (!instrument && kind !== "cover") inspector.open("half"); // instruments and covers are adjusted on the board itself
   };
 
+  // A drawn shape becomes a 3D solid beside it: spun around an axis, or given depth
+  const make3D = (mode, source) => {
+    const points = outlineOf(source);
+    if (!points) return;
+    const box = getBounds(source);
+    const axis = mode === "revolve" && isSymmetricAcross(points) ? "center" : "left";
+    const solid = newProfileSolid(mode, toProfile(points), { id: uid(), page, x: box.x + box.w + 48, y: box.y, axis });
+    store.commit([{ op: "add", obj: solid }]);
+    tools.setSelectedIds([solid.id]);
+    tools.setTool("select");
+    inspector.open("half");
+  };
+
   // Things the class-activity panel can put on the board: poll results, and a chart of numeric answers
   useEffect(() => {
     if (!apiRef) return undefined;
@@ -475,6 +490,7 @@ export default function BoardWorkspace({ room, socket, isHost, canDraw = false, 
             inspector={inspector}
             view={view}
             size={size}
+            onMake3D={make3D}
             safeLeft={dockEdge === "left" ? 68 : 8}
             safeBottom={inspector.desktop ? (dockEdge === "bottom" ? 64 : 8) : Math.max(72, inspector.insetBottom)}
           />
@@ -491,7 +507,7 @@ export default function BoardWorkspace({ room, socket, isHost, canDraw = false, 
               <button
                 type="button"
                 onClick={() => { setFollowing(true); if (hostRect) setViewFor(hostPage, fitRect(hostRect, size)); setPage(hostPage); }}
-                className="flex items-center gap-2 rounded-md bg-ink px-3 py-1.5 text-xs font-medium text-paper"
+                className="flex items-center gap-2 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white"
               >
                 <Radio size={13} /> Return to presenter
               </button>

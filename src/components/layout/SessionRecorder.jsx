@@ -340,7 +340,7 @@ export default function SessionRecorder({ room, socket }) {
             <SourceToggle icon={Mic} label="Microphone" hint={sources.mic ? "Your voice is recorded." : "Off: your voice is not recorded."} on={sources.mic} onToggle={() => toggleSource("mic")} />
             <SourceToggle icon={Video} label="Camera" hint={sources.camera ? "Shown in the corner of the recording." : "Off: no camera needed."} on={sources.camera} onToggle={() => toggleSource("camera")} />
           </ul>
-          <button type="button" onClick={startRecording} className="mt-3 flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-ink text-sm font-medium text-paper hover:opacity-90">
+          <button type="button" onClick={startRecording} className="mt-3 flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-accent text-sm font-medium text-white hover:opacity-90">
             <CircleDot size={15} /> Start recording
           </button>
           <p className="mt-2 text-center text-[11px] text-muted">{summary} · your choice is remembered</p>
